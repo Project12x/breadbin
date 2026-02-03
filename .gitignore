@@ -1,0 +1,28 @@
+# Build artifacts
+build/
+out/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+
+# CPM cache
+.cpm/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Binaries
+*.exe
+*.dll
+*.vst3
+*.lib
+*.obj
+*.pdb
+*.ilk
