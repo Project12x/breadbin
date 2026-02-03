@@ -4,7 +4,6 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-
 class BreadbinEditor : public juce::AudioProcessorEditor,
                        private juce::MidiKeyboardState::Listener {
 public:
@@ -19,12 +18,20 @@ private:
 
   // Mode selectors
   juce::ComboBox dualModeSelector;
-  juce::ComboBox chipModelSelector;
   juce::Slider agingSlider;
   juce::Label titleLabel;
   juce::Label modeLabel;
-  juce::Label modelLabel;
   juce::Label agingLabel;
+
+  // Per-channel chip selection
+  juce::ComboBox leftChipSelector;
+  juce::ComboBox rightChipSelector;
+  juce::Label leftChipLabel;
+  juce::Label rightChipLabel;
+
+  // Presets
+  juce::ComboBox presetSelector;
+  juce::Label presetLabel;
 
   // Synth controls - Voice 1
   juce::ComboBox waveformSelector;
@@ -52,6 +59,7 @@ private:
   void setupSynthControls();
   void setupFilterControls();
   void updateSynthFromControls();
+  void applyPreset(int presetId);
 
   // MidiKeyboardState::Listener
   void handleNoteOn(juce::MidiKeyboardState *, int midiChannel,

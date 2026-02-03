@@ -4,18 +4,23 @@
 BreadbinProcessor::BreadbinProcessor()
     : AudioProcessor(BusesProperties().withOutput(
           "Output", juce::AudioChannelSet::stereo(), true)) {
-  // Initialize both SIDs with default model
-  sidLeft.setChipModel(chipModel);
-  sidRight.setChipModel(chipModel);
+  // Initialize both SIDs with default models
+  sidLeft.setChipModel(chipModelLeft);
+  sidRight.setChipModel(chipModelRight);
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
 
-void BreadbinProcessor::prepareToPlay(double sampleRate,
-                                      int /*samplesPerBlock*/) {
+void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
   sidRight.prepare(sampleRate);
+
+  // Initialize MIDI collector for virtual keyboard
+  midiCollector.reset(sampleRate);
+
+  // Initialize safety chain
+  prepareSafetyChain(sampleRate, samplesPerBlock);
 }
 
 void BreadbinProcessor::releaseResources() {}
@@ -23,6 +28,9 @@ void BreadbinProcessor::releaseResources() {}
 void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                      juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
+
+  // Add messages from virtual keyboard (standalone mode)
+  midiCollector.removeNextBlockOfMessages(midiMessages, buffer.getNumSamples());
 
   // Handle MIDI
   for (const auto metadata : midiMessages) {
@@ -128,10 +136,19 @@ void BreadbinProcessor::releaseNote(int voiceIndex) {
   sid.noteOff(sidVoice);
 }
 
-void BreadbinProcessor::setChipModel(SIDEngine::ChipModel model) {
-  chipModel = model;
+void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
+  chipModelLeft = model;
   sidLeft.setChipModel(model);
+}
+
+void BreadbinProcessor::setRightChipModel(SIDEngine::ChipModel model) {
+  chipModelRight = model;
   sidRight.setChipModel(model);
+}
+
+void BreadbinProcessor::setBothChipModels(SIDEngine::ChipModel model) {
+  setLeftChipModel(model);
+  setRightChipModel(model);
 }
 
 void BreadbinProcessor::setAgingFactor(float aging) {
@@ -147,7 +164,9 @@ juce::AudioProcessorEditor *BreadbinProcessor::createEditor() {
 void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   juce::ValueTree state("BreadbinState");
   state.setProperty("dualMode", static_cast<int>(dualMode), nullptr);
-  state.setProperty("chipModel", static_cast<int>(chipModel), nullptr);
+  state.setProperty("chipModelLeft", static_cast<int>(chipModelLeft), nullptr);
+  state.setProperty("chipModelRight", static_cast<int>(chipModelRight),
+                    nullptr);
   state.setProperty("agingFactor", agingFactor, nullptr);
 
   juce::MemoryOutputStream stream(destData, false);
@@ -160,10 +179,35 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
   if (state.isValid()) {
     dualMode = static_cast<DualMode>(
         static_cast<int>(state.getProperty("dualMode", 0)));
-    setChipModel(static_cast<SIDEngine::ChipModel>(
-        static_cast<int>(state.getProperty("chipModel", 0))));
+    setLeftChipModel(static_cast<SIDEngine::ChipModel>(
+        static_cast<int>(state.getProperty("chipModelLeft", 0))));
+    setRightChipModel(static_cast<SIDEngine::ChipModel>(
+        static_cast<int>(state.getProperty("chipModelRight", 0))));
     setAgingFactor(state.getProperty("agingFactor", 0.0f));
   }
+}
+
+void BreadbinProcessor::prepareSafetyChain(double sampleRate,
+                                           int samplesPerBlock) {
+  juce::dsp::ProcessSpec spec;
+  spec.sampleRate = sampleRate;
+  spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+  spec.numChannels = 2;
+
+  // 20Hz high-pass (subsonic filter)
+  *subsonicFilter.state =
+      *juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, 20.0f);
+  subsonicFilter.prepare(spec);
+
+  // 20kHz low-pass (ultrasonic filter)
+  *ultrasonicFilter.state =
+      *juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, 20000.0f);
+  ultrasonicFilter.prepare(spec);
+
+  // Safety limiter at -3dB
+  safetyLimiter.setThreshold(-3.0f);
+  safetyLimiter.setRelease(100.0f);
+  safetyLimiter.prepare(spec);
 }
 
 // Plugin instantiation

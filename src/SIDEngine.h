@@ -64,6 +64,11 @@ private:
   float agingFactor = 0.0f;
   int agingCutoffOffset = 0;
 
+  // Sample output buffer (reSIDfp doesn't produce 1 sample per call)
+  float sampleBuffer[8] = {};
+  int sampleBufferPos = 0;
+  int sampleBufferSize = 0;
+
   // Voice state cache
   struct VoiceCache {
     uint8_t waveform = 0x10; // Triangle default

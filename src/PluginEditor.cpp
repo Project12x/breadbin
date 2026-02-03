@@ -20,6 +20,7 @@ BreadbinEditor::~BreadbinEditor() { keyboardState.removeListener(this); }
 void BreadbinEditor::handleNoteOn(juce::MidiKeyboardState *, int midiChannel,
                                   int midiNoteNumber, float velocity) {
   auto msg = juce::MidiMessage::noteOn(midiChannel, midiNoteNumber, velocity);
+  msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
   processor.getMidiMessageCollector().addMessageToQueue(msg);
 }
 
@@ -27,6 +28,7 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
                                    int midiNoteNumber, float velocity) {
   juce::ignoreUnused(velocity);
   auto msg = juce::MidiMessage::noteOff(midiChannel, midiNoteNumber);
+  msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
   processor.getMidiMessageCollector().addMessageToQueue(msg);
 }
 
@@ -52,19 +54,48 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(dualModeSelector);
 
-  // Chip Model
-  modelLabel.setText("Chip:", juce::dontSendNotification);
-  addAndMakeVisible(modelLabel);
+  // Left Chip Model
+  leftChipLabel.setText("L:", juce::dontSendNotification);
+  addAndMakeVisible(leftChipLabel);
 
-  chipModelSelector.addItem("MOS 6581 (1982)", 1);
-  chipModelSelector.addItem("MOS 8580 (1986)", 2);
-  chipModelSelector.setSelectedId(static_cast<int>(processor.getChipModel()) +
-                                  1);
-  chipModelSelector.onChange = [this]() {
-    processor.setChipModel(static_cast<SIDEngine::ChipModel>(
-        chipModelSelector.getSelectedId() - 1));
+  leftChipSelector.addItem("6581", 1);
+  leftChipSelector.addItem("8580", 2);
+  leftChipSelector.setSelectedId(
+      static_cast<int>(processor.getLeftChipModel()) + 1);
+  leftChipSelector.onChange = [this]() {
+    processor.setLeftChipModel(static_cast<SIDEngine::ChipModel>(
+        leftChipSelector.getSelectedId() - 1));
   };
-  addAndMakeVisible(chipModelSelector);
+  addAndMakeVisible(leftChipSelector);
+
+  // Right Chip Model
+  rightChipLabel.setText("R:", juce::dontSendNotification);
+  addAndMakeVisible(rightChipLabel);
+
+  rightChipSelector.addItem("6581", 1);
+  rightChipSelector.addItem("8580", 2);
+  rightChipSelector.setSelectedId(
+      static_cast<int>(processor.getRightChipModel()) + 1);
+  rightChipSelector.onChange = [this]() {
+    processor.setRightChipModel(static_cast<SIDEngine::ChipModel>(
+        rightChipSelector.getSelectedId() - 1));
+  };
+  addAndMakeVisible(rightChipSelector);
+
+  // Presets
+  presetLabel.setText("Preset:", juce::dontSendNotification);
+  addAndMakeVisible(presetLabel);
+
+  presetSelector.addItem("-- Select --", 1);
+  presetSelector.addItem("Classic Lead (Monty)", 2);
+  presetSelector.addItem("Fat Bass (Ocean)", 3);
+  presetSelector.addItem("PWM Pad (Hubbard)", 4);
+  presetSelector.addItem("Noise Snare", 5);
+  presetSelector.setSelectedId(1);
+  presetSelector.onChange = [this]() {
+    applyPreset(presetSelector.getSelectedId());
+  };
+  addAndMakeVisible(presetSelector);
 
   // Aging slider
   agingLabel.setText("Time Machine", juce::dontSendNotification);
@@ -162,12 +193,31 @@ void BreadbinEditor::setupFilterControls() {
 
 void BreadbinEditor::updateSynthFromControls() {
   auto &sid = processor.getLeftSID();
+  auto &sidR = processor.getRightSID();
 
-  // Waveform for all voices
-  auto waveform =
-      static_cast<SIDEngine::Waveform>(waveformSelector.getSelectedId() - 1);
-  for (int v = 0; v < 3; ++v)
+  // Map combobox ID (1-4) to actual SID waveform values
+  SIDEngine::Waveform waveform;
+  switch (waveformSelector.getSelectedId()) {
+  case 1:
+    waveform = SIDEngine::Waveform::Triangle;
+    break;
+  case 2:
+    waveform = SIDEngine::Waveform::Sawtooth;
+    break;
+  case 3:
+    waveform = SIDEngine::Waveform::Pulse;
+    break;
+  case 4:
+    waveform = SIDEngine::Waveform::Noise;
+    break;
+  default:
+    waveform = SIDEngine::Waveform::Triangle;
+    break;
+  }
+  for (int v = 0; v < 3; ++v) {
     sid.setWaveform(v, waveform);
+    sidR.setWaveform(v, waveform);
+  }
 
   // ADSR
   int attack = static_cast<int>(attackSlider.getValue());
@@ -179,12 +229,18 @@ void BreadbinEditor::updateSynthFromControls() {
     sid.setDecay(v, decay);
     sid.setSustain(v, sustain);
     sid.setRelease(v, release);
+    sidR.setAttack(v, attack);
+    sidR.setDecay(v, decay);
+    sidR.setSustain(v, sustain);
+    sidR.setRelease(v, release);
   }
 
   // Pulse width
   int pw = static_cast<int>(pulseWidthSlider.getValue());
-  for (int v = 0; v < 3; ++v)
+  for (int v = 0; v < 3; ++v) {
     sid.setPulseWidth(v, pw);
+    sidR.setPulseWidth(v, pw);
+  }
 
   // Filter
   sid.setFilterCutoff(static_cast<int>(filterCutoffSlider.getValue()));
@@ -194,16 +250,6 @@ void BreadbinEditor::updateSynthFromControls() {
                     filterHPButton.getToggleState());
   sid.setFilterVoices(true, true, true);
 
-  // Apply same to right SID
-  auto &sidR = processor.getRightSID();
-  for (int v = 0; v < 3; ++v) {
-    sidR.setWaveform(v, waveform);
-    sidR.setAttack(v, attack);
-    sidR.setDecay(v, decay);
-    sidR.setSustain(v, sustain);
-    sidR.setRelease(v, release);
-    sidR.setPulseWidth(v, pw);
-  }
   sidR.setFilterCutoff(static_cast<int>(filterCutoffSlider.getValue()));
   sidR.setFilterResonance(static_cast<int>(filterResonanceSlider.getValue()));
   sidR.setFilterMode(filterLPButton.getToggleState(),
@@ -232,17 +278,23 @@ void BreadbinEditor::resized() {
 
   // Title area
   titleLabel.setBounds(bounds.removeFromTop(40));
-  bounds.removeFromTop(10);
+  bounds.removeFromTop(5);
 
   // Mode row
-  auto modeRow = bounds.removeFromTop(25);
+  auto modeRow = bounds.removeFromTop(28);
   modeLabel.setBounds(modeRow.removeFromLeft(50));
-  dualModeSelector.setBounds(modeRow.removeFromLeft(120));
-  modeRow.removeFromLeft(20);
-  modelLabel.setBounds(modeRow.removeFromLeft(40));
-  chipModelSelector.setBounds(modeRow.removeFromLeft(130));
+  dualModeSelector.setBounds(modeRow.removeFromLeft(110));
+  modeRow.removeFromLeft(10);
+  leftChipLabel.setBounds(modeRow.removeFromLeft(20));
+  leftChipSelector.setBounds(modeRow.removeFromLeft(60));
+  modeRow.removeFromLeft(5);
+  rightChipLabel.setBounds(modeRow.removeFromLeft(20));
+  rightChipSelector.setBounds(modeRow.removeFromLeft(60));
+  modeRow.removeFromLeft(10);
+  presetLabel.setBounds(modeRow.removeFromLeft(50));
+  presetSelector.setBounds(modeRow.removeFromLeft(140));
 
-  bounds.removeFromTop(10);
+  bounds.removeFromTop(8);
 
   // Synth controls row
   auto synthRow = bounds.removeFromTop(70);
@@ -268,14 +320,84 @@ void BreadbinEditor::resized() {
   filterBPButton.setBounds(filterRow.removeFromLeft(40));
   filterHPButton.setBounds(filterRow.removeFromLeft(40));
 
-  bounds.removeFromTop(10);
+  bounds.removeFromTop(5);
 
   // Aging slider
   agingLabel.setBounds(bounds.removeFromTop(20));
   agingSlider.setBounds(bounds.removeFromTop(25).reduced(40, 0));
 
-  bounds.removeFromTop(15);
+  bounds.removeFromTop(10);
 
   // Keyboard at bottom
   keyboard.setBounds(bounds.removeFromBottom(80));
+}
+
+void BreadbinEditor::applyPreset(int presetId) {
+  auto &sid = processor.getLeftSID();
+  auto &sidR = processor.getRightSID();
+
+  switch (presetId) {
+  case 2: // Classic Lead (Monty on the Run style)
+    // Sawtooth, short attack, medium decay, high sustain
+    waveformSelector.setSelectedId(2); // Sawtooth
+    attackSlider.setValue(0);
+    decaySlider.setValue(6);
+    sustainSlider.setValue(12);
+    releaseSlider.setValue(4);
+    pulseWidthSlider.setValue(2048);
+    filterCutoffSlider.setValue(1400);
+    filterResonanceSlider.setValue(6);
+    filterLPButton.setToggleState(true, juce::dontSendNotification);
+    filterBPButton.setToggleState(false, juce::dontSendNotification);
+    filterHPButton.setToggleState(false, juce::dontSendNotification);
+    break;
+
+  case 3: // Fat Bass (Ocean Loader style)
+    // Pulse wave, punchy envelope
+    waveformSelector.setSelectedId(3); // Pulse
+    attackSlider.setValue(0);
+    decaySlider.setValue(8);
+    sustainSlider.setValue(6);
+    releaseSlider.setValue(2);
+    pulseWidthSlider.setValue(1024); // 25% duty cycle
+    filterCutoffSlider.setValue(600);
+    filterResonanceSlider.setValue(10);
+    filterLPButton.setToggleState(true, juce::dontSendNotification);
+    filterBPButton.setToggleState(false, juce::dontSendNotification);
+    filterHPButton.setToggleState(false, juce::dontSendNotification);
+    break;
+
+  case 4: // PWM Pad (Hubbard style)
+    // Triangle + Pulse combo, slow attack
+    waveformSelector.setSelectedId(3); // Pulse for PWM
+    attackSlider.setValue(10);
+    decaySlider.setValue(4);
+    sustainSlider.setValue(14);
+    releaseSlider.setValue(8);
+    pulseWidthSlider.setValue(2048);
+    filterCutoffSlider.setValue(1800);
+    filterResonanceSlider.setValue(4);
+    filterLPButton.setToggleState(true, juce::dontSendNotification);
+    filterBPButton.setToggleState(false, juce::dontSendNotification);
+    filterHPButton.setToggleState(false, juce::dontSendNotification);
+    break;
+
+  case 5:                              // Noise Snare
+    waveformSelector.setSelectedId(4); // Noise
+    attackSlider.setValue(0);
+    decaySlider.setValue(6);
+    sustainSlider.setValue(0);
+    releaseSlider.setValue(4);
+    filterCutoffSlider.setValue(1200);
+    filterResonanceSlider.setValue(2);
+    filterLPButton.setToggleState(false, juce::dontSendNotification);
+    filterBPButton.setToggleState(true, juce::dontSendNotification);
+    filterHPButton.setToggleState(false, juce::dontSendNotification);
+    break;
+
+  default:
+    return; // "-- Select --" does nothing
+  }
+
+  updateSynthFromControls();
 }

@@ -39,8 +39,13 @@ public:
   DualMode getDualMode() const { return dualMode; }
   void setDualMode(DualMode mode) { dualMode = mode; }
 
-  SIDEngine::ChipModel getChipModel() const { return chipModel; }
-  void setChipModel(SIDEngine::ChipModel model);
+  // Per-channel chip model accessors
+  SIDEngine::ChipModel getLeftChipModel() const { return chipModelLeft; }
+  SIDEngine::ChipModel getRightChipModel() const { return chipModelRight; }
+  void setLeftChipModel(SIDEngine::ChipModel model);
+  void setRightChipModel(SIDEngine::ChipModel model);
+  // Convenience: set both at once
+  void setBothChipModels(SIDEngine::ChipModel model);
 
   float getAgingFactor() const { return agingFactor; }
   void setAgingFactor(float aging);
@@ -59,7 +64,8 @@ private:
   SIDEngine sidRight;
 
   DualMode dualMode = DualMode::StereoSplit;
-  SIDEngine::ChipModel chipModel = SIDEngine::ChipModel::MOS6581;
+  SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
+  SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
   float agingFactor = 0.0f;
 
   double hostSampleRate = 44100.0;

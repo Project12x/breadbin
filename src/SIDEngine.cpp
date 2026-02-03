@@ -25,6 +25,18 @@ void SIDEngine::prepare(double sampleRate) {
   // Configure SID sampling
   sid->setSamplingParameters(SID_CLOCK_PAL, reSIDfp::SamplingMethod::RESAMPLE,
                              sampleRate);
+
+  // Initialize all voice registers so noteOn will work immediately
+  for (int v = 0; v < 3; ++v) {
+    updateVoiceRegisters(v);
+    // Set default pulse width
+    int baseReg = v * 7;
+    writeRegister(baseReg + 2, voiceCache[v].pulseWidth & 0xFF);
+    writeRegister(baseReg + 3, (voiceCache[v].pulseWidth >> 8) & 0x0F);
+  }
+
+  // Initialize filter
+  updateFilterRegisters();
 }
 
 void SIDEngine::setChipModel(ChipModel model) {
@@ -47,25 +59,40 @@ void SIDEngine::setAgingFactor(float aging) {
 }
 
 float SIDEngine::clock() {
-  // Accumulate SID clock cycles to generate one host sample
-  clockAccumulator += clockRatio;
-
-  int cyclesToRun = static_cast<int>(clockAccumulator);
-  clockAccumulator -= cyclesToRun;
-
-  if (cyclesToRun <= 0)
-    cyclesToRun = 1;
-
-  short outputBuffer[1];
-
-  // Clock the SID and collect output (v2.16 API: returns samples written)
-  int samples =
-      sid->clock(static_cast<unsigned int>(cyclesToRun), outputBuffer);
-
-  // Convert to float (-1.0 to 1.0)
-  if (samples > 0) {
-    return static_cast<float>(outputBuffer[0]) / 32768.0f;
+  // If we have a buffered sample, return it
+  if (sampleBufferPos < sampleBufferSize) {
+    return sampleBuffer[sampleBufferPos++];
   }
+
+  // Need to generate more samples - clock the SID until we get output
+  // Calculate how many SID clocks we need to run for ~1 host sample
+  // SID clock: ~985,248 Hz (PAL), Host: e.g. 44,100 Hz
+  // Ratio: ~22.3 SID clocks per host sample
+
+  const int cyclesToRun = static_cast<int>(clockRatio) + 1;
+
+  // Output buffer for reSIDfp (enough for one host sample)
+  short outputBuffer[8];
+  int samplesProduced = 0;
+
+  // Run SID cycles until we produce at least one sample
+  int totalCycles = 0;
+  while (samplesProduced == 0 && totalCycles < 100) {
+    samplesProduced =
+        sid->clock(static_cast<unsigned int>(cyclesToRun), outputBuffer);
+    totalCycles += cyclesToRun;
+  }
+
+  // Convert to float and buffer
+  if (samplesProduced > 0) {
+    sampleBufferSize = samplesProduced;
+    sampleBufferPos = 0;
+    for (int i = 0; i < samplesProduced && i < 8; ++i) {
+      sampleBuffer[i] = static_cast<float>(outputBuffer[i]) / 32768.0f;
+    }
+    return sampleBuffer[sampleBufferPos++];
+  }
+
   return 0.0f;
 }
 
