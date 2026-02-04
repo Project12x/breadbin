@@ -31,29 +31,51 @@ private:
   juce::Label leftChipLabel;
   juce::Label rightChipLabel;
 
-  // Presets
-  juce::ComboBox presetSelector;
-  juce::Label presetLabel;
+  // Presets - per voice
+  juce::ComboBox leftPresetSelector;
+  juce::ComboBox rightPresetSelector;
+  juce::Label leftPresetLabel;
+  juce::Label rightPresetLabel;
 
-  // Synth controls - Voice 1
-  juce::ComboBox waveformSelector;
-  juce::Slider pulseWidthSlider;
-  juce::Slider attackSlider;
-  juce::Slider decaySlider;
-  juce::Slider sustainSlider;
-  juce::Slider releaseSlider;
-  juce::Label waveformLabel;
-  juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
-  juce::Label pulseWidthLabel;
+  // Synth controls - per voice waveform
+  juce::ComboBox leftWaveformSelector;
+  juce::ComboBox rightWaveformSelector;
+  juce::Slider leftPulseWidthSlider;
+  juce::Slider rightPulseWidthSlider;
+  juce::Label leftWaveformLabel, rightWaveformLabel;
+  juce::Label leftPWLabel, rightPWLabel;
 
-  // Filter controls
-  juce::Slider filterCutoffSlider;
-  juce::Slider filterResonanceSlider;
-  juce::ToggleButton filterLPButton{"LP"};
-  juce::ToggleButton filterBPButton{"BP"};
-  juce::ToggleButton filterHPButton{"HP"};
-  juce::Label filterLabel;
-  juce::Label cutoffLabel, resonanceLabel;
+  // ADSR - per voice (Left SID)
+  juce::Slider leftAttackSlider, leftDecaySlider, leftSustainSlider,
+      leftReleaseSlider;
+  juce::Label leftADSRLabel;
+  juce::Label leftAttackLabel, leftDecayLabel, leftSustainLabel,
+      leftReleaseLabel;
+
+  // ADSR - per voice (Right SID)
+  juce::Slider rightAttackSlider, rightDecaySlider, rightSustainSlider,
+      rightReleaseSlider;
+  juce::Label rightADSRLabel;
+  juce::Label rightAttackLabel, rightDecayLabel, rightSustainLabel,
+      rightReleaseLabel;
+
+  // Filter controls - Left SID
+  juce::Slider leftCutoffSlider;
+  juce::Slider leftResonanceSlider;
+  juce::ToggleButton leftLPButton{"LP"};
+  juce::ToggleButton leftBPButton{"BP"};
+  juce::ToggleButton leftHPButton{"HP"};
+  juce::Label leftFilterLabel;
+  juce::Label leftCutoffLabel, leftResonanceLabel;
+
+  // Filter controls - Right SID
+  juce::Slider rightCutoffSlider;
+  juce::Slider rightResonanceSlider;
+  juce::ToggleButton rightLPButton{"LP"};
+  juce::ToggleButton rightBPButton{"BP"};
+  juce::ToggleButton rightHPButton{"HP"};
+  juce::Label rightFilterLabel;
+  juce::Label rightCutoffLabel, rightResonanceLabel;
 
   // Virtual keyboard for standalone testing
   juce::MidiKeyboardState keyboardState;

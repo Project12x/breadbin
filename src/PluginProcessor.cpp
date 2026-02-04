@@ -42,10 +42,20 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
+  // DEBUG: track max levels
+  static int debugCounter = 0;
+  float maxL = 0.0f, maxR = 0.0f;
+
   // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
+
+    // DEBUG: track peaks
+    if (std::abs(sampleL) > maxL)
+      maxL = std::abs(sampleL);
+    if (std::abs(sampleR) > maxR)
+      maxR = std::abs(sampleR);
 
     switch (dualMode) {
     case DualMode::StereoSplit:
@@ -70,6 +80,13 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       break;
     }
   }
+
+  // DEBUG: periodic output
+  if (++debugCounter % 100 == 0 && (maxL > 0.001f || maxR > 0.001f)) {
+    DBG("Audio levels - Left: " << maxL << " Right: " << maxR
+                                << " hasRightChannel: "
+                                << (rightChannel != nullptr));
+  }
 }
 
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
@@ -78,38 +95,32 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     const int velocity = msg.getVelocity();
     const int channel = msg.getChannel();
 
-    // Find free voice based on mode
-    int voiceIndex = -1;
-
     if (dualMode == DualMode::Multitimbral) {
       // Channel 1 -> voices 0-2 (left SID), Channel 2 -> voices 3-5 (right SID)
       int startVoice = (channel == 2) ? 3 : 0;
       for (int v = startVoice; v < startVoice + 3; ++v) {
         if (!voices[v].active) {
-          voiceIndex = v;
+          triggerNote(v, note, velocity);
           break;
         }
       }
-    } else {
-      // Stereo/Unison: use voices round-robin
-      for (int v = 0; v < 6; ++v) {
-        if (!voices[v].active) {
-          voiceIndex = v;
+    } else if (dualMode == DualMode::StereoSplit ||
+               dualMode == DualMode::Unison) {
+      // Trigger on BOTH SIDs simultaneously using paired voices (0+3, 1+4, 2+5)
+      for (int v = 0; v < 3; ++v) {
+        if (!voices[v].active && !voices[v + 3].active) {
+          triggerNote(v, note, velocity);     // Left SID
+          triggerNote(v + 3, note, velocity); // Right SID
           break;
         }
       }
-    }
-
-    if (voiceIndex >= 0) {
-      triggerNote(voiceIndex, note, velocity);
     }
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
-    // Find and release matching voice
+    // Release all voices playing this note (may be paired in Stereo/Unison)
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active && voices[v].note == note) {
         releaseNote(v);
-        break;
       }
     }
   }
@@ -123,6 +134,10 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
   // Route to appropriate SID
   SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
   int sidVoice = voiceIndex % 3;
+
+  DBG("triggerNote: voiceIndex=" << voiceIndex << " sidVoice=" << sidVoice
+                                 << " note=" << midiNote
+                                 << " isRightSID=" << (voiceIndex >= 3));
 
   sid.noteOn(sidVoice, midiNote, velocity);
 }
