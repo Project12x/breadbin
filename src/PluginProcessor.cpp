@@ -130,6 +130,22 @@ void BreadbinProcessor::releaseNote(int voiceIndex) {
   sid.noteOff(sidVoice);
 }
 
+void BreadbinProcessor::applyVoiceSettings(int voice) {
+  if (voice < 0 || voice > 5)
+    return;
+
+  SIDEngine &sid = (voice < 3) ? sidLeft : sidRight;
+  int sidVoice = voice % 3;
+  const auto &settings = voiceSettings[voice];
+
+  sid.setWaveform(sidVoice, settings.waveform);
+  sid.setPulseWidth(sidVoice, settings.pulseWidth);
+  sid.setAttack(sidVoice, settings.attack);
+  sid.setDecay(sidVoice, settings.decay);
+  sid.setSustain(sidVoice, settings.sustain);
+  sid.setRelease(sidVoice, settings.release);
+}
+
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
   chipModelLeft = model;
   sidLeft.setChipModel(model);

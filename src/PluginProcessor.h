@@ -59,6 +59,22 @@ public:
   SIDEngine &getLeftSID() { return sidLeft; }
   SIDEngine &getRightSID() { return sidRight; }
 
+  // Per-voice settings (6 voices: 0-2 = SID L, 3-5 = SID R)
+  struct VoiceSettings {
+    SIDEngine::Waveform waveform = SIDEngine::Waveform::Triangle;
+    int pulseWidth = 2048;
+    int attack = 0;
+    int decay = 0;
+    int sustain = 15;
+    int release = 0;
+    float pan = 0.0f; // -1.0 = full left, 0.0 = center, 1.0 = full right
+  };
+  VoiceSettings &getVoiceSettings(int voice) { return voiceSettings[voice]; }
+  const VoiceSettings &getVoiceSettings(int voice) const {
+    return voiceSettings[voice];
+  }
+  void applyVoiceSettings(int voice); // Apply settings to SID engine
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -70,6 +86,9 @@ private:
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;
+
+  // Per-voice settings storage
+  std::array<VoiceSettings, 6> voiceSettings;
 
   // Voice state for MIDI
   struct VoiceState {

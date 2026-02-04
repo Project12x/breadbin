@@ -16,50 +16,42 @@ public:
 private:
   BreadbinProcessor &processor;
 
-  // Mode selectors
+  // Currently selected voice (0-5)
+  int selectedVoice = 0;
+
+  // Mode/global controls
   juce::ComboBox dualModeSelector;
   juce::Slider agingSlider;
   juce::Label titleLabel;
   juce::Label modeLabel;
   juce::Label agingLabel;
-  juce::Label agingStartLabel; // "1982"
-  juce::Label agingEndLabel;   // "NOW"
+  juce::Label agingStartLabel;
+  juce::Label agingEndLabel;
 
-  // Per-channel chip selection
+  // Per-SID chip selection
   juce::ComboBox leftChipSelector;
   juce::ComboBox rightChipSelector;
   juce::Label leftChipLabel;
   juce::Label rightChipLabel;
 
-  // Presets - per voice
-  juce::ComboBox leftPresetSelector;
-  juce::ComboBox rightPresetSelector;
-  juce::Label leftPresetLabel;
-  juce::Label rightPresetLabel;
+  // Presets
+  juce::ComboBox presetSelector;
+  juce::Label presetLabel;
 
-  // Synth controls - per voice waveform
-  juce::ComboBox leftWaveformSelector;
-  juce::ComboBox rightWaveformSelector;
-  juce::Slider leftPulseWidthSlider;
-  juce::Slider rightPulseWidthSlider;
-  juce::Label leftWaveformLabel, rightWaveformLabel;
-  juce::Label leftPWLabel, rightPWLabel;
+  // Voice Selector (6 buttons)
+  std::array<juce::TextButton, 6> voiceButtons;
+  juce::Label voiceSelectorLabel;
 
-  // ADSR - per voice (Left SID)
-  juce::Slider leftAttackSlider, leftDecaySlider, leftSustainSlider,
-      leftReleaseSlider;
-  juce::Label leftADSRLabel;
-  juce::Label leftAttackLabel, leftDecayLabel, leftSustainLabel,
-      leftReleaseLabel;
+  // Per-voice controls (single set - edits selectedVoice)
+  juce::ComboBox waveformSelector;
+  juce::Slider pulseWidthSlider;
+  juce::Slider attackSlider, decaySlider, sustainSlider, releaseSlider;
+  juce::Slider panSlider;
+  juce::Label waveformLabel, pwLabel;
+  juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
+  juce::Label panLabel;
 
-  // ADSR - per voice (Right SID)
-  juce::Slider rightAttackSlider, rightDecaySlider, rightSustainSlider,
-      rightReleaseSlider;
-  juce::Label rightADSRLabel;
-  juce::Label rightAttackLabel, rightDecayLabel, rightSustainLabel,
-      rightReleaseLabel;
-
-  // Filter controls - Left SID
+  // Filter controls - Left SID (voices 1-3)
   juce::Slider leftCutoffSlider;
   juce::Slider leftResonanceSlider;
   juce::ToggleButton leftLPButton{"LP"};
@@ -68,7 +60,7 @@ private:
   juce::Label leftFilterLabel;
   juce::Label leftCutoffLabel, leftResonanceLabel;
 
-  // Filter controls - Right SID
+  // Filter controls - Right SID (voices 4-6)
   juce::Slider rightCutoffSlider;
   juce::Slider rightResonanceSlider;
   juce::ToggleButton rightLPButton{"LP"};
@@ -77,7 +69,7 @@ private:
   juce::Label rightFilterLabel;
   juce::Label rightCutoffLabel, rightResonanceLabel;
 
-  // Virtual keyboard for standalone testing
+  // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
 
@@ -85,9 +77,13 @@ private:
   juce::Image backgroundImage;
 
   void setupControls();
-  void setupSynthControls();
+  void setupVoiceSelector();
+  void setupVoiceControls();
   void setupFilterControls();
-  void updateSynthFromControls();
+  void selectVoice(int voice);
+  void loadVoiceToUI(int voice);
+  void saveUIToVoice(int voice);
+  void updateFiltersFromUI();
   void applyPreset(int presetId);
 
   // MidiKeyboardState::Listener

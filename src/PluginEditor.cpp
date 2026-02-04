@@ -4,23 +4,23 @@
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
     : AudioProcessorEditor(&p), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
-  setupControls();
-  setupSynthControls();
-  setupFilterControls();
 
-  // Load background image from binary data
-  backgroundImage = juce::ImageCache::getFromMemory(
+  // Load background image
+  backgroundImage = juce::ImageFileFormat::loadFrom(
       BinaryData::background_jpg, BinaryData::background_jpgSize);
 
-  // Setup keyboard with listener (inject MIDI to processor)
   keyboardState.addListener(this);
-  keyboard.setAvailableRange(36, 84); // C2 to C6
-  addAndMakeVisible(keyboard);
+  processor.getMidiMessageCollector().reset(p.getSampleRate());
 
-  setSize(700, 500);
+  setupControls();
+  setupVoiceSelector();
+  setupVoiceControls();
+  setupFilterControls();
 
-  // Initialize SID engines with UI control values
-  updateSynthFromControls();
+  // Initialize all voices with default settings, select voice 1
+  selectVoice(0);
+
+  setSize(700, 600);
 }
 
 BreadbinEditor::~BreadbinEditor() { keyboardState.removeListener(this); }
@@ -28,582 +28,515 @@ BreadbinEditor::~BreadbinEditor() { keyboardState.removeListener(this); }
 void BreadbinEditor::handleNoteOn(juce::MidiKeyboardState *, int midiChannel,
                                   int midiNoteNumber, float velocity) {
   auto msg = juce::MidiMessage::noteOn(midiChannel, midiNoteNumber, velocity);
-  msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
   processor.getMidiMessageCollector().addMessageToQueue(msg);
 }
 
 void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
                                    int midiNoteNumber, float velocity) {
-  juce::ignoreUnused(velocity);
-  auto msg = juce::MidiMessage::noteOff(midiChannel, midiNoteNumber);
-  msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
+  auto msg = juce::MidiMessage::noteOff(midiChannel, midiNoteNumber, velocity);
   processor.getMidiMessageCollector().addMessageToQueue(msg);
 }
 
 void BreadbinEditor::setupControls() {
-  // Title label is no longer shown - background image provides branding
+  // Title
+  titleLabel.setText("BREADBIN", juce::dontSendNotification);
+  titleLabel.setFont(juce::Font(28.0f, juce::Font::bold));
+  titleLabel.setJustificationType(juce::Justification::centred);
+  titleLabel.setColour(juce::Label::textColourId, juce::Colours::whitesmoke);
+  addAndMakeVisible(titleLabel);
 
-  // Dual Mode
+  // Mode selector
   modeLabel.setText("Mode:", juce::dontSendNotification);
+  modeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(modeLabel);
 
   dualModeSelector.addItem("Stereo Split", 1);
   dualModeSelector.addItem("Unison", 2);
   dualModeSelector.addItem("Multitimbral", 3);
-  dualModeSelector.setSelectedId(static_cast<int>(processor.getDualMode()) + 1);
+  dualModeSelector.setSelectedId(1);
   dualModeSelector.onChange = [this]() {
     processor.setDualMode(static_cast<BreadbinProcessor::DualMode>(
         dualModeSelector.getSelectedId() - 1));
   };
   addAndMakeVisible(dualModeSelector);
 
-  // Left Chip Model
-  leftChipLabel.setText("L:", juce::dontSendNotification);
-  addAndMakeVisible(leftChipLabel);
-
-  leftChipSelector.addItem("6581", 1);
-  leftChipSelector.addItem("8580", 2);
-  leftChipSelector.setSelectedId(
-      static_cast<int>(processor.getLeftChipModel()) + 1);
-  leftChipSelector.onChange = [this]() {
-    processor.setLeftChipModel(static_cast<SIDEngine::ChipModel>(
-        leftChipSelector.getSelectedId() - 1));
-  };
-  addAndMakeVisible(leftChipSelector);
-
-  // Right Chip Model
-  rightChipLabel.setText("R:", juce::dontSendNotification);
-  addAndMakeVisible(rightChipLabel);
-
-  rightChipSelector.addItem("6581", 1);
-  rightChipSelector.addItem("8580", 2);
-  rightChipSelector.setSelectedId(
-      static_cast<int>(processor.getRightChipModel()) + 1);
-  rightChipSelector.onChange = [this]() {
-    processor.setRightChipModel(static_cast<SIDEngine::ChipModel>(
-        rightChipSelector.getSelectedId() - 1));
-  };
-  addAndMakeVisible(rightChipSelector);
-
-  // Presets - Left SID
-  leftPresetLabel.setText("L Preset:", juce::dontSendNotification);
-  addAndMakeVisible(leftPresetLabel);
-
-  leftPresetSelector.addItem("-- Select --", 1);
-  leftPresetSelector.addItem("Classic Lead (Monty)", 2);
-  leftPresetSelector.addItem("Fat Bass (Ocean)", 3);
-  leftPresetSelector.addItem("PWM Pad (Hubbard)", 4);
-  leftPresetSelector.addItem("Noise Snare", 5);
-  leftPresetSelector.setSelectedId(1);
-  leftPresetSelector.onChange = [this]() {
-    applyPreset(leftPresetSelector.getSelectedId());
-  };
-  addAndMakeVisible(leftPresetSelector);
-
-  // Presets - Right SID
-  rightPresetLabel.setText("R Preset:", juce::dontSendNotification);
-  addAndMakeVisible(rightPresetLabel);
-
-  rightPresetSelector.addItem("-- Select --", 1);
-  rightPresetSelector.addItem("Classic Lead (Monty)", 2);
-  rightPresetSelector.addItem("Fat Bass (Ocean)", 3);
-  rightPresetSelector.addItem("PWM Pad (Hubbard)", 4);
-  rightPresetSelector.addItem("Noise Snare", 5);
-  rightPresetSelector.setSelectedId(1);
-  rightPresetSelector.onChange = [this]() {
-    applyPreset(rightPresetSelector.getSelectedId());
-  };
-  addAndMakeVisible(rightPresetSelector);
-
-  // Time Machine (aging slider) - 1982 to NOW labels at ends
+  // Time Machine (aging)
   agingLabel.setText("Time Machine", juce::dontSendNotification);
-  agingLabel.setJustificationType(juce::Justification::centred);
-  agingLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+  agingLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(agingLabel);
 
-  // "1982" label at left end
   agingStartLabel.setText("1982", juce::dontSendNotification);
-  agingStartLabel.setJustificationType(juce::Justification::centredRight);
-  agingStartLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-  agingStartLabel.setFont(juce::FontOptions(11.0f));
+  agingStartLabel.setColour(juce::Label::textColourId,
+                            juce::Colours::lightgrey);
+  agingStartLabel.setFont(juce::Font(10.0f));
   addAndMakeVisible(agingStartLabel);
 
-  // "NOW" label at right end
   agingEndLabel.setText("NOW", juce::dontSendNotification);
-  agingEndLabel.setJustificationType(juce::Justification::centredLeft);
-  agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-  agingEndLabel.setFont(juce::FontOptions(11.0f));
+  agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  agingEndLabel.setFont(juce::Font(10.0f));
   addAndMakeVisible(agingEndLabel);
 
-  // Simple 0-1 slider with no text box
-  agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   agingSlider.setRange(0.0, 1.0, 0.01);
-  agingSlider.setValue(processor.getAgingFactor());
+  agingSlider.setValue(0.0);
+  agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   agingSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   agingSlider.onValueChange = [this]() {
     processor.setAgingFactor(static_cast<float>(agingSlider.getValue()));
   };
   addAndMakeVisible(agingSlider);
+
+  // Chip selectors - per SID
+  leftChipLabel.setText("L Chip:", juce::dontSendNotification);
+  leftChipLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(leftChipLabel);
+
+  leftChipSelector.addItem("6581", 1);
+  leftChipSelector.addItem("8580", 2);
+  leftChipSelector.setSelectedId(1);
+  leftChipSelector.onChange = [this]() {
+    processor.setLeftChipModel(leftChipSelector.getSelectedId() == 1
+                                   ? SIDEngine::ChipModel::MOS6581
+                                   : SIDEngine::ChipModel::MOS8580);
+  };
+  addAndMakeVisible(leftChipSelector);
+
+  rightChipLabel.setText("R Chip:", juce::dontSendNotification);
+  rightChipLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(rightChipLabel);
+
+  rightChipSelector.addItem("6581", 1);
+  rightChipSelector.addItem("8580", 2);
+  rightChipSelector.setSelectedId(1);
+  rightChipSelector.onChange = [this]() {
+    processor.setRightChipModel(rightChipSelector.getSelectedId() == 1
+                                    ? SIDEngine::ChipModel::MOS6581
+                                    : SIDEngine::ChipModel::MOS8580);
+  };
+  addAndMakeVisible(rightChipSelector);
+
+  // Preset selector
+  presetLabel.setText("Preset:", juce::dontSendNotification);
+  presetLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(presetLabel);
+
+  presetSelector.addItem("Custom", 1);
+  presetSelector.addItem("Classic Lead", 2);
+  presetSelector.addItem("Fat Bass", 3);
+  presetSelector.addItem("Arpeggio", 4);
+  presetSelector.addItem("Warm Pad", 5);
+  presetSelector.setSelectedId(1);
+  presetSelector.onChange = [this]() {
+    if (presetSelector.getSelectedId() > 1)
+      applyPreset(presetSelector.getSelectedId());
+  };
+  addAndMakeVisible(presetSelector);
+
+  // Virtual keyboard
+  keyboard.setKeyWidth(18.0f);
+  addAndMakeVisible(keyboard);
 }
 
-void BreadbinEditor::setupSynthControls() {
-  // Helper to setup label
-  auto setupLabel = [this](juce::Label &label, const juce::String &text) {
-    label.setText(text, juce::dontSendNotification);
-    label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colours::white);
-    label.setFont(juce::FontOptions(11.0f));
-    addAndMakeVisible(label);
-  };
+void BreadbinEditor::setupVoiceSelector() {
+  voiceSelectorLabel.setText("Voice:", juce::dontSendNotification);
+  voiceSelectorLabel.setColour(juce::Label::textColourId,
+                               juce::Colours::lightgrey);
+  addAndMakeVisible(voiceSelectorLabel);
 
-  // Helper to setup slider with styled text box
-  auto setupSlider = [this](juce::Slider &slider, double min, double max,
-                            double val, int textWidth) {
-    slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    slider.setRange(min, max, 1.0);
-    slider.setValue(val);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, textWidth, 16);
-    slider.setColour(juce::Slider::textBoxBackgroundColourId,
-                     juce::Colour(0x80000000));
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxOutlineColourId,
-                     juce::Colour(0x40FFFFFF));
-    slider.onValueChange = [this]() { updateSynthFromControls(); };
+  for (int i = 0; i < 6; ++i) {
+    voiceButtons[i].setButtonText(juce::String(i + 1));
+    voiceButtons[i].setClickingTogglesState(false);
+    voiceButtons[i].onClick = [this, i]() { selectVoice(i); };
+    addAndMakeVisible(voiceButtons[i]);
+  }
+}
+
+void BreadbinEditor::setupVoiceControls() {
+  // Waveform
+  waveformLabel.setText("Wave:", juce::dontSendNotification);
+  waveformLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(waveformLabel);
+
+  waveformSelector.addItem("Triangle", 1);
+  waveformSelector.addItem("Sawtooth", 2);
+  waveformSelector.addItem("Pulse", 3);
+  waveformSelector.addItem("Noise", 4);
+  waveformSelector.setSelectedId(1);
+  waveformSelector.onChange = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(waveformSelector);
+
+  // Pulse Width
+  pwLabel.setText("PW:", juce::dontSendNotification);
+  pwLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(pwLabel);
+
+  pulseWidthSlider.setRange(0, 4095, 1);
+  pulseWidthSlider.setValue(2048);
+  pulseWidthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  pulseWidthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  pulseWidthSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(pulseWidthSlider);
+
+  // ADSR
+  auto setupADSR = [this](juce::Slider &slider, juce::Label &label,
+                          const juce::String &text) {
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    label.setFont(juce::Font(10.0f));
+    addAndMakeVisible(label);
+
+    slider.setRange(0, 15, 1);
+    slider.setSliderStyle(juce::Slider::LinearVertical);
+    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    slider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
     addAndMakeVisible(slider);
   };
 
-  // Helper to setup waveform selector
-  auto setupWaveformSelector = [this](juce::ComboBox &selector) {
-    selector.addItem("Triangle", 1);
-    selector.addItem("Sawtooth", 2);
-    selector.addItem("Pulse", 3);
-    selector.addItem("Noise", 4);
-    selector.setSelectedId(1);
-    selector.onChange = [this]() { updateSynthFromControls(); };
-    addAndMakeVisible(selector);
-  };
+  attackSlider.setValue(0);
+  decaySlider.setValue(0);
+  sustainSlider.setValue(15);
+  releaseSlider.setValue(0);
+  setupADSR(attackSlider, attackLabel, "A");
+  setupADSR(decaySlider, decayLabel, "D");
+  setupADSR(sustainSlider, sustainLabel, "S");
+  setupADSR(releaseSlider, releaseLabel, "R");
 
-  // Left SID waveform controls
-  setupLabel(leftWaveformLabel, "L Wave");
-  setupWaveformSelector(leftWaveformSelector);
-  setupLabel(leftPWLabel, "L PW");
-  setupSlider(leftPulseWidthSlider, 0, 4095, 2048, 45);
+  // Pan
+  panLabel.setText("Pan:", juce::dontSendNotification);
+  panLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(panLabel);
 
-  // Right SID waveform controls
-  setupLabel(rightWaveformLabel, "R Wave");
-  setupWaveformSelector(rightWaveformSelector);
-  setupLabel(rightPWLabel, "R PW");
-  setupSlider(rightPulseWidthSlider, 0, 4095, 2048, 45);
-
-  // Left SID ADSR
-  setupLabel(leftADSRLabel, "L ADSR");
-  setupLabel(leftAttackLabel, "A");
-  setupSlider(leftAttackSlider, 0, 15, 0, 30);
-  setupLabel(leftDecayLabel, "D");
-  setupSlider(leftDecaySlider, 0, 15, 8, 30);
-  setupLabel(leftSustainLabel, "S");
-  setupSlider(leftSustainSlider, 0, 15, 12, 30);
-  setupLabel(leftReleaseLabel, "R");
-  setupSlider(leftReleaseSlider, 0, 15, 4, 30);
-
-  // Right SID ADSR
-  setupLabel(rightADSRLabel, "R ADSR");
-  setupLabel(rightAttackLabel, "A");
-  setupSlider(rightAttackSlider, 0, 15, 0, 30);
-  setupLabel(rightDecayLabel, "D");
-  setupSlider(rightDecaySlider, 0, 15, 8, 30);
-  setupLabel(rightSustainLabel, "S");
-  setupSlider(rightSustainSlider, 0, 15, 12, 30);
-  setupLabel(rightReleaseLabel, "R");
-  setupSlider(rightReleaseSlider, 0, 15, 4, 30);
+  panSlider.setRange(-1.0, 1.0, 0.01);
+  panSlider.setValue(0.0);
+  panSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  panSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  panSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(panSlider);
 }
 
 void BreadbinEditor::setupFilterControls() {
-  // Helper to setup label
-  auto setupLabel = [this](juce::Label &label, const juce::String &text) {
-    label.setText(text, juce::dontSendNotification);
-    label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colours::white);
-    label.setFont(juce::FontOptions(11.0f));
-    addAndMakeVisible(label);
+  auto setupFilter = [this](juce::Slider &cutoff, juce::Slider &res,
+                            juce::ToggleButton &lp, juce::ToggleButton &bp,
+                            juce::ToggleButton &hp, juce::Label &filterLabel,
+                            juce::Label &cutLabel, juce::Label &resLabel,
+                            SIDEngine &sid, const juce::String &sidName) {
+    filterLabel.setText(sidName + " Filter", juce::dontSendNotification);
+    filterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    filterLabel.setFont(juce::Font(12.0f, juce::Font::bold));
+    addAndMakeVisible(filterLabel);
+
+    cutLabel.setText("Cut", juce::dontSendNotification);
+    cutLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    cutLabel.setFont(juce::Font(10.0f));
+    addAndMakeVisible(cutLabel);
+
+    resLabel.setText("Res", juce::dontSendNotification);
+    resLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    resLabel.setFont(juce::Font(10.0f));
+    addAndMakeVisible(resLabel);
+
+    cutoff.setRange(0, 2047, 1);
+    cutoff.setValue(1024);
+    cutoff.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    cutoff.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    cutoff.onValueChange = [&sid, &cutoff]() {
+      sid.setFilterCutoff(static_cast<int>(cutoff.getValue()));
+    };
+    addAndMakeVisible(cutoff);
+
+    res.setRange(0, 15, 1);
+    res.setValue(0);
+    res.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    res.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    res.onValueChange = [&sid, &res]() {
+      sid.setFilterResonance(static_cast<int>(res.getValue()));
+    };
+    addAndMakeVisible(res);
+
+    auto setupFilterButton = [this, &sid](juce::ToggleButton &btn) {
+      btn.setColour(juce::ToggleButton::textColourId, juce::Colours::lightgrey);
+      btn.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+      btn.onClick = [this]() { updateFiltersFromUI(); };
+      addAndMakeVisible(btn);
+    };
+
+    setupFilterButton(lp);
+    setupFilterButton(bp);
+    setupFilterButton(hp);
+    lp.setToggleState(true, juce::dontSendNotification);
+
+    // Enable filter for all 3 voices on this SID
+    sid.setFilterVoices(true, true, true);
+    sid.setFilterMode(true, false, false);
+    sid.setFilterCutoff(1024);
   };
 
-  // Helper to setup slider with styled text box
-  auto setupSlider = [this](juce::Slider &slider, double min, double max,
-                            double val, int textWidth) {
-    slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    slider.setRange(min, max, 1.0);
-    slider.setValue(val);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, textWidth, 16);
-    slider.setColour(juce::Slider::textBoxBackgroundColourId,
-                     juce::Colour(0x80000000));
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxOutlineColourId,
-                     juce::Colour(0x40FFFFFF));
-    slider.onValueChange = [this]() { updateSynthFromControls(); };
-    addAndMakeVisible(slider);
-  };
-
-  // Left SID Filter
-  leftFilterLabel.setText("L Filter", juce::dontSendNotification);
-  leftFilterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-  addAndMakeVisible(leftFilterLabel);
-
-  setupLabel(leftCutoffLabel, "Cut");
-  setupSlider(leftCutoffSlider, 0, 2047, 1024, 45);
-
-  setupLabel(leftResonanceLabel, "Res");
-  setupSlider(leftResonanceSlider, 0, 15, 8, 30);
-
-  leftLPButton.onClick = [this]() { updateSynthFromControls(); };
-  leftBPButton.onClick = [this]() { updateSynthFromControls(); };
-  leftHPButton.onClick = [this]() { updateSynthFromControls(); };
-  leftLPButton.setToggleState(true, juce::dontSendNotification);
-  addAndMakeVisible(leftLPButton);
-  addAndMakeVisible(leftBPButton);
-  addAndMakeVisible(leftHPButton);
-
-  // Right SID Filter
-  rightFilterLabel.setText("R Filter", juce::dontSendNotification);
-  rightFilterLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-  addAndMakeVisible(rightFilterLabel);
-
-  setupLabel(rightCutoffLabel, "Cut");
-  setupSlider(rightCutoffSlider, 0, 2047, 1024, 45);
-
-  setupLabel(rightResonanceLabel, "Res");
-  setupSlider(rightResonanceSlider, 0, 15, 8, 30);
-
-  rightLPButton.onClick = [this]() { updateSynthFromControls(); };
-  rightBPButton.onClick = [this]() { updateSynthFromControls(); };
-  rightHPButton.onClick = [this]() { updateSynthFromControls(); };
-  rightLPButton.setToggleState(true, juce::dontSendNotification);
-  addAndMakeVisible(rightLPButton);
-  addAndMakeVisible(rightBPButton);
-  addAndMakeVisible(rightHPButton);
+  setupFilter(leftCutoffSlider, leftResonanceSlider, leftLPButton, leftBPButton,
+              leftHPButton, leftFilterLabel, leftCutoffLabel,
+              leftResonanceLabel, processor.getLeftSID(), "L");
+  setupFilter(rightCutoffSlider, rightResonanceSlider, rightLPButton,
+              rightBPButton, rightHPButton, rightFilterLabel, rightCutoffLabel,
+              rightResonanceLabel, processor.getRightSID(), "R");
 }
 
-void BreadbinEditor::updateSynthFromControls() {
-  auto &sid = processor.getLeftSID();
-  auto &sidR = processor.getRightSID();
+void BreadbinEditor::selectVoice(int voice) {
+  if (voice < 0 || voice > 5)
+    return;
 
-  // Helper to map waveform ID to enum
-  auto getWaveform = [](int id) -> SIDEngine::Waveform {
-    switch (id) {
-    case 1:
-      return SIDEngine::Waveform::Triangle;
-    case 2:
-      return SIDEngine::Waveform::Sawtooth;
-    case 3:
-      return SIDEngine::Waveform::Pulse;
-    case 4:
-      return SIDEngine::Waveform::Noise;
-    default:
-      return SIDEngine::Waveform::Triangle;
-    }
-  };
-
-  // Left SID waveform and pulse width
-  auto leftWaveform = getWaveform(leftWaveformSelector.getSelectedId());
-  int leftPW = static_cast<int>(leftPulseWidthSlider.getValue());
-  for (int v = 0; v < 3; ++v) {
-    sid.setWaveform(v, leftWaveform);
-    sid.setPulseWidth(v, leftPW);
+  // Save current voice settings before switching
+  if (selectedVoice != voice) {
+    saveUIToVoice(selectedVoice);
   }
 
-  // Right SID waveform and pulse width
-  auto rightWaveform = getWaveform(rightWaveformSelector.getSelectedId());
-  int rightPW = static_cast<int>(rightPulseWidthSlider.getValue());
-  for (int v = 0; v < 3; ++v) {
-    sidR.setWaveform(v, rightWaveform);
-    sidR.setPulseWidth(v, rightPW);
+  selectedVoice = voice;
+
+  // Update button appearance
+  for (int i = 0; i < 6; ++i) {
+    voiceButtons[i].setColour(juce::TextButton::buttonColourId,
+                              i == selectedVoice ? juce::Colours::cyan
+                                                 : juce::Colours::darkgrey);
   }
 
-  // Left SID ADSR
-  int leftAttack = static_cast<int>(leftAttackSlider.getValue());
-  int leftDecay = static_cast<int>(leftDecaySlider.getValue());
-  int leftSustain = static_cast<int>(leftSustainSlider.getValue());
-  int leftRelease = static_cast<int>(leftReleaseSlider.getValue());
-  for (int v = 0; v < 3; ++v) {
-    sid.setAttack(v, leftAttack);
-    sid.setDecay(v, leftDecay);
-    sid.setSustain(v, leftSustain);
-    sid.setRelease(v, leftRelease);
+  loadVoiceToUI(voice);
+}
+
+void BreadbinEditor::loadVoiceToUI(int voice) {
+  const auto &settings = processor.getVoiceSettings(voice);
+
+  // Load waveform
+  int waveformId = 1;
+  switch (settings.waveform) {
+  case SIDEngine::Waveform::Triangle:
+    waveformId = 1;
+    break;
+  case SIDEngine::Waveform::Sawtooth:
+    waveformId = 2;
+    break;
+  case SIDEngine::Waveform::Pulse:
+    waveformId = 3;
+    break;
+  case SIDEngine::Waveform::Noise:
+    waveformId = 4;
+    break;
+  }
+  waveformSelector.setSelectedId(waveformId, juce::dontSendNotification);
+
+  pulseWidthSlider.setValue(settings.pulseWidth, juce::dontSendNotification);
+  attackSlider.setValue(settings.attack, juce::dontSendNotification);
+  decaySlider.setValue(settings.decay, juce::dontSendNotification);
+  sustainSlider.setValue(settings.sustain, juce::dontSendNotification);
+  releaseSlider.setValue(settings.release, juce::dontSendNotification);
+  panSlider.setValue(settings.pan, juce::dontSendNotification);
+}
+
+void BreadbinEditor::saveUIToVoice(int voice) {
+  auto &settings = processor.getVoiceSettings(voice);
+
+  // Save waveform
+  switch (waveformSelector.getSelectedId()) {
+  case 1:
+    settings.waveform = SIDEngine::Waveform::Triangle;
+    break;
+  case 2:
+    settings.waveform = SIDEngine::Waveform::Sawtooth;
+    break;
+  case 3:
+    settings.waveform = SIDEngine::Waveform::Pulse;
+    break;
+  case 4:
+    settings.waveform = SIDEngine::Waveform::Noise;
+    break;
   }
 
-  // Right SID ADSR
-  int rightAttack = static_cast<int>(rightAttackSlider.getValue());
-  int rightDecay = static_cast<int>(rightDecaySlider.getValue());
-  int rightSustain = static_cast<int>(rightSustainSlider.getValue());
-  int rightRelease = static_cast<int>(rightReleaseSlider.getValue());
-  for (int v = 0; v < 3; ++v) {
-    sidR.setAttack(v, rightAttack);
-    sidR.setDecay(v, rightDecay);
-    sidR.setSustain(v, rightSustain);
-    sidR.setRelease(v, rightRelease);
-  }
+  settings.pulseWidth = static_cast<int>(pulseWidthSlider.getValue());
+  settings.attack = static_cast<int>(attackSlider.getValue());
+  settings.decay = static_cast<int>(decaySlider.getValue());
+  settings.sustain = static_cast<int>(sustainSlider.getValue());
+  settings.release = static_cast<int>(releaseSlider.getValue());
+  settings.pan = static_cast<float>(panSlider.getValue());
 
-  // Left SID Filter
-  sid.setFilterCutoff(static_cast<int>(leftCutoffSlider.getValue()));
-  sid.setFilterResonance(static_cast<int>(leftResonanceSlider.getValue()));
-  sid.setFilterMode(leftLPButton.getToggleState(),
-                    leftBPButton.getToggleState(),
-                    leftHPButton.getToggleState());
-  sid.setFilterVoices(true, true, true);
+  // Apply to SID engine
+  processor.applyVoiceSettings(voice);
+}
 
-  // Right SID Filter
-  sidR.setFilterCutoff(static_cast<int>(rightCutoffSlider.getValue()));
-  sidR.setFilterResonance(static_cast<int>(rightResonanceSlider.getValue()));
-  sidR.setFilterMode(rightLPButton.getToggleState(),
-                     rightBPButton.getToggleState(),
-                     rightHPButton.getToggleState());
-  sidR.setFilterVoices(true, true, true);
+void BreadbinEditor::updateFiltersFromUI() {
+  processor.getLeftSID().setFilterMode(leftLPButton.getToggleState(),
+                                       leftBPButton.getToggleState(),
+                                       leftHPButton.getToggleState());
+  processor.getRightSID().setFilterMode(rightLPButton.getToggleState(),
+                                        rightBPButton.getToggleState(),
+                                        rightHPButton.getToggleState());
 }
 
 void BreadbinEditor::paint(juce::Graphics &g) {
-  // Fill entire background with dark color first
-  g.fillAll(juce::Colour(0xFF1A1A40));
-
-  // Draw background image in the area above the keyboard
-  // Keyboard takes bottom 80 pixels, so background fills the rest
   if (backgroundImage.isValid()) {
-    const int keyboardHeight = 80;
-    auto bgBounds = getLocalBounds().withTrimmedBottom(keyboardHeight);
-
-    // Draw image scaled to fill the background area while maintaining aspect
-    // ratio
-    g.drawImage(backgroundImage, bgBounds.toFloat(),
-                juce::RectanglePlacement::centred |
-                    juce::RectanglePlacement::fillDestination);
+    g.drawImage(backgroundImage, getLocalBounds().toFloat(),
+                juce::RectanglePlacement::stretchToFit);
+    // Dark overlay for readability
+    g.setColour(juce::Colour(0, 0, 0).withAlpha(0.6f));
+    g.fillRect(getLocalBounds());
+  } else {
+    g.fillAll(juce::Colour(30, 30, 35));
   }
 }
 
 void BreadbinEditor::resized() {
-  auto bounds = getLocalBounds().reduced(15);
+  auto bounds = getLocalBounds().reduced(10);
+  const int rowHeight = 35;
+  const int padding = 5;
 
-  // Skip title area - background image provides branding
-  bounds.removeFromTop(10);
+  // Row 1: Title, Mode, Time Machine, Chips
+  auto row1 = bounds.removeFromTop(rowHeight);
+  titleLabel.setBounds(row1.removeFromLeft(100));
+  row1.removeFromLeft(padding);
+  modeLabel.setBounds(row1.removeFromLeft(40));
+  dualModeSelector.setBounds(row1.removeFromLeft(100));
+  row1.removeFromLeft(padding * 2);
+  agingLabel.setBounds(row1.removeFromLeft(80));
+  agingStartLabel.setBounds(row1.removeFromLeft(30));
+  agingSlider.setBounds(row1.removeFromLeft(100));
+  agingEndLabel.setBounds(row1.removeFromLeft(30));
+  row1.removeFromLeft(padding * 2);
+  leftChipLabel.setBounds(row1.removeFromLeft(45));
+  leftChipSelector.setBounds(row1.removeFromLeft(60));
+  row1.removeFromLeft(padding);
+  rightChipLabel.setBounds(row1.removeFromLeft(50));
+  rightChipSelector.setBounds(row1.removeFromLeft(60));
 
-  // Mode row
-  auto modeRow = bounds.removeFromTop(32);
-  modeLabel.setBounds(modeRow.removeFromLeft(50));
-  dualModeSelector.setBounds(modeRow.removeFromLeft(110));
-  modeRow.removeFromLeft(10);
-  leftChipLabel.setBounds(modeRow.removeFromLeft(20));
-  leftChipSelector.setBounds(modeRow.removeFromLeft(60));
-  modeRow.removeFromLeft(5);
-  rightChipLabel.setBounds(modeRow.removeFromLeft(20));
-  rightChipSelector.setBounds(modeRow.removeFromLeft(60));
-  modeRow.removeFromLeft(10);
-  leftPresetLabel.setBounds(modeRow.removeFromLeft(55));
-  leftPresetSelector.setBounds(modeRow.removeFromLeft(100));
-  modeRow.removeFromLeft(5);
-  rightPresetLabel.setBounds(modeRow.removeFromLeft(55));
-  rightPresetSelector.setBounds(modeRow.removeFromLeft(100));
+  bounds.removeFromTop(padding);
 
-  bounds.removeFromTop(10);
+  // Row 2: Preset and Voice Selector
+  auto row2 = bounds.removeFromTop(rowHeight);
+  presetLabel.setBounds(row2.removeFromLeft(50));
+  presetSelector.setBounds(row2.removeFromLeft(110));
+  row2.removeFromLeft(padding * 3);
+  voiceSelectorLabel.setBounds(row2.removeFromLeft(45));
+  for (int i = 0; i < 6; ++i) {
+    voiceButtons[i].setBounds(row2.removeFromLeft(45));
+    row2.removeFromLeft(2);
+  }
 
-  // Synth controls row - per-voice waveform and per-voice ADSR
-  auto synthRow = bounds.removeFromTop(90);
-  auto sliderHeight = 60;
-  auto adsrWidth = 38;
+  bounds.removeFromTop(padding);
 
-  // Left Waveform
-  auto leftWaveArea = synthRow.removeFromLeft(60);
-  leftWaveformLabel.setBounds(leftWaveArea.removeFromTop(14));
-  leftWaveformSelector.setBounds(leftWaveArea.removeFromTop(24));
-  leftPWLabel.setBounds(leftWaveArea.removeFromTop(12));
-  leftPulseWidthSlider.setBounds(leftWaveArea);
+  // Row 3: Voice Controls (Wave, PW, ADSR, Pan)
+  auto row3 = bounds.removeFromTop(80);
+  waveformLabel.setBounds(row3.removeFromLeft(40));
+  waveformSelector.setBounds(row3.removeFromLeft(90));
+  row3.removeFromLeft(padding);
+  pwLabel.setBounds(row3.removeFromLeft(30));
+  pulseWidthSlider.setBounds(row3.removeFromLeft(100));
+  row3.removeFromLeft(padding * 2);
 
-  synthRow.removeFromLeft(3);
+  // ADSR - vertical sliders
+  const int adsrWidth = 35;
+  const int adsrHeight = 70;
+  auto adsrSection = row3.removeFromLeft(adsrWidth * 4 + 10);
+  auto adsrY = adsrSection.getY();
+  attackLabel.setBounds(adsrSection.getX(), adsrY, adsrWidth, 15);
+  attackSlider.setBounds(adsrSection.getX(), adsrY + 15, adsrWidth,
+                         adsrHeight - 15);
+  decayLabel.setBounds(adsrSection.getX() + adsrWidth, adsrY, adsrWidth, 15);
+  decaySlider.setBounds(adsrSection.getX() + adsrWidth, adsrY + 15, adsrWidth,
+                        adsrHeight - 15);
+  sustainLabel.setBounds(adsrSection.getX() + adsrWidth * 2, adsrY, adsrWidth,
+                         15);
+  sustainSlider.setBounds(adsrSection.getX() + adsrWidth * 2, adsrY + 15,
+                          adsrWidth, adsrHeight - 15);
+  releaseLabel.setBounds(adsrSection.getX() + adsrWidth * 3, adsrY, adsrWidth,
+                         15);
+  releaseSlider.setBounds(adsrSection.getX() + adsrWidth * 3, adsrY + 15,
+                          adsrWidth, adsrHeight - 15);
 
-  // Left ADSR
-  leftADSRLabel.setBounds(synthRow.removeFromLeft(40).removeFromTop(14));
-  synthRow.removeFromLeft(-40);
-  auto lADSRArea = synthRow.removeFromLeft(adsrWidth * 4);
-  auto lARow = lADSRArea.removeFromLeft(adsrWidth);
-  leftAttackLabel.setBounds(lARow.removeFromTop(12));
-  leftAttackSlider.setBounds(lARow);
-  auto lDRow = lADSRArea.removeFromLeft(adsrWidth);
-  leftDecayLabel.setBounds(lDRow.removeFromTop(12));
-  leftDecaySlider.setBounds(lDRow);
-  auto lSRow = lADSRArea.removeFromLeft(adsrWidth);
-  leftSustainLabel.setBounds(lSRow.removeFromTop(12));
-  leftSustainSlider.setBounds(lSRow);
-  auto lRRow = lADSRArea.removeFromLeft(adsrWidth);
-  leftReleaseLabel.setBounds(lRRow.removeFromTop(12));
-  leftReleaseSlider.setBounds(lRRow);
+  row3.removeFromLeft(padding * 2);
+  panLabel.setBounds(row3.removeFromLeft(35));
+  panSlider.setBounds(row3.removeFromLeft(120));
 
-  synthRow.removeFromLeft(10);
+  bounds.removeFromTop(padding * 2);
 
-  // Right Waveform
-  auto rightWaveArea = synthRow.removeFromLeft(60);
-  rightWaveformLabel.setBounds(rightWaveArea.removeFromTop(14));
-  rightWaveformSelector.setBounds(rightWaveArea.removeFromTop(24));
-  rightPWLabel.setBounds(rightWaveArea.removeFromTop(12));
-  rightPulseWidthSlider.setBounds(rightWaveArea);
+  // Row 4: Filters (L and R side by side)
+  auto row4 = bounds.removeFromTop(100);
+  const int filterWidth = (row4.getWidth() - padding) / 2;
 
-  synthRow.removeFromLeft(3);
+  // Left filter
+  auto leftFilterArea = row4.removeFromLeft(filterWidth);
+  leftFilterLabel.setBounds(leftFilterArea.removeFromTop(18));
+  auto leftKnobs = leftFilterArea.removeFromTop(50);
+  leftCutoffLabel.setBounds(leftKnobs.removeFromLeft(25));
+  leftCutoffSlider.setBounds(leftKnobs.removeFromLeft(50));
+  leftResonanceLabel.setBounds(leftKnobs.removeFromLeft(25));
+  leftResonanceSlider.setBounds(leftKnobs.removeFromLeft(50));
+  auto leftModes = leftFilterArea.removeFromTop(25);
+  leftLPButton.setBounds(leftModes.removeFromLeft(45));
+  leftBPButton.setBounds(leftModes.removeFromLeft(45));
+  leftHPButton.setBounds(leftModes.removeFromLeft(45));
 
-  // Right ADSR
-  rightADSRLabel.setBounds(synthRow.removeFromLeft(40).removeFromTop(14));
-  synthRow.removeFromLeft(-40);
-  auto rADSRArea = synthRow.removeFromLeft(adsrWidth * 4);
-  auto rARow = rADSRArea.removeFromLeft(adsrWidth);
-  rightAttackLabel.setBounds(rARow.removeFromTop(12));
-  rightAttackSlider.setBounds(rARow);
-  auto rDRow = rADSRArea.removeFromLeft(adsrWidth);
-  rightDecayLabel.setBounds(rDRow.removeFromTop(12));
-  rightDecaySlider.setBounds(rDRow);
-  auto rSRow = rADSRArea.removeFromLeft(adsrWidth);
-  rightSustainLabel.setBounds(rSRow.removeFromTop(12));
-  rightSustainSlider.setBounds(rSRow);
-  auto rRRow = rADSRArea.removeFromLeft(adsrWidth);
-  rightReleaseLabel.setBounds(rRRow.removeFromTop(12));
-  rightReleaseSlider.setBounds(rRRow);
+  row4.removeFromLeft(padding);
 
-  bounds.removeFromTop(8);
+  // Right filter
+  auto rightFilterArea = row4;
+  rightFilterLabel.setBounds(rightFilterArea.removeFromTop(18));
+  auto rightKnobs = rightFilterArea.removeFromTop(50);
+  rightCutoffLabel.setBounds(rightKnobs.removeFromLeft(25));
+  rightCutoffSlider.setBounds(rightKnobs.removeFromLeft(50));
+  rightResonanceLabel.setBounds(rightKnobs.removeFromLeft(25));
+  rightResonanceSlider.setBounds(rightKnobs.removeFromLeft(50));
+  auto rightModes = rightFilterArea.removeFromTop(25);
+  rightLPButton.setBounds(rightModes.removeFromLeft(45));
+  rightBPButton.setBounds(rightModes.removeFromLeft(45));
+  rightHPButton.setBounds(rightModes.removeFromLeft(45));
 
-  // Filter rows - Left and Right SID filter panels
-  auto filterRow = bounds.removeFromTop(90);
-  auto filterSliderHeight = 60;
-  auto buttonHeight = 22;
-
-  // Left Filter Panel
-  leftFilterLabel.setBounds(filterRow.removeFromLeft(45).withHeight(18));
-  filterRow.removeFromLeft(-45);
-  auto leftPanel = filterRow.removeFromLeft(180);
-  leftFilterLabel.setBounds(leftPanel.removeFromTop(18));
-
-  auto leftControlRow = leftPanel.removeFromTop(sliderHeight);
-  auto leftCutArea = leftControlRow.removeFromLeft(50);
-  leftCutoffLabel.setBounds(leftCutArea.removeFromTop(14));
-  leftCutoffSlider.setBounds(leftCutArea);
-
-  auto leftResArea = leftControlRow.removeFromLeft(45);
-  leftResonanceLabel.setBounds(leftResArea.removeFromTop(14));
-  leftResonanceSlider.setBounds(leftResArea);
-
-  auto leftButtonRow = leftControlRow.removeFromLeft(80);
-  leftButtonRow.removeFromTop(10);
-  leftLPButton.setBounds(
-      leftButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-  leftBPButton.setBounds(
-      leftButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-  leftHPButton.setBounds(
-      leftButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-
-  filterRow.removeFromLeft(20);
-
-  // Right Filter  Panel
-  rightFilterLabel.setBounds(filterRow.removeFromLeft(45).withHeight(18));
-  filterRow.removeFromLeft(-45);
-  auto rightPanel = filterRow.removeFromLeft(180);
-  rightFilterLabel.setBounds(rightPanel.removeFromTop(18));
-
-  auto rightControlRow = rightPanel.removeFromTop(sliderHeight);
-  auto rightCutArea = rightControlRow.removeFromLeft(50);
-  rightCutoffLabel.setBounds(rightCutArea.removeFromTop(14));
-  rightCutoffSlider.setBounds(rightCutArea);
-
-  auto rightResArea = rightControlRow.removeFromLeft(45);
-  rightResonanceLabel.setBounds(rightResArea.removeFromTop(14));
-  rightResonanceSlider.setBounds(rightResArea);
-
-  auto rightButtonRow = rightControlRow.removeFromLeft(80);
-  rightButtonRow.removeFromTop(10);
-  rightLPButton.setBounds(
-      rightButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-  rightBPButton.setBounds(
-      rightButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-  rightHPButton.setBounds(
-      rightButtonRow.removeFromLeft(26).removeFromTop(buttonHeight));
-
-  bounds.removeFromTop(5);
-
-  // Time Machine slider with 1982/NOW labels
-  agingLabel.setBounds(bounds.removeFromTop(18));
-  auto agingRow = bounds.removeFromTop(25);
-  agingStartLabel.setBounds(agingRow.removeFromLeft(35));
-  agingEndLabel.setBounds(agingRow.removeFromRight(35));
-  agingSlider.setBounds(agingRow.reduced(5, 0));
-
-  bounds.removeFromTop(10);
+  bounds.removeFromTop(padding);
 
   // Keyboard at bottom
-  keyboard.setBounds(bounds.removeFromBottom(80));
+  keyboard.setBounds(bounds.removeFromBottom(70));
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
-  auto &sid = processor.getLeftSID();
-  auto &sidR = processor.getRightSID();
-
-  // Helper to apply filter settings to both L/R
-  auto applyFilterPreset = [this](int cutoff, int resonance, bool lp, bool bp,
-                                  bool hp) {
-    leftCutoffSlider.setValue(cutoff);
-    leftResonanceSlider.setValue(resonance);
-    leftLPButton.setToggleState(lp, juce::dontSendNotification);
-    leftBPButton.setToggleState(bp, juce::dontSendNotification);
-    leftHPButton.setToggleState(hp, juce::dontSendNotification);
-    rightCutoffSlider.setValue(cutoff);
-    rightResonanceSlider.setValue(resonance);
-    rightLPButton.setToggleState(lp, juce::dontSendNotification);
-    rightBPButton.setToggleState(bp, juce::dontSendNotification);
-    rightHPButton.setToggleState(hp, juce::dontSendNotification);
+  // Apply preset to all 6 voices
+  auto configureVoice = [this](int voice, SIDEngine::Waveform wave, int pw,
+                               int a, int d, int s, int r, float pan) {
+    auto &settings = processor.getVoiceSettings(voice);
+    settings.waveform = wave;
+    settings.pulseWidth = pw;
+    settings.attack = a;
+    settings.decay = d;
+    settings.sustain = s;
+    settings.release = r;
+    settings.pan = pan;
+    processor.applyVoiceSettings(voice);
   };
 
-  // Helper to apply waveform and PW to both L/R
-  auto applyWaveformPreset = [this](int waveformId, int pw) {
-    leftWaveformSelector.setSelectedId(waveformId);
-    rightWaveformSelector.setSelectedId(waveformId);
-    leftPulseWidthSlider.setValue(pw);
-    rightPulseWidthSlider.setValue(pw);
-  };
-
-  // Helper to apply ADSR to both L/R
-  auto applyADSRPreset = [this](int a, int d, int s, int r) {
-    leftAttackSlider.setValue(a);
-    leftDecaySlider.setValue(d);
-    leftSustainSlider.setValue(s);
-    leftReleaseSlider.setValue(r);
-    rightAttackSlider.setValue(a);
-    rightDecaySlider.setValue(d);
-    rightSustainSlider.setValue(s);
-    rightReleaseSlider.setValue(r);
-  };
+  // Default panning: L voices left, R voices right
+  float lPan = -0.5f, rPan = 0.5f;
 
   switch (presetId) {
-  case 2: // Classic Lead (Monty on the Run style)
-    // Sawtooth, short attack, medium decay, high sustain
-    applyWaveformPreset(2, 2048); // Sawtooth
-    applyADSRPreset(0, 6, 12, 4);
-    applyFilterPreset(1400, 6, true, false, false);
+  case 2: // Classic Lead
+    for (int v = 0; v < 3; ++v)
+      configureVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, lPan);
+    for (int v = 3; v < 6; ++v)
+      configureVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, rPan);
     break;
-
-  case 3: // Fat Bass (Ocean Loader style)
-    // Pulse wave, punchy envelope
-    applyWaveformPreset(3, 1024); // Pulse, 25% duty cycle
-    applyADSRPreset(0, 8, 6, 2);
-    applyFilterPreset(600, 10, true, false, false);
+  case 3: // Fat Bass
+    for (int v = 0; v < 3; ++v)
+      configureVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, lPan);
+    for (int v = 3; v < 6; ++v)
+      configureVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, rPan);
     break;
-
-  case 4: // PWM Pad (Hubbard style)
-    // Triangle + Pulse combo, slow attack
-    applyWaveformPreset(3, 2048); // Pulse for PWM
-    applyADSRPreset(10, 4, 14, 8);
-    applyFilterPreset(1800, 4, true, false, false);
+  case 4: // Arpeggio
+    for (int v = 0; v < 3; ++v)
+      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15, 0, lPan);
+    for (int v = 3; v < 6; ++v)
+      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15, 0, rPan);
     break;
-
-  case 5:                         // Noise Snare
-    applyWaveformPreset(4, 2048); // Noise
-    applyADSRPreset(0, 6, 0, 4);
-    applyFilterPreset(1200, 2, false, true, false);
+  case 5: // Warm Pad
+    for (int v = 0; v < 3; ++v)
+      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10, 10,
+                     lPan);
+    for (int v = 3; v < 6; ++v)
+      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10, 10,
+                     rPan);
     break;
-
-  default:
-    return; // "-- Select --" does nothing
   }
 
-  updateSynthFromControls();
+  // Reload current voice into UI
+  loadVoiceToUI(selectedVoice);
 }
