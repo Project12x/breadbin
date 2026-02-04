@@ -19,30 +19,49 @@ private:
   // Currently selected voice (0-5)
   int selectedVoice = 0;
 
-  // Mode/global controls
-  juce::ComboBox dualModeSelector;
-  juce::Slider agingSlider;
+  // Title and global controls
   juce::Label titleLabel;
+  juce::ComboBox dualModeSelector;
   juce::Label modeLabel;
+  juce::ComboBox presetSelector;
+  juce::Label presetLabel;
+
+  // Time Machine (aging)
+  juce::Slider agingSlider;
   juce::Label agingLabel;
   juce::Label agingStartLabel;
   juce::Label agingEndLabel;
 
-  // Per-SID chip selection
+  // ========== LEFT SID SECTION ==========
+  juce::Label leftSIDLabel;
   juce::ComboBox leftChipSelector;
+  // L SID Voices (0-2)
+  std::array<juce::TextButton, 3> leftVoiceButtons;
+  std::array<juce::ToggleButton, 3> leftVoiceEnables;
+  // L SID Filter
+  juce::Slider leftCutoffSlider;
+  juce::Slider leftResonanceSlider;
+  juce::ToggleButton leftLPButton{"LP"};
+  juce::ToggleButton leftBPButton{"BP"};
+  juce::ToggleButton leftHPButton{"HP"};
+  juce::Label leftCutoffLabel, leftResonanceLabel;
+
+  // ========== RIGHT SID SECTION ==========
+  juce::Label rightSIDLabel;
   juce::ComboBox rightChipSelector;
-  juce::Label leftChipLabel;
-  juce::Label rightChipLabel;
+  // R SID Voices (3-5)
+  std::array<juce::TextButton, 3> rightVoiceButtons;
+  std::array<juce::ToggleButton, 3> rightVoiceEnables;
+  // R SID Filter
+  juce::Slider rightCutoffSlider;
+  juce::Slider rightResonanceSlider;
+  juce::ToggleButton rightLPButton{"LP"};
+  juce::ToggleButton rightBPButton{"BP"};
+  juce::ToggleButton rightHPButton{"HP"};
+  juce::Label rightCutoffLabel, rightResonanceLabel;
 
-  // Presets
-  juce::ComboBox presetSelector;
-  juce::Label presetLabel;
-
-  // Voice Selector (6 buttons)
-  std::array<juce::TextButton, 6> voiceButtons;
-  juce::Label voiceSelectorLabel;
-
-  // Per-voice controls (single set - edits selectedVoice)
+  // ========== VOICE EDITOR (edits selected voice) ==========
+  juce::Label voiceEditorLabel;
   juce::ComboBox waveformSelector;
   juce::Slider pulseWidthSlider;
   juce::Slider attackSlider, decaySlider, sustainSlider, releaseSlider;
@@ -50,24 +69,6 @@ private:
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
   juce::Label panLabel;
-
-  // Filter controls - Left SID (voices 1-3)
-  juce::Slider leftCutoffSlider;
-  juce::Slider leftResonanceSlider;
-  juce::ToggleButton leftLPButton{"LP"};
-  juce::ToggleButton leftBPButton{"BP"};
-  juce::ToggleButton leftHPButton{"HP"};
-  juce::Label leftFilterLabel;
-  juce::Label leftCutoffLabel, leftResonanceLabel;
-
-  // Filter controls - Right SID (voices 4-6)
-  juce::Slider rightCutoffSlider;
-  juce::Slider rightResonanceSlider;
-  juce::ToggleButton rightLPButton{"LP"};
-  juce::ToggleButton rightBPButton{"BP"};
-  juce::ToggleButton rightHPButton{"HP"};
-  juce::Label rightFilterLabel;
-  juce::Label rightCutoffLabel, rightResonanceLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
@@ -77,12 +78,13 @@ private:
   juce::Image backgroundImage;
 
   void setupControls();
-  void setupVoiceSelector();
-  void setupVoiceControls();
-  void setupFilterControls();
+  void setupLeftSID();
+  void setupRightSID();
+  void setupVoiceEditor();
   void selectVoice(int voice);
   void loadVoiceToUI(int voice);
   void saveUIToVoice(int voice);
+  void updateVoiceButtonStates();
   void updateFiltersFromUI();
   void applyPreset(int presetId);
 
