@@ -92,6 +92,11 @@ private:
   // Per-voice settings storage
   std::array<VoiceSettings, 6> voiceSettings;
 
+  // Note queues for last-note priority (one per SID)
+  juce::Array<int> leftNoteQueue;  // Notes held on left SID
+  juce::Array<int> rightNoteQueue; // Notes held on right SID
+  int lastVelocity = 100;
+
   // Voice state for MIDI
   struct VoiceState {
     int note = -1;
@@ -114,6 +119,7 @@ private:
   void handleMidiEvent(const juce::MidiMessage &msg);
   void triggerNote(int voiceIndex, int midiNote, int velocity);
   void releaseNote(int voiceIndex);
+  void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)

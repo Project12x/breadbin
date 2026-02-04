@@ -80,42 +80,41 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   if (msg.isNoteOn()) {
     const int note = msg.getNoteNumber();
-    const int velocity = msg.getVelocity();
+    lastVelocity = msg.getVelocity();
     const int channel = msg.getChannel();
 
     if (dualMode == DualMode::Multitimbral) {
-      // Channel 1 -> voices 0-2 (left SID), Channel 2 -> voices 3-5 (right SID)
-      int startVoice = (channel == 2) ? 3 : 0;
-      for (int v = startVoice; v < startVoice + 3; ++v) {
-        if (!voices[v].active) {
-          triggerNote(v, note, velocity);
-          break;
-        }
+      // Channel 1 -> left SID, Channel 2 -> right SID
+      if (channel == 2) {
+        rightNoteQueue.addIfNotAlreadyThere(note);
+        updateSIDFromQueue(false); // right SID
+      } else {
+        leftNoteQueue.addIfNotAlreadyThere(note);
+        updateSIDFromQueue(true); // left SID
       }
-    } else if (dualMode == DualMode::StereoSplit ||
-               dualMode == DualMode::Unison) {
-      // Find a free enabled voice on left SID (0-2)
-      for (int v = 0; v < 3; ++v) {
-        if (voiceSettings[v].enabled && !voices[v].active) {
-          triggerNote(v, note, velocity);
-          break;
-        }
-      }
-      // Find a free enabled voice on right SID (3-5)
-      for (int v = 3; v < 6; ++v) {
-        if (voiceSettings[v].enabled && !voices[v].active) {
-          triggerNote(v, note, velocity);
-          break;
-        }
-      }
+    } else {
+      // Stereo/Unison: both SIDs play the same notes
+      leftNoteQueue.addIfNotAlreadyThere(note);
+      rightNoteQueue.addIfNotAlreadyThere(note);
+      updateSIDFromQueue(true);  // left
+      updateSIDFromQueue(false); // right
     }
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
-    // Release all voices playing this note (may be paired in Stereo/Unison)
+
+    // Remove from queue(s)
+    leftNoteQueue.removeFirstMatchingValue(note);
+    rightNoteQueue.removeFirstMatchingValue(note);
+
+    // Update SIDs to play the previous note (or off if queue empty)
+    updateSIDFromQueue(true);  // left
+    updateSIDFromQueue(false); // right
+  } else if (msg.isAllNotesOff()) {
+    leftNoteQueue.clear();
+    rightNoteQueue.clear();
+    // Turn off all voices
     for (int v = 0; v < 6; ++v) {
-      if (voices[v].active && voices[v].note == note) {
-        releaseNote(v);
-      }
+      releaseNote(v);
     }
   }
 }
@@ -139,6 +138,30 @@ void BreadbinProcessor::releaseNote(int voiceIndex) {
   int sidVoice = voiceIndex % 3;
 
   sid.noteOff(sidVoice);
+}
+
+void BreadbinProcessor::updateSIDFromQueue(bool isLeftSID) {
+  auto &queue = isLeftSID ? leftNoteQueue : rightNoteQueue;
+  const int startVoice = isLeftSID ? 0 : 3;
+
+  if (queue.isEmpty()) {
+    // No notes held - release all voices on this SID
+    for (int v = startVoice; v < startVoice + 3; ++v) {
+      if (voices[v].active) {
+        releaseNote(v);
+      }
+    }
+  } else {
+    // Play latest note (last in queue) on ALL enabled voices
+    const int note = queue.getLast();
+    for (int v = startVoice; v < startVoice + 3; ++v) {
+      if (voiceSettings[v].enabled) {
+        triggerNote(v, note, lastVelocity);
+      } else if (voices[v].active) {
+        releaseNote(v);
+      }
+    }
+  }
 }
 
 void BreadbinProcessor::applyVoiceSettings(int voice) {

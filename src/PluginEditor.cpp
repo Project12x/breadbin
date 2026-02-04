@@ -47,10 +47,12 @@ void BreadbinEditor::setupControls() {
   modeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(modeLabel);
 
-  dualModeSelector.addItem("Stereo", 1);
+  dualModeSelector.addItem("Stereo Split", 1);
   dualModeSelector.addItem("Unison", 2);
-  dualModeSelector.addItem("Multi", 3);
+  dualModeSelector.addItem("Multitimbral", 3);
   dualModeSelector.setSelectedId(1);
+  dualModeSelector.setTooltip("Stereo: L/R SID split\nUnison: Both SIDs "
+                              "together\nMultitimbral: Separate MIDI channels");
   dualModeSelector.onChange = [this]() {
     processor.setDualMode(static_cast<BreadbinProcessor::DualMode>(
         dualModeSelector.getSelectedId() - 1));
@@ -62,12 +64,13 @@ void BreadbinEditor::setupControls() {
   presetLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(presetLabel);
 
-  presetSelector.addItem("Custom", 1);
-  presetSelector.addItem("Classic Lead", 2);
-  presetSelector.addItem("Fat Bass", 3);
-  presetSelector.addItem("Arpeggio", 4);
-  presetSelector.addItem("Warm Pad", 5);
+  presetSelector.addItem("-- Select --", 1);
+  presetSelector.addItem("Classic Lead (Monty)", 2);
+  presetSelector.addItem("Fat Bass (Ocean)", 3);
+  presetSelector.addItem("PWM Pad (Hubbard)", 4);
+  presetSelector.addItem("Noise Snare", 5);
   presetSelector.setSelectedId(1);
+  presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
     if (presetSelector.getSelectedId() > 1)
       applyPreset(presetSelector.getSelectedId());
@@ -93,6 +96,8 @@ void BreadbinEditor::setupControls() {
   agingSlider.setValue(0.0);
   agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   agingSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  agingSlider.setTooltip(
+      "Time Machine: Simulates capacitor aging from 1982 to now");
   agingSlider.onValueChange = [this]() {
     processor.setAgingFactor(static_cast<float>(agingSlider.getValue()));
   };
@@ -439,13 +444,15 @@ void BreadbinEditor::resized() {
 
   // ===== TOP ROW: Title, Mode, Preset =====
   auto topRow = bounds.removeFromTop(rowH);
-  titleLabel.setBounds(topRow.removeFromLeft(90));
+  titleLabel.setBounds(topRow.removeFromLeft(85));
   topRow.removeFromLeft(pad);
   modeLabel.setBounds(topRow.removeFromLeft(35));
-  dualModeSelector.setBounds(topRow.removeFromLeft(70));
+  dualModeSelector.setBounds(
+      topRow.removeFromLeft(100)); // Wider for "Stereo Split"
   topRow.removeFromLeft(pad * 2);
   presetLabel.setBounds(topRow.removeFromLeft(45));
-  presetSelector.setBounds(topRow.removeFromLeft(80));
+  presetSelector.setBounds(
+      topRow.removeFromLeft(150)); // Wider for "Classic Lead (Monty)"
 
   bounds.removeFromTop(pad * 2);
 
@@ -576,21 +583,21 @@ void BreadbinEditor::applyPreset(int presetId) {
   float pan = (selectedVoice < 3) ? -0.5f : 0.5f;
 
   switch (presetId) {
-  case 2: // Lead
+  case 2: // Classic Lead (Monty) - Pulse with medium PWM
     configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4,
                    pan);
     break;
-  case 3: // Bass
+  case 3: // Fat Bass (Ocean) - Sawtooth with slow attack
     configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12,
                    3, pan);
     break;
-  case 4: // Arpeggio
-    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15,
-                   0, pan);
+  case 4: // PWM Pad (Hubbard) - Pulse with slow attack/release
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12, 8,
+                   pan);
     break;
-  case 5: // Pad
-    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10,
-                   10, pan);
+  case 5: // Noise Snare - Noise with fast decay
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 8, 0, 4,
+                   pan);
     break;
   }
 
