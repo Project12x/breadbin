@@ -55,6 +55,9 @@ private:
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
 
+  // Background image
+  juce::Image backgroundImage;
+
   void setupControls();
   void setupSynthControls();
   void setupFilterControls();

@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
     : AudioProcessorEditor(&p), processor(p),
@@ -6,6 +7,10 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupControls();
   setupSynthControls();
   setupFilterControls();
+
+  // Load background image from binary data
+  backgroundImage = juce::ImageCache::getFromMemory(
+      BinaryData::background_jpg, BinaryData::background_jpgSize);
 
   // Setup keyboard with listener (inject MIDI to processor)
   keyboardState.addListener(this);
@@ -259,18 +264,21 @@ void BreadbinEditor::updateSynthFromControls() {
 }
 
 void BreadbinEditor::paint(juce::Graphics &g) {
-  // C64-inspired dark blue gradient
-  g.setGradientFill(juce::ColourGradient(
-      juce::Colour(0xFF1A1A40), 0, 0, juce::Colour(0xFF2D2D6A), 0,
-      static_cast<float>(getHeight()), false));
-  g.fillAll();
+  // Fill entire background with dark color first
+  g.fillAll(juce::Colour(0xFF1A1A40));
 
-  // Subtitle
-  g.setColour(juce::Colour(0xFF8888CC));
-  g.setFont(12.0f);
-  g.drawText("C64 Dual SID Synthesizer",
-             getLocalBounds().removeFromTop(70).removeFromBottom(20),
-             juce::Justification::centred);
+  // Draw background image in the area above the keyboard
+  // Keyboard takes bottom 80 pixels, so background fills the rest
+  if (backgroundImage.isValid()) {
+    const int keyboardHeight = 80;
+    auto bgBounds = getLocalBounds().withTrimmedBottom(keyboardHeight);
+
+    // Draw image scaled to fill the background area while maintaining aspect
+    // ratio
+    g.drawImage(backgroundImage, bgBounds.toFloat(),
+                juce::RectanglePlacement::centred |
+                    juce::RectanglePlacement::fillDestination);
+  }
 }
 
 void BreadbinEditor::resized() {

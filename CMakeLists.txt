@@ -54,6 +54,12 @@ set(PLUGIN_SOURCES
     src/residfp/version.cc
 )
 
+# Add binary assets (background image)
+juce_add_binary_data(BreadbinAssets
+    SOURCES
+        assets/background.jpg
+)
+
 juce_add_plugin(Breadbin
     COMPANY_NAME "GPL Audio"
     IS_SYNTH TRUE
@@ -102,6 +108,7 @@ endif()
 
 target_link_libraries(Breadbin
     PRIVATE
+        BreadbinAssets
         juce::juce_audio_utils
         juce::juce_audio_processors
         juce::juce_gui_basics
