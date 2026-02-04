@@ -63,10 +63,10 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(presetLabel);
 
   presetSelector.addItem("Custom", 1);
-  presetSelector.addItem("Lead", 2);
-  presetSelector.addItem("Bass", 3);
+  presetSelector.addItem("Classic Lead", 2);
+  presetSelector.addItem("Fat Bass", 3);
   presetSelector.addItem("Arpeggio", 4);
-  presetSelector.addItem("Pad", 5);
+  presetSelector.addItem("Warm Pad", 5);
   presetSelector.setSelectedId(1);
   presetSelector.onChange = [this]() {
     if (presetSelector.getSelectedId() > 1)
