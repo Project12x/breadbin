@@ -436,7 +436,7 @@ void BreadbinEditor::resized() {
   const int rowH = 28;
   const int pad = 4;
 
-  // ===== TOP ROW: Title, Mode, Preset, Age =====
+  // ===== TOP ROW: Title, Mode, Preset =====
   auto topRow = bounds.removeFromTop(rowH);
   titleLabel.setBounds(topRow.removeFromLeft(90));
   topRow.removeFromLeft(pad);
@@ -445,11 +445,6 @@ void BreadbinEditor::resized() {
   topRow.removeFromLeft(pad * 2);
   presetLabel.setBounds(topRow.removeFromLeft(45));
   presetSelector.setBounds(topRow.removeFromLeft(80));
-  topRow.removeFromLeft(pad * 2);
-  agingLabel.setBounds(topRow.removeFromLeft(30));
-  agingStartLabel.setBounds(topRow.removeFromLeft(18));
-  agingSlider.setBounds(topRow.removeFromLeft(80));
-  agingEndLabel.setBounds(topRow.removeFromLeft(25));
 
   bounds.removeFromTop(pad * 2);
 
@@ -551,6 +546,13 @@ void BreadbinEditor::resized() {
 
   // ===== KEYBOARD =====
   keyboard.setBounds(bounds.removeFromBottom(60));
+
+  // ===== TIME MACHINE (bottom, above keyboard) =====
+  auto agingRow = bounds.removeFromBottom(24);
+  agingLabel.setBounds(agingRow.removeFromLeft(30));
+  agingStartLabel.setBounds(agingRow.removeFromLeft(22));
+  agingSlider.setBounds(agingRow.removeFromLeft(200));
+  agingEndLabel.setBounds(agingRow.removeFromLeft(30));
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
@@ -567,34 +569,25 @@ void BreadbinEditor::applyPreset(int presetId) {
     processor.applyVoiceSettings(voice);
   };
 
-  float lPan = -0.5f, rPan = 0.5f;
+  // Apply preset to selected voice only
+  float pan = (selectedVoice < 3) ? -0.5f : 0.5f;
 
   switch (presetId) {
   case 2: // Lead
-    for (int v = 0; v < 3; ++v)
-      configureVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, lPan);
-    for (int v = 3; v < 6; ++v)
-      configureVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, rPan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4,
+                   pan);
     break;
   case 3: // Bass
-    for (int v = 0; v < 3; ++v)
-      configureVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, lPan);
-    for (int v = 3; v < 6; ++v)
-      configureVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, rPan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12,
+                   3, pan);
     break;
   case 4: // Arpeggio
-    for (int v = 0; v < 3; ++v)
-      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15, 0, lPan);
-    for (int v = 3; v < 6; ++v)
-      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15, 0, rPan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 2048, 0, 0, 15,
+                   0, pan);
     break;
   case 5: // Pad
-    for (int v = 0; v < 3; ++v)
-      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10, 10,
-                     lPan);
-    for (int v = 3; v < 6; ++v)
-      configureVoice(v, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10, 10,
-                     rPan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 2048, 8, 8, 10,
+                   10, pan);
     break;
   }
 

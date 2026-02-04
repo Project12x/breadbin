@@ -90,10 +90,23 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     } else if (dualMode == DualMode::StereoSplit ||
                dualMode == DualMode::Unison) {
       // Trigger on BOTH SIDs simultaneously using paired voices (0+3, 1+4, 2+5)
+      // Only trigger on enabled voices
       for (int v = 0; v < 3; ++v) {
-        if (!voices[v].active && !voices[v + 3].active) {
-          triggerNote(v, note, velocity);     // Left SID
-          triggerNote(v + 3, note, velocity); // Right SID
+        bool leftEnabled = voiceSettings[v].enabled;
+        bool rightEnabled = voiceSettings[v + 3].enabled;
+        bool leftFree = !voices[v].active;
+        bool rightFree = !voices[v + 3].active;
+
+        // Trigger left voice if enabled and free
+        if (leftEnabled && leftFree && (!rightEnabled || rightFree)) {
+          triggerNote(v, note, velocity);
+        }
+        // Trigger right voice if enabled and free
+        if (rightEnabled && rightFree && (!leftEnabled || leftFree)) {
+          triggerNote(v + 3, note, velocity);
+        }
+        // If we triggered at least one, break
+        if ((leftEnabled && leftFree) || (rightEnabled && rightFree)) {
           break;
         }
       }
