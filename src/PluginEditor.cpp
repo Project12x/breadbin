@@ -38,12 +38,7 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
 }
 
 void BreadbinEditor::setupControls() {
-  // Title
-  titleLabel.setText("BREADBIN", juce::dontSendNotification);
-  titleLabel.setFont(juce::FontOptions(28.0f, juce::Font::bold));
-  titleLabel.setJustificationType(juce::Justification::centred);
-  titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF7B68EE));
-  addAndMakeVisible(titleLabel);
+  // Title label is no longer shown - background image provides branding
 
   // Dual Mode
   modeLabel.setText("Mode:", juce::dontSendNotification);
@@ -135,34 +130,28 @@ void BreadbinEditor::setupSynthControls() {
   addAndMakeVisible(adsrLabel);
 
   auto setupADSRSlider = [this](juce::Slider &slider,
-                                const juce::String &tooltip) {
+                                const juce::String &name) {
     slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     slider.setRange(0.0, 15.0, 1.0);
     slider.setValue(8.0);
-    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    slider.setTooltip(tooltip);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
+    slider.setName(name);
     slider.onValueChange = [this]() { updateSynthFromControls(); };
     addAndMakeVisible(slider);
   };
 
-  setupADSRSlider(attackSlider, "Attack (0-15)");
-  setupADSRSlider(decaySlider, "Decay (0-15)");
-  sustainSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-  sustainSlider.setRange(0.0, 15.0, 1.0);
-  sustainSlider.setValue(12.0);
-  sustainSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  sustainSlider.setTooltip("Sustain (0-15)");
-  sustainSlider.onValueChange = [this]() { updateSynthFromControls(); };
-  addAndMakeVisible(sustainSlider);
-
-  setupADSRSlider(releaseSlider, "Release (0-15)");
+  setupADSRSlider(attackSlider, "A");
+  setupADSRSlider(decaySlider, "D");
+  setupADSRSlider(sustainSlider, "S");
+  sustainSlider.setValue(12.0); // Override default
+  setupADSRSlider(releaseSlider, "R");
 
   // Pulse width
   pulseWidthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   pulseWidthSlider.setRange(0, 4095, 1);
   pulseWidthSlider.setValue(2048);
-  pulseWidthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  pulseWidthSlider.setTooltip("Pulse Width");
+  pulseWidthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
+  pulseWidthSlider.setName("PW");
   pulseWidthSlider.onValueChange = [this]() { updateSynthFromControls(); };
   addAndMakeVisible(pulseWidthSlider);
 }
@@ -174,16 +163,17 @@ void BreadbinEditor::setupFilterControls() {
   filterCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   filterCutoffSlider.setRange(0, 2047, 1);
   filterCutoffSlider.setValue(1024);
-  filterCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  filterCutoffSlider.setTooltip("Cutoff");
+  filterCutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 14);
+  filterCutoffSlider.setName("Cutoff");
   filterCutoffSlider.onValueChange = [this]() { updateSynthFromControls(); };
   addAndMakeVisible(filterCutoffSlider);
 
   filterResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   filterResonanceSlider.setRange(0, 15, 1);
   filterResonanceSlider.setValue(8);
-  filterResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  filterResonanceSlider.setTooltip("Resonance");
+  filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50,
+                                        14);
+  filterResonanceSlider.setName("Reso");
   filterResonanceSlider.onValueChange = [this]() { updateSynthFromControls(); };
   addAndMakeVisible(filterResonanceSlider);
 
@@ -284,12 +274,11 @@ void BreadbinEditor::paint(juce::Graphics &g) {
 void BreadbinEditor::resized() {
   auto bounds = getLocalBounds().reduced(15);
 
-  // Title area
-  titleLabel.setBounds(bounds.removeFromTop(40));
-  bounds.removeFromTop(5);
+  // Skip title area - background image provides branding
+  bounds.removeFromTop(10);
 
   // Mode row
-  auto modeRow = bounds.removeFromTop(28);
+  auto modeRow = bounds.removeFromTop(32);
   modeLabel.setBounds(modeRow.removeFromLeft(50));
   dualModeSelector.setBounds(modeRow.removeFromLeft(110));
   modeRow.removeFromLeft(10);
@@ -302,31 +291,33 @@ void BreadbinEditor::resized() {
   presetLabel.setBounds(modeRow.removeFromLeft(50));
   presetSelector.setBounds(modeRow.removeFromLeft(140));
 
-  bounds.removeFromTop(8);
+  bounds.removeFromTop(10);
 
-  // Synth controls row
-  auto synthRow = bounds.removeFromTop(70);
+  // Synth controls row - larger controls
+  auto synthRow = bounds.removeFromTop(90);
   waveformLabel.setBounds(synthRow.removeFromLeft(70));
   waveformSelector.setBounds(synthRow.removeFromLeft(100));
+  synthRow.removeFromLeft(15);
+
+  adsrLabel.setBounds(synthRow.removeFromLeft(45));
+  attackSlider.setBounds(synthRow.removeFromLeft(60));
+  decaySlider.setBounds(synthRow.removeFromLeft(60));
+  sustainSlider.setBounds(synthRow.removeFromLeft(60));
+  releaseSlider.setBounds(synthRow.removeFromLeft(60));
   synthRow.removeFromLeft(10);
+  pulseWidthSlider.setBounds(synthRow.removeFromLeft(60));
 
-  adsrLabel.setBounds(synthRow.removeFromLeft(40));
-  attackSlider.setBounds(synthRow.removeFromLeft(50));
-  decaySlider.setBounds(synthRow.removeFromLeft(50));
-  sustainSlider.setBounds(synthRow.removeFromLeft(50));
-  releaseSlider.setBounds(synthRow.removeFromLeft(50));
-  pulseWidthSlider.setBounds(synthRow.removeFromLeft(50));
+  bounds.removeFromTop(8);
 
-  bounds.removeFromTop(5);
-
-  // Filter row
-  auto filterRow = bounds.removeFromTop(70);
+  // Filter row - larger controls
+  auto filterRow = bounds.removeFromTop(90);
   filterLabel.setBounds(filterRow.removeFromLeft(50));
-  filterCutoffSlider.setBounds(filterRow.removeFromLeft(60));
-  filterResonanceSlider.setBounds(filterRow.removeFromLeft(60));
-  filterLPButton.setBounds(filterRow.removeFromLeft(40));
-  filterBPButton.setBounds(filterRow.removeFromLeft(40));
-  filterHPButton.setBounds(filterRow.removeFromLeft(40));
+  filterCutoffSlider.setBounds(filterRow.removeFromLeft(70));
+  filterResonanceSlider.setBounds(filterRow.removeFromLeft(70));
+  filterRow.removeFromLeft(10);
+  filterLPButton.setBounds(filterRow.removeFromLeft(45));
+  filterBPButton.setBounds(filterRow.removeFromLeft(45));
+  filterHPButton.setBounds(filterRow.removeFromLeft(45));
 
   bounds.removeFromTop(5);
 
