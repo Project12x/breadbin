@@ -62,6 +62,7 @@ public:
   // Per-voice settings (6 voices: 0-2 = SID L, 3-5 = SID R)
   struct VoiceSettings {
     bool enabled = true;
+    int presetId = 1; // 1 = Custom
     SIDEngine::Waveform waveform = SIDEngine::Waveform::Triangle;
     int pulseWidth = 2048;
     int attack = 0;

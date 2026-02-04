@@ -381,6 +381,7 @@ void BreadbinEditor::loadVoiceToUI(int voice) {
   sustainSlider.setValue(settings.sustain, juce::dontSendNotification);
   releaseSlider.setValue(settings.release, juce::dontSendNotification);
   panSlider.setValue(settings.pan, juce::dontSendNotification);
+  presetSelector.setSelectedId(settings.presetId, juce::dontSendNotification);
 }
 
 void BreadbinEditor::saveUIToVoice(int voice) {
@@ -556,9 +557,11 @@ void BreadbinEditor::resized() {
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
-  auto configureVoice = [this](int voice, SIDEngine::Waveform wave, int pw,
-                               int a, int d, int s, int r, float pan) {
+  auto configureVoice = [this, presetId](int voice, SIDEngine::Waveform wave,
+                                         int pw, int a, int d, int s, int r,
+                                         float pan) {
     auto &settings = processor.getVoiceSettings(voice);
+    settings.presetId = presetId;
     settings.waveform = wave;
     settings.pulseWidth = pw;
     settings.attack = a;
