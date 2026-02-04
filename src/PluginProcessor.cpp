@@ -19,6 +19,11 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Initialize MIDI collector for virtual keyboard
   midiCollector.reset(sampleRate);
 
+  // Apply voice settings to all 6 voices so they're ready for polyphony
+  for (int v = 0; v < 6; ++v) {
+    applyVoiceSettings(v);
+  }
+
   // Initialize safety chain
   prepareSafetyChain(sampleRate, samplesPerBlock);
 }
