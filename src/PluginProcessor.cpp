@@ -42,20 +42,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
-  // DEBUG: track max levels
-  static int debugCounter = 0;
-  float maxL = 0.0f, maxR = 0.0f;
-
   // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
-
-    // DEBUG: track peaks
-    if (std::abs(sampleL) > maxL)
-      maxL = std::abs(sampleL);
-    if (std::abs(sampleR) > maxR)
-      maxR = std::abs(sampleR);
 
     switch (dualMode) {
     case DualMode::StereoSplit:
@@ -79,13 +69,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         rightChannel[i] = sampleR;
       break;
     }
-  }
-
-  // DEBUG: periodic output
-  if (++debugCounter % 100 == 0 && (maxL > 0.001f || maxR > 0.001f)) {
-    DBG("Audio levels - Left: " << maxL << " Right: " << maxR
-                                << " hasRightChannel: "
-                                << (rightChannel != nullptr));
   }
 }
 
@@ -134,10 +117,6 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
   // Route to appropriate SID
   SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
   int sidVoice = voiceIndex % 3;
-
-  DBG("triggerNote: voiceIndex=" << voiceIndex << " sidVoice=" << sidVoice
-                                 << " note=" << midiNote
-                                 << " isRightSID=" << (voiceIndex >= 3));
 
   sid.noteOn(sidVoice, midiNote, velocity);
 }
