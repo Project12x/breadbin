@@ -97,15 +97,31 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(presetSelector);
 
-  // Aging slider
+  // Time Machine (aging slider) - 1982 to NOW labels at ends
   agingLabel.setText("Time Machine", juce::dontSendNotification);
   agingLabel.setJustificationType(juce::Justification::centred);
+  agingLabel.setColour(juce::Label::textColourId, juce::Colours::white);
   addAndMakeVisible(agingLabel);
 
+  // "1982" label at left end
+  agingStartLabel.setText("1982", juce::dontSendNotification);
+  agingStartLabel.setJustificationType(juce::Justification::centredRight);
+  agingStartLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+  agingStartLabel.setFont(juce::FontOptions(11.0f));
+  addAndMakeVisible(agingStartLabel);
+
+  // "NOW" label at right end
+  agingEndLabel.setText("NOW", juce::dontSendNotification);
+  agingEndLabel.setJustificationType(juce::Justification::centredLeft);
+  agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+  agingEndLabel.setFont(juce::FontOptions(11.0f));
+  addAndMakeVisible(agingEndLabel);
+
+  // Simple 0-1 slider with no text box
   agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   agingSlider.setRange(0.0, 1.0, 0.01);
   agingSlider.setValue(processor.getAgingFactor());
-  agingSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
+  agingSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   agingSlider.onValueChange = [this]() {
     processor.setAgingFactor(static_cast<float>(agingSlider.getValue()));
   };
@@ -125,57 +141,83 @@ void BreadbinEditor::setupSynthControls() {
   waveformSelector.onChange = [this]() { updateSynthFromControls(); };
   addAndMakeVisible(waveformSelector);
 
-  // ADSR controls
-  adsrLabel.setText("ADSR:", juce::dontSendNotification);
-  addAndMakeVisible(adsrLabel);
+  // Helper to setup label
+  auto setupLabel = [this](juce::Label &label, const juce::String &text) {
+    label.setText(text, juce::dontSendNotification);
+    label.setJustificationType(juce::Justification::centred);
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    label.setFont(juce::FontOptions(11.0f));
+    addAndMakeVisible(label);
+  };
 
-  auto setupADSRSlider = [this](juce::Slider &slider,
-                                const juce::String &name) {
+  // Helper to setup slider with styled text box
+  auto setupSlider = [this](juce::Slider &slider, double min, double max,
+                            double val, int textWidth) {
     slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    slider.setRange(0.0, 15.0, 1.0);
-    slider.setValue(8.0);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
-    slider.setName(name);
+    slider.setRange(min, max, 1.0);
+    slider.setValue(val);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, textWidth, 16);
+    slider.setColour(juce::Slider::textBoxBackgroundColourId,
+                     juce::Colour(0x80000000));
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    slider.setColour(juce::Slider::textBoxOutlineColourId,
+                     juce::Colour(0x40FFFFFF));
     slider.onValueChange = [this]() { updateSynthFromControls(); };
     addAndMakeVisible(slider);
   };
 
-  setupADSRSlider(attackSlider, "A");
-  setupADSRSlider(decaySlider, "D");
-  setupADSRSlider(sustainSlider, "S");
-  sustainSlider.setValue(12.0); // Override default
-  setupADSRSlider(releaseSlider, "R");
+  // ADSR with labels
+  setupLabel(attackLabel, "Attack");
+  setupSlider(attackSlider, 0, 15, 8, 36);
+
+  setupLabel(decayLabel, "Decay");
+  setupSlider(decaySlider, 0, 15, 8, 36);
+
+  setupLabel(sustainLabel, "Sustain");
+  setupSlider(sustainSlider, 0, 15, 12, 36);
+
+  setupLabel(releaseLabel, "Release");
+  setupSlider(releaseSlider, 0, 15, 8, 36);
 
   // Pulse width
-  pulseWidthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-  pulseWidthSlider.setRange(0, 4095, 1);
-  pulseWidthSlider.setValue(2048);
-  pulseWidthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
-  pulseWidthSlider.setName("PW");
-  pulseWidthSlider.onValueChange = [this]() { updateSynthFromControls(); };
-  addAndMakeVisible(pulseWidthSlider);
+  setupLabel(pulseWidthLabel, "PW");
+  setupSlider(pulseWidthSlider, 0, 4095, 2048, 50);
 }
 
 void BreadbinEditor::setupFilterControls() {
   filterLabel.setText("Filter:", juce::dontSendNotification);
   addAndMakeVisible(filterLabel);
 
-  filterCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-  filterCutoffSlider.setRange(0, 2047, 1);
-  filterCutoffSlider.setValue(1024);
-  filterCutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 14);
-  filterCutoffSlider.setName("Cutoff");
-  filterCutoffSlider.onValueChange = [this]() { updateSynthFromControls(); };
-  addAndMakeVisible(filterCutoffSlider);
+  // Helper to setup label (same as synth controls)
+  auto setupLabel = [this](juce::Label &label, const juce::String &text) {
+    label.setText(text, juce::dontSendNotification);
+    label.setJustificationType(juce::Justification::centred);
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    label.setFont(juce::FontOptions(11.0f));
+    addAndMakeVisible(label);
+  };
 
-  filterResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-  filterResonanceSlider.setRange(0, 15, 1);
-  filterResonanceSlider.setValue(8);
-  filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50,
-                                        14);
-  filterResonanceSlider.setName("Reso");
-  filterResonanceSlider.onValueChange = [this]() { updateSynthFromControls(); };
-  addAndMakeVisible(filterResonanceSlider);
+  // Helper to setup slider with styled text box
+  auto setupSlider = [this](juce::Slider &slider, double min, double max,
+                            double val, int textWidth) {
+    slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    slider.setRange(min, max, 1.0);
+    slider.setValue(val);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, textWidth, 16);
+    slider.setColour(juce::Slider::textBoxBackgroundColourId,
+                     juce::Colour(0x80000000));
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    slider.setColour(juce::Slider::textBoxOutlineColourId,
+                     juce::Colour(0x40FFFFFF));
+    slider.onValueChange = [this]() { updateSynthFromControls(); };
+    addAndMakeVisible(slider);
+  };
+
+  setupLabel(cutoffLabel, "Cutoff");
+  setupSlider(filterCutoffSlider, 0, 2047, 1024, 50);
+
+  setupLabel(resonanceLabel, "Reso");
+  setupSlider(filterResonanceSlider, 0, 15, 8, 36);
 
   filterLPButton.onClick = [this]() { updateSynthFromControls(); };
   filterBPButton.onClick = [this]() { updateSynthFromControls(); };
@@ -293,37 +335,79 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromTop(10);
 
-  // Synth controls row - larger controls
-  auto synthRow = bounds.removeFromTop(90);
-  waveformLabel.setBounds(synthRow.removeFromLeft(70));
-  waveformSelector.setBounds(synthRow.removeFromLeft(100));
+  // Synth controls row - labels above sliders
+  auto synthRow = bounds.removeFromTop(100);
+  waveformLabel.setBounds(synthRow.removeFromLeft(70).removeFromTop(20));
+  synthRow.removeFromLeft(-70); // Reset position
+  auto waveformArea = synthRow.removeFromLeft(70);
+  waveformLabel.setBounds(waveformArea.removeFromTop(20));
+  waveformSelector.setBounds(waveformArea.removeFromTop(30));
+
   synthRow.removeFromLeft(15);
 
-  adsrLabel.setBounds(synthRow.removeFromLeft(45));
-  attackSlider.setBounds(synthRow.removeFromLeft(60));
-  decaySlider.setBounds(synthRow.removeFromLeft(60));
-  sustainSlider.setBounds(synthRow.removeFromLeft(60));
-  releaseSlider.setBounds(synthRow.removeFromLeft(60));
+  // ADSR sliders with labels above
+  auto adsrWidth = 55;
+  auto sliderHeight = 70;
+
+  auto attackArea = synthRow.removeFromLeft(adsrWidth);
+  attackLabel.setBounds(attackArea.removeFromTop(16));
+  attackSlider.setBounds(attackArea.removeFromTop(sliderHeight));
+
+  auto decayArea = synthRow.removeFromLeft(adsrWidth);
+  decayLabel.setBounds(decayArea.removeFromTop(16));
+  decaySlider.setBounds(decayArea.removeFromTop(sliderHeight));
+
+  auto sustainArea = synthRow.removeFromLeft(adsrWidth);
+  sustainLabel.setBounds(sustainArea.removeFromTop(16));
+  sustainSlider.setBounds(sustainArea.removeFromTop(sliderHeight));
+
+  auto releaseArea = synthRow.removeFromLeft(adsrWidth);
+  releaseLabel.setBounds(releaseArea.removeFromTop(16));
+  releaseSlider.setBounds(releaseArea.removeFromTop(sliderHeight));
+
   synthRow.removeFromLeft(10);
-  pulseWidthSlider.setBounds(synthRow.removeFromLeft(60));
+
+  auto pwArea = synthRow.removeFromLeft(adsrWidth);
+  pulseWidthLabel.setBounds(pwArea.removeFromTop(16));
+  pulseWidthSlider.setBounds(pwArea.removeFromTop(sliderHeight));
 
   bounds.removeFromTop(8);
 
-  // Filter row - larger controls
-  auto filterRow = bounds.removeFromTop(90);
-  filterLabel.setBounds(filterRow.removeFromLeft(50));
-  filterCutoffSlider.setBounds(filterRow.removeFromLeft(70));
-  filterResonanceSlider.setBounds(filterRow.removeFromLeft(70));
+  // Filter row - labels above sliders
+  auto filterRow = bounds.removeFromTop(100);
+  filterLabel.setBounds(filterRow.removeFromLeft(50).removeFromTop(20));
+  filterRow.removeFromLeft(-50);
+  auto filterLabelArea = filterRow.removeFromLeft(50);
+  filterLabel.setBounds(filterLabelArea.removeFromTop(20));
   filterRow.removeFromLeft(10);
-  filterLPButton.setBounds(filterRow.removeFromLeft(45));
-  filterBPButton.setBounds(filterRow.removeFromLeft(45));
-  filterHPButton.setBounds(filterRow.removeFromLeft(45));
+
+  auto cutoffArea = filterRow.removeFromLeft(65);
+  cutoffLabel.setBounds(cutoffArea.removeFromTop(16));
+  filterCutoffSlider.setBounds(cutoffArea.removeFromTop(sliderHeight));
+
+  auto resoArea = filterRow.removeFromLeft(55);
+  resonanceLabel.setBounds(resoArea.removeFromTop(16));
+  filterResonanceSlider.setBounds(resoArea.removeFromTop(sliderHeight));
+
+  filterRow.removeFromLeft(10);
+  auto buttonHeight = 25;
+  auto buttonArea = filterRow.removeFromLeft(120);
+  buttonArea.removeFromTop(30);
+  filterLPButton.setBounds(
+      buttonArea.removeFromLeft(40).removeFromTop(buttonHeight));
+  filterBPButton.setBounds(
+      buttonArea.removeFromLeft(40).removeFromTop(buttonHeight));
+  filterHPButton.setBounds(
+      buttonArea.removeFromLeft(40).removeFromTop(buttonHeight));
 
   bounds.removeFromTop(5);
 
-  // Aging slider
-  agingLabel.setBounds(bounds.removeFromTop(20));
-  agingSlider.setBounds(bounds.removeFromTop(25).reduced(40, 0));
+  // Time Machine slider with 1982/NOW labels
+  agingLabel.setBounds(bounds.removeFromTop(18));
+  auto agingRow = bounds.removeFromTop(25);
+  agingStartLabel.setBounds(agingRow.removeFromLeft(35));
+  agingEndLabel.setBounds(agingRow.removeFromRight(35));
+  agingSlider.setBounds(agingRow.reduced(5, 0));
 
   bounds.removeFromTop(10);
 

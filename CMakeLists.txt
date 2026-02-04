@@ -118,3 +118,29 @@ target_link_libraries(Breadbin
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+# Headless test executable (TODO: Enable when SafetyLimiter.h exists)
+# add_executable(BreadbinTests
+#     tests/HeadlessTests.cpp
+#     src/SIDEngine.cpp
+# )
+# 
+# target_include_directories(BreadbinTests PRIVATE
+#     ${CMAKE_SOURCE_DIR}/src
+#     ${CMAKE_SOURCE_DIR}/reSIDfp/src
+# )
+# 
+# target_link_libraries(BreadbinTests PRIVATE
+#     juce::juce_core
+# )
+# 
+# target_sources(BreadbinTests PRIVATE
+#     reSIDfp/src/resid/sid.cc
+#     reSIDfp/src/resid/wave.cc
+#     reSIDfp/src/resid/envelope.cc
+#     reSIDfp/src/resid/filter.cc
+#     reSIDfp/src/resid/extfilt.cc
+#     reSIDfp/src/resid/pot.cc
+#     reSIDfp/src/resid/voice.cc
+#     reSIDfp/src/resid/version.cc
+# )

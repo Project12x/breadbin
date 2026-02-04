@@ -22,6 +22,8 @@ private:
   juce::Label titleLabel;
   juce::Label modeLabel;
   juce::Label agingLabel;
+  juce::Label agingStartLabel; // "1982"
+  juce::Label agingEndLabel;   // "NOW"
 
   // Per-channel chip selection
   juce::ComboBox leftChipSelector;
@@ -41,7 +43,8 @@ private:
   juce::Slider sustainSlider;
   juce::Slider releaseSlider;
   juce::Label waveformLabel;
-  juce::Label adsrLabel;
+  juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
+  juce::Label pulseWidthLabel;
 
   // Filter controls
   juce::Slider filterCutoffSlider;
@@ -50,6 +53,7 @@ private:
   juce::ToggleButton filterBPButton{"BP"};
   juce::ToggleButton filterHPButton{"HP"};
   juce::Label filterLabel;
+  juce::Label cutoffLabel, resonanceLabel;
 
   // Virtual keyboard for standalone testing
   juce::MidiKeyboardState keyboardState;
