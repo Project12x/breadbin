@@ -77,6 +77,15 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(presetSelector);
 
+  // Save/Load preset buttons
+  savePresetButton.setTooltip("Save all settings to a .breadbin file");
+  savePresetButton.onClick = [this]() { savePresetToFile(); };
+  addAndMakeVisible(savePresetButton);
+
+  loadPresetButton.setTooltip("Load settings from a .breadbin file");
+  loadPresetButton.onClick = [this]() { loadPresetFromFile(); };
+  addAndMakeVisible(loadPresetButton);
+
   // Time Machine
   agingLabel.setText("Age:", juce::dontSendNotification);
   agingLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
@@ -454,6 +463,10 @@ void BreadbinEditor::resized() {
   presetLabel.setBounds(topRow.removeFromLeft(45));
   presetSelector.setBounds(
       topRow.removeFromLeft(150)); // Wider for "Classic Lead (Monty)"
+  topRow.removeFromLeft(pad);
+  savePresetButton.setBounds(topRow.removeFromLeft(45));
+  topRow.removeFromLeft(pad);
+  loadPresetButton.setBounds(topRow.removeFromLeft(45));
 
   bounds.removeFromTop(pad * 2);
 
@@ -603,4 +616,93 @@ void BreadbinEditor::applyPreset(int presetId) {
   }
 
   loadVoiceToUI(selectedVoice);
+}
+
+void BreadbinEditor::savePresetToFile() {
+  // Save all current UI state to selected voice first
+  saveUIToVoice(selectedVoice);
+
+  // Get state from processor
+  juce::MemoryBlock data;
+  processor.getStateInformation(data);
+
+  // Show file dialog
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Save Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.breadbin", true);
+
+  auto chooserFlags = juce::FileBrowserComponent::saveMode |
+                      juce::FileBrowserComponent::canSelectFiles |
+                      juce::FileBrowserComponent::warnAboutOverwriting;
+
+  chooser->launchAsync(chooserFlags, [this, data](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file != juce::File{}) {
+      // Ensure correct extension
+      if (!file.hasFileExtension(".breadbin"))
+        file = file.withFileExtension(".breadbin");
+
+      // Write state as XML for human readability
+      auto state =
+          juce::ValueTree::readFromData(data.getData(), data.getSize());
+      if (state.isValid()) {
+        auto xml = state.createXml();
+        if (xml != nullptr) {
+          xml->writeTo(file);
+        }
+      }
+    }
+  });
+
+  // Keep chooser alive
+  static std::unique_ptr<juce::FileChooser> savedChooser;
+  savedChooser = std::move(chooser);
+}
+
+void BreadbinEditor::loadPresetFromFile() {
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Load Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.breadbin", true);
+
+  auto chooserFlags = juce::FileBrowserComponent::openMode |
+                      juce::FileBrowserComponent::canSelectFiles;
+
+  chooser->launchAsync(chooserFlags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file.existsAsFile()) {
+      auto xml = juce::XmlDocument::parse(file);
+      if (xml != nullptr) {
+        auto state = juce::ValueTree::fromXml(*xml);
+        if (state.isValid()) {
+          juce::MemoryBlock data;
+          juce::MemoryOutputStream stream(data, false);
+          state.writeToStream(stream);
+          processor.setStateInformation(data.getData(),
+                                        static_cast<int>(data.getSize()));
+
+          // Refresh UI to show loaded state
+          loadVoiceToUI(selectedVoice);
+
+          // Update global controls
+          dualModeSelector.setSelectedId(
+              static_cast<int>(processor.getDualMode()) + 1,
+              juce::dontSendNotification);
+          leftChipSelector.setSelectedId(
+              static_cast<int>(processor.getLeftChipModel()) + 1,
+              juce::dontSendNotification);
+          rightChipSelector.setSelectedId(
+              static_cast<int>(processor.getRightChipModel()) + 1,
+              juce::dontSendNotification);
+          agingSlider.setValue(processor.getAgingFactor(),
+                               juce::dontSendNotification);
+        }
+      }
+    }
+  });
+
+  // Keep chooser alive
+  static std::unique_ptr<juce::FileChooser> savedChooser;
+  savedChooser = std::move(chooser);
 }

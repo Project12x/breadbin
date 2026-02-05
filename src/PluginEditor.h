@@ -25,6 +25,8 @@ private:
   juce::Label modeLabel;
   juce::ComboBox presetSelector;
   juce::Label presetLabel;
+  juce::TextButton savePresetButton{"Save"};
+  juce::TextButton loadPresetButton{"Load"};
 
   // Time Machine (aging)
   juce::Slider agingSlider;
@@ -87,6 +89,8 @@ private:
   void updateVoiceButtonStates();
   void updateFiltersFromUI();
   void applyPreset(int presetId);
+  void savePresetToFile();
+  void loadPresetFromFile();
 
   // MidiKeyboardState::Listener
   void handleNoteOn(juce::MidiKeyboardState *, int midiChannel,
