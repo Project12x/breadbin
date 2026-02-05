@@ -1,61 +1,53 @@
-# How To Guide
-
-## Building
-
-### Prerequisites
-- Visual Studio 2022 with C++ workload
-- CMake 3.22+
-- JUCE 8.0.4 (fetched automatically)
-
-### Build Steps
-
-```powershell
-# Configure
-cmake -B build -G "Visual Studio 17 2022"
-
-# Build Release
-cmake --build build --config Release
-
-# Build Debug
-cmake --build build --config Debug
-```
-
-### Output Locations
-- **Standalone**: `build/Breadbin_artefacts/Release/Standalone/Breadbin.exe`
-- **VST3**: `build/Breadbin_artefacts/Release/VST3/Breadbin.vst3/`
+# How to Use Breadbin SID VST
 
 ## Installation
+1. Build the project or copy `Breadbin.vst3` to your VST3 folder
+2. Scan for plugins in your DAW
+3. Load Breadbin on a MIDI track
 
-### VST3 Plugin
-Copy the `Breadbin.vst3` folder to your VST3 directory:
-- Windows: `C:\Program Files\Common Files\VST3\`
-- macOS: `/Library/Audio/Plug-Ins/VST3/`
+## Quick Start
 
-### Standalone
-Run `Breadbin.exe` directly - no installation required.
+### Play Notes
+- Use your MIDI keyboard or the on-screen virtual keyboard
+- All 3 SIDs play in unison by default (Stereo mode)
 
-## Usage
+### Change the Sound
+1. Click a voice button (1-9) to select it
+2. Adjust waveform: Triangle, Saw, Pulse, Noise
+3. Tweak Pulse Width for PWM sounds
+4. Shape the envelope with Attack, Decay, Sustain, Release
 
-### Dual SID Modes
-1. **Stereo Split**: Classic dual-SID setup. Left SID plays on left, right SID on right.
-2. **Unison**: Both SIDs play together with slight detune for thickness.
-3. **Multitimbral**: Voice 1 pans left, Voice 2 right, Voice 3 center.
+### Use the Filters
+Each SID has independent LP/BP/HP filter:
+- **Cut**: Filter cutoff frequency
+- **Res**: Resonance emphasis
+- **LP/BP/HP**: Enable filter modes (can combine)
 
-### Time Machine
-Slide from 1982 (pristine chips) to NOW (aged, warmer sound).
+### Multitimbral Mode
+Switch Mode to "Multitimbral" for keyboard split:
+- Below C4 → Left SID
+- C4 to B4 → Center SID  
+- C5 and above → Right SID
+
+### Arpeggiator
+1. Enable with the **ON** toggle
+2. Hold multiple notes
+3. Choose pattern: Up, Down, Up/Down, Random
+4. Select rate: PAL 50Hz (authentic), NTSC 60Hz, or Sync
+5. Expand with Octaves knob (1-3)
 
 ### Chip Models
-- **6581**: Original C64 chip. Warmer, grittier filter.
-- **8580**: Later revision. Cleaner, tighter bass.
+Select per SID:
+- **6581**: Dark, gritty, more distortion (early C64)
+- **8580**: Cleaner, brighter (later C64)
 
-### Filter Modes
-- **LP**: Low-pass (most common SID sound)
-- **BP**: Band-pass (nasal, vocal quality)
-- **HP**: High-pass (thin, cutting)
+### Time Machine
+The Aging slider simulates component wear:
+- 0% = Factory new
+- 100% = Well-worn vintage character
 
-## Presets
-
-Select from the Preset dropdown:
-- **Init**: Default state
-- **Last Ninja Lead**: Classic C64 game lead
-- **Monty Bass**: Punchy bass sound
+## Tips
+- Layer 3 slightly detuned pulse waves for thick pads
+- Use 6581 for bass, 8580 for leads
+- Multitimbral mode: bass on left, lead on right, arp in center
+- PAL 50Hz arp rate is authentic C64 speed
