@@ -46,6 +46,7 @@ private:
   juce::ToggleButton leftLPButton{"LP"};
   juce::ToggleButton leftBPButton{"BP"};
   juce::ToggleButton leftHPButton{"HP"};
+  juce::ToggleButton leftFilterEnableButton{"Flt"};
   juce::Label leftCutoffLabel, leftResonanceLabel;
   juce::Slider leftDetuneSlider;
   juce::Label leftDetuneLabel;
@@ -62,6 +63,7 @@ private:
   juce::ToggleButton rightLPButton{"LP"};
   juce::ToggleButton rightBPButton{"BP"};
   juce::ToggleButton rightHPButton{"HP"};
+  juce::ToggleButton rightFilterEnableButton{"Flt"};
   juce::Label rightCutoffLabel, rightResonanceLabel;
   juce::Slider rightDetuneSlider;
   juce::Label rightDetuneLabel;

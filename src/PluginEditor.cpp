@@ -242,8 +242,11 @@ void BreadbinEditor::setupLeftSID() {
   setupButton(leftLPButton);
   setupButton(leftBPButton);
   setupButton(leftHPButton);
+  setupButton(leftFilterEnableButton);
   leftLPButton.setButtonText("LP");
   leftLPButton.setToggleState(true, juce::dontSendNotification);
+  leftFilterEnableButton.setToggleState(true, juce::dontSendNotification);
+  leftFilterEnableButton.setTooltip("Enable filter routing");
 
   processor.getLeftSID().setFilterVoices(true, true, true);
   processor.getLeftSID().setFilterMode(true, false, false);
@@ -343,7 +346,10 @@ void BreadbinEditor::setupRightSID() {
   setupButton(rightLPButton);
   setupButton(rightBPButton);
   setupButton(rightHPButton);
+  setupButton(rightFilterEnableButton);
   rightLPButton.setToggleState(true, juce::dontSendNotification);
+  rightFilterEnableButton.setToggleState(true, juce::dontSendNotification);
+  rightFilterEnableButton.setTooltip("Enable filter routing");
 
   processor.getRightSID().setFilterVoices(true, true, true);
   processor.getRightSID().setFilterMode(true, false, false);
@@ -525,9 +531,16 @@ void BreadbinEditor::saveUIToVoice(int voice) {
 }
 
 void BreadbinEditor::updateFiltersFromUI() {
+  // Route voices through filter only if filter is enabled
+  bool leftEnabled = leftFilterEnableButton.getToggleState();
+  processor.getLeftSID().setFilterVoices(leftEnabled, leftEnabled, leftEnabled);
   processor.getLeftSID().setFilterMode(leftLPButton.getToggleState(),
                                        leftBPButton.getToggleState(),
                                        leftHPButton.getToggleState());
+
+  bool rightEnabled = rightFilterEnableButton.getToggleState();
+  processor.getRightSID().setFilterVoices(rightEnabled, rightEnabled,
+                                          rightEnabled);
   processor.getRightSID().setFilterMode(rightLPButton.getToggleState(),
                                         rightBPButton.getToggleState(),
                                         rightHPButton.getToggleState());
@@ -594,7 +607,8 @@ void BreadbinEditor::resized() {
   leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(45));
 
   auto leftModesRow = leftPanel.removeFromTop(22);
-  leftLPButton.setBounds(leftModesRow.removeFromLeft(65));
+  leftFilterEnableButton.setBounds(leftModesRow.removeFromLeft(45));
+  leftLPButton.setBounds(leftModesRow.removeFromLeft(45));
   leftBPButton.setBounds(leftModesRow.removeFromLeft(45));
   leftHPButton.setBounds(leftModesRow.removeFromLeft(45));
 
@@ -628,7 +642,8 @@ void BreadbinEditor::resized() {
   rightResonanceSlider.setBounds(rightFilterRow.removeFromLeft(45));
 
   auto rightModesRow = rightPanel.removeFromTop(22);
-  rightLPButton.setBounds(rightModesRow.removeFromLeft(65));
+  rightFilterEnableButton.setBounds(rightModesRow.removeFromLeft(45));
+  rightLPButton.setBounds(rightModesRow.removeFromLeft(45));
   rightBPButton.setBounds(rightModesRow.removeFromLeft(45));
   rightHPButton.setBounds(rightModesRow.removeFromLeft(45));
 
