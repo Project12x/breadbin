@@ -8,7 +8,6 @@
 #include <random>
 #include <vector>
 
-
 class BreadbinProcessor : public juce::AudioProcessor {
 public:
   // Dual SID routing modes
@@ -94,6 +93,16 @@ public:
   int getArpOctaves() const { return arpOctaves; }
   void setArpOctaves(int octaves) { arpOctaves = juce::jlimit(1, 4, octaves); }
 
+  // Detune per SID (-50 to +50 cents)
+  float getLeftDetune() const { return leftDetuneCents; }
+  float getRightDetune() const { return rightDetuneCents; }
+  void setLeftDetune(float cents) {
+    leftDetuneCents = juce::jlimit(-50.0f, 50.0f, cents);
+  }
+  void setRightDetune(float cents) {
+    rightDetuneCents = juce::jlimit(-50.0f, 50.0f, cents);
+  }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -102,6 +111,8 @@ private:
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
   float agingFactor = 0.0f;
+  float leftDetuneCents = 0.0f;
+  float rightDetuneCents = 0.0f;
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;

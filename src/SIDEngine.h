@@ -31,6 +31,7 @@ public:
 
   // Voice control (0-2)
   void noteOn(int voice, int midiNote, int velocity);
+  void noteOn(int voice, int midiNote, int velocity, float detuneCents);
   void noteOff(int voice);
 
   // Per-voice parameters

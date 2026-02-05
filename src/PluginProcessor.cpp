@@ -180,11 +180,12 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
   voices[voiceIndex].note = midiNote;
   voices[voiceIndex].active = true;
 
-  // Route to appropriate SID
+  // Route to appropriate SID with detune applied
   SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
+  float detune = (voiceIndex < 3) ? leftDetuneCents : rightDetuneCents;
   int sidVoice = voiceIndex % 3;
 
-  sid.noteOn(sidVoice, midiNote, velocity);
+  sid.noteOn(sidVoice, midiNote, velocity, detune);
 }
 
 void BreadbinProcessor::releaseNote(int voiceIndex) {

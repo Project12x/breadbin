@@ -47,6 +47,8 @@ private:
   juce::ToggleButton leftBPButton{"BP"};
   juce::ToggleButton leftHPButton{"HP"};
   juce::Label leftCutoffLabel, leftResonanceLabel;
+  juce::Slider leftDetuneSlider;
+  juce::Label leftDetuneLabel;
 
   // ========== RIGHT SID SECTION ==========
   juce::Label rightSIDLabel;
@@ -61,6 +63,8 @@ private:
   juce::ToggleButton rightBPButton{"BP"};
   juce::ToggleButton rightHPButton{"HP"};
   juce::Label rightCutoffLabel, rightResonanceLabel;
+  juce::Slider rightDetuneSlider;
+  juce::Label rightDetuneLabel;
 
   // ========== VOICE EDITOR (edits selected voice) ==========
   juce::Label voiceEditorLabel;

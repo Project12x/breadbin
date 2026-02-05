@@ -97,11 +97,24 @@ float SIDEngine::clock() {
 }
 
 void SIDEngine::noteOn(int voice, int midiNote, int velocity) {
+  noteOn(voice, midiNote, velocity, 0.0f);
+}
+
+void SIDEngine::noteOn(int voice, int midiNote, int velocity,
+                       float detuneCents) {
   if (voice < 0 || voice > 2)
     return;
 
-  // Calculate SID frequency from MIDI note
-  uint16_t freq = midiNoteToFrequency(midiNote);
+  // Calculate detuned frequency
+  // cents to semitones: cents/100, MIDI note with fractional part
+  double detuneNote = static_cast<double>(midiNote) + (detuneCents / 100.0);
+
+  // MIDI note to Hz: f = 440 * 2^((n-69)/12)
+  double hz = 440.0 * std::pow(2.0, (detuneNote - 69.0) / 12.0);
+
+  // Convert to SID frequency register value
+  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
 
   // Set frequency registers
   int baseReg = voice * 7;
