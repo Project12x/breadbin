@@ -87,34 +87,39 @@ public:
 
 private:
   SIDEngine sidLeft;
+  SIDEngine sidCenter;
   SIDEngine sidRight;
 
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
+  SIDEngine::ChipModel chipModelCenter = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
   float agingFactor = 0.0f;
 
   // Per-SID stereo panning (-1.0 = left, 0.0 = center, +1.0 = right)
   float leftSIDPan = -0.75f; // Default: left SID panned 75% left
+  float centerSIDPan = 0.0f; // Default: center SID panned center
   float rightSIDPan = 0.75f; // Default: right SID panned 75% right
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;
 
-  // Per-voice settings storage
-  std::array<VoiceSettings, 6> voiceSettings;
+  // Per-voice settings storage (9 voices: 3 per SID)
+  // Voices 0-2: Left SID, Voices 3-5: Center SID, Voices 6-8: Right SID
+  std::array<VoiceSettings, 9> voiceSettings;
 
   // Note queues for last-note priority (one per SID)
-  juce::Array<int> leftNoteQueue;  // Notes held on left SID
-  juce::Array<int> rightNoteQueue; // Notes held on right SID
+  juce::Array<int> leftNoteQueue;   // Notes held on left SID
+  juce::Array<int> centerNoteQueue; // Notes held on center SID
+  juce::Array<int> rightNoteQueue;  // Notes held on right SID
   int lastVelocity = 100;
 
-  // Voice state for MIDI
+  // Voice state for MIDI (9 voices: 3 per SID)
   struct VoiceState {
     int note = -1;
     bool active = false;
   };
-  std::array<VoiceState, 6> voices;
+  std::array<VoiceState, 9> voices;
 
   // SAFETY DSP CHAIN
   // DC blocker / subsonic filter (20Hz high-pass)
@@ -131,7 +136,8 @@ private:
   void handleMidiEvent(const juce::MidiMessage &msg);
   void triggerNote(int voiceIndex, int midiNote, int velocity);
   void releaseNote(int voiceIndex);
-  void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
+  // sidIndex: 0 = left, 1 = center, 2 = right
+  void updateSIDFromQueue(int sidIndex);
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
