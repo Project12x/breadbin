@@ -103,6 +103,12 @@ public:
     rightDetuneCents = juce::jlimit(-50.0f, 50.0f, cents);
   }
 
+  // Portamento/Glide (0-2000 ms)
+  float getGlideTimeMs() const { return glideTimeMs; }
+  void setGlideTimeMs(float ms) {
+    glideTimeMs = juce::jlimit(0.0f, 2000.0f, ms);
+  }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -113,6 +119,7 @@ private:
   float agingFactor = 0.0f;
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
+  float glideTimeMs = 0.0f;
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;
@@ -129,6 +136,10 @@ private:
   struct VoiceState {
     int note = -1;
     bool active = false;
+    // Glide state
+    double currentHz = 440.0;
+    double targetHz = 440.0;
+    bool isGliding = false;
   };
   std::array<VoiceState, 6> voices;
 

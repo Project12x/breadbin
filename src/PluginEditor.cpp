@@ -160,6 +160,22 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(arpOctaveSelector);
 
+  // Glide/Portamento
+  glideTimeLabel.setText("Glide", juce::dontSendNotification);
+  glideTimeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  glideTimeLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(glideTimeLabel);
+
+  glideTimeSlider.setRange(0.0, 2000.0, 1.0);
+  glideTimeSlider.setValue(processor.getGlideTimeMs());
+  glideTimeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  glideTimeSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
+  glideTimeSlider.setTooltip("Portamento time (0 = off, up to 2000ms)");
+  glideTimeSlider.onValueChange = [this]() {
+    processor.setGlideTimeMs(static_cast<float>(glideTimeSlider.getValue()));
+  };
+  addAndMakeVisible(glideTimeSlider);
+
   // Keyboard
   keyboard.setKeyWidth(16.0f);
   keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
@@ -685,6 +701,11 @@ void BreadbinEditor::resized() {
   controlsRow.removeFromLeft(pad * 2);
   panLabel.setBounds(controlsRow.removeFromLeft(35));
   panSlider.setBounds(controlsRow.removeFromLeft(100));
+
+  // Glide/Portamento in voice editor row
+  controlsRow.removeFromLeft(pad * 4);
+  glideTimeLabel.setBounds(controlsRow.removeFromLeft(35));
+  glideTimeSlider.setBounds(controlsRow.removeFromLeft(140));
 
   bounds.removeFromTop(pad);
 

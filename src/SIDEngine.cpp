@@ -134,6 +134,20 @@ void SIDEngine::noteOff(int voice) {
   updateVoiceRegisters(voice);
 }
 
+void SIDEngine::setFrequency(int voice, double hz) {
+  if (voice < 0 || voice > 2)
+    return;
+
+  // Convert Hz to SID frequency register value
+  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+
+  // Set frequency registers only - no gate change
+  int baseReg = voice * 7;
+  writeRegister(baseReg + 0, freq & 0xFF);        // Freq Lo
+  writeRegister(baseReg + 1, (freq >> 8) & 0xFF); // Freq Hi
+}
+
 void SIDEngine::setWaveform(int voice, Waveform waveform) {
   if (voice < 0 || voice > 2)
     return;

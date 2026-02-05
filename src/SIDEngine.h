@@ -33,6 +33,8 @@ public:
   void noteOn(int voice, int midiNote, int velocity);
   void noteOn(int voice, int midiNote, int velocity, float detuneCents);
   void noteOff(int voice);
+  void setFrequency(int voice,
+                    double hz); // For portamento - no envelope retrigger
 
   // Per-voice parameters
   void setWaveform(int voice, Waveform waveform);

@@ -47,6 +47,38 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (arpEnabled && !arpSequence.empty()) {
     processArpeggiator(numSamples);
   }
+
+  // Process glide/portamento for all voices
+  if (glideTimeMs > 0.0f) {
+    // Calculate glide rate: how much to move per sample
+    double glideTimeSec = glideTimeMs / 1000.0;
+    double samplesPerGlide = hostSampleRate * glideTimeSec;
+
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active && voices[v].isGliding) {
+        double currentHz = voices[v].currentHz;
+        double targetHz = voices[v].targetHz;
+
+        if (std::abs(currentHz - targetHz) < 0.1) {
+          // Close enough - snap to target
+          voices[v].currentHz = targetHz;
+          voices[v].isGliding = false;
+        } else {
+          // Exponential glide for musical feel
+          // Move a fraction of the distance per block
+          double glideRate = static_cast<double>(numSamples) / samplesPerGlide;
+          double newHz = currentHz + (targetHz - currentHz) * glideRate;
+          voices[v].currentHz = newHz;
+
+          // Update SID frequency
+          SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+          int sidVoice = v % 3;
+          sid.setFrequency(sidVoice, newHz);
+        }
+      }
+    }
+  }
+
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -177,15 +209,34 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
 
 void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
                                     int velocity) {
+  // Calculate target frequency with detune
+  float detune = (voiceIndex < 3) ? leftDetuneCents : rightDetuneCents;
+  double detuneNote = static_cast<double>(midiNote) + (detune / 100.0);
+  double targetHz = 440.0 * std::pow(2.0, (detuneNote - 69.0) / 12.0);
+
+  bool wasActive = voices[voiceIndex].active;
+  double previousHz = voices[voiceIndex].currentHz;
+
   voices[voiceIndex].note = midiNote;
   voices[voiceIndex].active = true;
+  voices[voiceIndex].targetHz = targetHz;
 
-  // Route to appropriate SID with detune applied
   SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
-  float detune = (voiceIndex < 3) ? leftDetuneCents : rightDetuneCents;
   int sidVoice = voiceIndex % 3;
 
-  sid.noteOn(sidVoice, midiNote, velocity, detune);
+  // Glide: if voice was already playing and glide is enabled, slide pitch
+  if (wasActive && glideTimeMs > 0.0f) {
+    // Start gliding from current frequency to target
+    voices[voiceIndex].isGliding = true;
+    // currentHz stays at previousHz - processBlock will interpolate
+    // Send immediate frequency update to start from current position
+    sid.setFrequency(sidVoice, previousHz);
+  } else {
+    // No glide - normal note trigger
+    voices[voiceIndex].currentHz = targetHz;
+    voices[voiceIndex].isGliding = false;
+    sid.noteOn(sidVoice, midiNote, velocity, detune);
+  }
 }
 
 void BreadbinProcessor::releaseNote(int voiceIndex) {

@@ -85,6 +85,10 @@ private:
   juce::ComboBox arpOctaveSelector;
   juce::Label arpRateLabel;
 
+  // ========== GLIDE/PORTAMENTO ==========
+  juce::Slider glideTimeSlider;
+  juce::Label glideTimeLabel;
+
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
