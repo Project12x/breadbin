@@ -105,6 +105,7 @@ void BreadbinEditor::setupControls() {
 
   // Keyboard
   keyboard.setKeyWidth(16.0f);
+  keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
   addAndMakeVisible(keyboard);
 }
 

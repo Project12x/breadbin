@@ -75,6 +75,24 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       break;
     }
   }
+
+  // Apply safety chain (DC blocker, ultrasonic filter, limiter)
+  juce::dsp::AudioBlock<float> block(buffer);
+  juce::dsp::ProcessContextReplacing<float> context(block);
+  subsonicFilter.process(context);
+  ultrasonicFilter.process(context);
+  safetyLimiter.process(context);
+
+  // Simple noise gate to silence residual drone (-40dB threshold)
+  constexpr float noiseGateThreshold = 0.01f; // ~-40dB
+  for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+    auto *channelData = buffer.getWritePointer(ch);
+    for (int i = 0; i < numSamples; ++i) {
+      if (std::abs(channelData[i]) < noiseGateThreshold) {
+        channelData[i] = 0.0f;
+      }
+    }
+  }
 }
 
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
@@ -213,6 +231,22 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
                     nullptr);
   state.setProperty("agingFactor", agingFactor, nullptr);
 
+  // Save per-voice settings
+  for (int v = 0; v < 6; ++v) {
+    juce::ValueTree voiceState("Voice" + juce::String(v));
+    const auto &vs = voiceSettings[v];
+    voiceState.setProperty("enabled", vs.enabled, nullptr);
+    voiceState.setProperty("waveform", static_cast<int>(vs.waveform), nullptr);
+    voiceState.setProperty("pulseWidth", vs.pulseWidth, nullptr);
+    voiceState.setProperty("attack", vs.attack, nullptr);
+    voiceState.setProperty("decay", vs.decay, nullptr);
+    voiceState.setProperty("sustain", vs.sustain, nullptr);
+    voiceState.setProperty("release", vs.release, nullptr);
+    voiceState.setProperty("pan", vs.pan, nullptr);
+    voiceState.setProperty("presetId", vs.presetId, nullptr);
+    state.addChild(voiceState, -1, nullptr);
+  }
+
   juce::MemoryOutputStream stream(destData, false);
   state.writeToStream(stream);
 }
@@ -228,6 +262,25 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     setRightChipModel(static_cast<SIDEngine::ChipModel>(
         static_cast<int>(state.getProperty("chipModelRight", 0))));
     setAgingFactor(state.getProperty("agingFactor", 0.0f));
+
+    // Restore per-voice settings
+    for (int v = 0; v < 6; ++v) {
+      auto voiceState = state.getChildWithName("Voice" + juce::String(v));
+      if (voiceState.isValid()) {
+        auto &vs = voiceSettings[v];
+        vs.enabled = voiceState.getProperty("enabled", true);
+        vs.waveform = static_cast<SIDEngine::Waveform>(
+            static_cast<int>(voiceState.getProperty("waveform", 0x10)));
+        vs.pulseWidth = voiceState.getProperty("pulseWidth", 2048);
+        vs.attack = voiceState.getProperty("attack", 0);
+        vs.decay = voiceState.getProperty("decay", 0);
+        vs.sustain = voiceState.getProperty("sustain", 15);
+        vs.release = voiceState.getProperty("release", 0);
+        vs.pan = voiceState.getProperty("pan", 0.0f);
+        vs.presetId = voiceState.getProperty("presetId", 1);
+        applyVoiceSettings(v);
+      }
+    }
   }
 }
 
