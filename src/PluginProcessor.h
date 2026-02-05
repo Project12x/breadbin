@@ -100,7 +100,9 @@ public:
     int decay = 0;
     int sustain = 15;
     int release = 0;
-    float pan = 0.0f; // -1.0 = full left, 0.0 = center, 1.0 = full right
+    float pan = 0.0f;      // -1.0 = full left, 0.0 = center, 1.0 = full right
+    bool ringMod = false;  // Ring modulation with previous voice
+    bool hardSync = false; // Hard sync from previous voice
   };
   VoiceSettings &getVoiceSettings(int voice) { return voiceSettings[voice]; }
   const VoiceSettings &getVoiceSettings(int voice) const {

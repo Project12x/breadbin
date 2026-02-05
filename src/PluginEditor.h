@@ -91,6 +91,8 @@ private:
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
   juce::Label panLabel;
+  juce::ToggleButton ringModButton{"Ring"};
+  juce::ToggleButton hardSyncButton{"Sync"};
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;

@@ -1,7 +1,7 @@
 # Breadbin SID VST - Project State
 
-**Last Updated**: 2026-02-04  
-**Version**: 0.3.0  
+**Last Updated**: 2026-02-05  
+**Version**: 0.3.1  
 **Build Status**: ✅ Compiles successfully (Debug & Release)
 
 ## Current Features
@@ -16,6 +16,8 @@
 - ✅ Triangle, Saw, Pulse, Noise waveforms
 - ✅ Pulse width control
 - ✅ Per-voice ADSR
+- ✅ Ring Modulation
+- ✅ Hard Sync
 - ✅ Resonant LP/BP/HP filter per SID
 
 ### Modes
@@ -36,9 +38,8 @@
 - ✅ C64 background aesthetic
 
 ## Not Yet Implemented
-- ❌ Ring Modulation
-- ❌ Hard Sync
 - ❌ Per-voice filter routing
+- ❌ Per-SID detune
 - ❌ LFO system
 - ❌ Portamento
 - ❌ Pitch bend / Mod wheel
@@ -47,6 +48,6 @@
 
 ## Code Quality
 - ~450 lines PluginProcessor.cpp
-- ~780 lines PluginEditor.cpp
-- ~220 lines SIDEngine.cpp
+- ~840 lines PluginEditor.cpp
+- ~260 lines SIDEngine.cpp
 - Compiler warnings: Font deprecation (cosmetic)

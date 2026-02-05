@@ -500,6 +500,21 @@ void BreadbinEditor::setupVoiceEditor() {
   panSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   panSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(panSlider);
+
+  // Ring Modulation and Hard Sync
+  ringModButton.setColour(juce::ToggleButton::textColourId,
+                          juce::Colours::lightgrey);
+  ringModButton.setColour(juce::ToggleButton::tickColourId,
+                          juce::Colours::orange);
+  ringModButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(ringModButton);
+
+  hardSyncButton.setColour(juce::ToggleButton::textColourId,
+                           juce::Colours::lightgrey);
+  hardSyncButton.setColour(juce::ToggleButton::tickColourId,
+                           juce::Colours::orange);
+  hardSyncButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(hardSyncButton);
 }
 
 void BreadbinEditor::selectVoice(int voice) {
@@ -557,6 +572,8 @@ void BreadbinEditor::loadVoiceToUI(int voice) {
   sustainSlider.setValue(settings.sustain, juce::dontSendNotification);
   releaseSlider.setValue(settings.release, juce::dontSendNotification);
   panSlider.setValue(settings.pan, juce::dontSendNotification);
+  ringModButton.setToggleState(settings.ringMod, juce::dontSendNotification);
+  hardSyncButton.setToggleState(settings.hardSync, juce::dontSendNotification);
   presetSelector.setSelectedId(settings.presetId, juce::dontSendNotification);
 }
 
@@ -584,6 +601,8 @@ void BreadbinEditor::saveUIToVoice(int voice) {
   settings.sustain = static_cast<int>(sustainSlider.getValue());
   settings.release = static_cast<int>(releaseSlider.getValue());
   settings.pan = static_cast<float>(panSlider.getValue());
+  settings.ringMod = ringModButton.getToggleState();
+  settings.hardSync = hardSyncButton.getToggleState();
 
   processor.applyVoiceSettings(voice);
 }
@@ -759,6 +778,9 @@ void BreadbinEditor::resized() {
   controlsRow.removeFromLeft(pad * 2);
   panLabel.setBounds(controlsRow.removeFromLeft(30));
   panSlider.setBounds(controlsRow.removeFromLeft(100));
+  controlsRow.removeFromLeft(pad);
+  ringModButton.setBounds(controlsRow.removeFromLeft(55));
+  hardSyncButton.setBounds(controlsRow.removeFromLeft(55));
 
   bounds.removeFromTop(pad);
 
