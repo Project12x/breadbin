@@ -17,7 +17,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupVoiceEditor();
 
   selectVoice(0);
-  setSize(850, 600);
+  setSize(700, 500);
+  setResizable(true, true);
+  setResizeLimits(600, 400, 1200, 800);
 }
 
 BreadbinEditor::~BreadbinEditor() { keyboardState.removeListener(this); }
@@ -122,8 +124,8 @@ void BreadbinEditor::setupControls() {
 
   arpPatternSelector.addItem("Up", 1);
   arpPatternSelector.addItem("Down", 2);
-  arpPatternSelector.addItem("Up/Dn", 3);
-  arpPatternSelector.addItem("Rand", 4);
+  arpPatternSelector.addItem("Up/Down", 3);
+  arpPatternSelector.addItem("Random", 4);
   arpPatternSelector.setSelectedId(static_cast<int>(processor.getArpPattern()) +
                                        1,
                                    juce::dontSendNotification);
@@ -147,10 +149,10 @@ void BreadbinEditor::setupControls() {
   arpRateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(arpRateLabel);
 
-  arpOctaveSelector.addItem("1 Oct", 1);
-  arpOctaveSelector.addItem("2 Oct", 2);
-  arpOctaveSelector.addItem("3 Oct", 3);
-  arpOctaveSelector.addItem("4 Oct", 4);
+  arpOctaveSelector.addItem("1 Octave", 1);
+  arpOctaveSelector.addItem("2 Octaves", 2);
+  arpOctaveSelector.addItem("3 Octaves", 3);
+  arpOctaveSelector.addItem("4 Octaves", 4);
   arpOctaveSelector.setSelectedId(processor.getArpOctaves(),
                                   juce::dontSendNotification);
   arpOctaveSelector.onChange = [this]() {
@@ -171,8 +173,8 @@ void BreadbinEditor::setupLeftSID() {
   leftSIDLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(leftSIDLabel);
 
-  leftChipSelector.addItem("6581", 1);
-  leftChipSelector.addItem("8580", 2);
+  leftChipSelector.addItem("MOS 6581", 1);
+  leftChipSelector.addItem("MOS 8580", 2);
   leftChipSelector.setSelectedId(1);
   leftChipSelector.onChange = [this]() {
     processor.setLeftChipModel(leftChipSelector.getSelectedId() == 1
@@ -197,7 +199,7 @@ void BreadbinEditor::setupLeftSID() {
   }
 
   // Filter
-  leftCutoffLabel.setText("Cut", juce::dontSendNotification);
+  leftCutoffLabel.setText("Cutoff", juce::dontSendNotification);
   leftCutoffLabel.setColour(juce::Label::textColourId,
                             juce::Colours::lightgrey);
   leftCutoffLabel.setFont(juce::Font(10.0f));
@@ -207,6 +209,7 @@ void BreadbinEditor::setupLeftSID() {
   leftCutoffSlider.setValue(1024);
   leftCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  leftCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   leftCutoffSlider.onValueChange = [this]() {
     processor.getLeftSID().setFilterCutoff(
         static_cast<int>(leftCutoffSlider.getValue()));
@@ -223,6 +226,7 @@ void BreadbinEditor::setupLeftSID() {
   leftResonanceSlider.setValue(0);
   leftResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  leftResonanceSlider.setTooltip("Filter Resonance (0-15)");
   leftResonanceSlider.onValueChange = [this]() {
     processor.getLeftSID().setFilterResonance(
         static_cast<int>(leftResonanceSlider.getValue()));
@@ -238,6 +242,7 @@ void BreadbinEditor::setupLeftSID() {
   setupButton(leftLPButton);
   setupButton(leftBPButton);
   setupButton(leftHPButton);
+  leftLPButton.setButtonText("LP");
   leftLPButton.setToggleState(true, juce::dontSendNotification);
 
   processor.getLeftSID().setFilterVoices(true, true, true);
@@ -252,8 +257,8 @@ void BreadbinEditor::setupRightSID() {
   rightSIDLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(rightSIDLabel);
 
-  rightChipSelector.addItem("6581", 1);
-  rightChipSelector.addItem("8580", 2);
+  rightChipSelector.addItem("MOS 6581", 1);
+  rightChipSelector.addItem("MOS 8580", 2);
   rightChipSelector.setSelectedId(1);
   rightChipSelector.onChange = [this]() {
     processor.setRightChipModel(rightChipSelector.getSelectedId() == 1
@@ -278,7 +283,7 @@ void BreadbinEditor::setupRightSID() {
   }
 
   // Filter
-  rightCutoffLabel.setText("Cut", juce::dontSendNotification);
+  rightCutoffLabel.setText("Cutoff", juce::dontSendNotification);
   rightCutoffLabel.setColour(juce::Label::textColourId,
                              juce::Colours::lightgrey);
   rightCutoffLabel.setFont(juce::Font(10.0f));
@@ -288,6 +293,7 @@ void BreadbinEditor::setupRightSID() {
   rightCutoffSlider.setValue(1024);
   rightCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  rightCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   rightCutoffSlider.onValueChange = [this]() {
     processor.getRightSID().setFilterCutoff(
         static_cast<int>(rightCutoffSlider.getValue()));
@@ -304,6 +310,7 @@ void BreadbinEditor::setupRightSID() {
   rightResonanceSlider.setValue(0);
   rightResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  rightResonanceSlider.setTooltip("Filter Resonance (0-15)");
   rightResonanceSlider.onValueChange = [this]() {
     processor.getRightSID().setFilterResonance(
         static_cast<int>(rightResonanceSlider.getValue()));
@@ -336,11 +343,12 @@ void BreadbinEditor::setupVoiceEditor() {
   waveformLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   addAndMakeVisible(waveformLabel);
 
-  waveformSelector.addItem("Tri", 1);
-  waveformSelector.addItem("Saw", 2);
+  waveformSelector.addItem("Triangle", 1);
+  waveformSelector.addItem("Sawtooth", 2);
   waveformSelector.addItem("Pulse", 3);
   waveformSelector.addItem("Noise", 4);
   waveformSelector.setSelectedId(1);
+  waveformSelector.setTooltip("Oscillator Waveform");
   waveformSelector.onChange = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(waveformSelector);
 
@@ -352,11 +360,14 @@ void BreadbinEditor::setupVoiceEditor() {
   pulseWidthSlider.setValue(2048);
   pulseWidthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   pulseWidthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  pulseWidthSlider.setTooltip(
+      "Pulse Width (0-4095): Controls the square wave duty cycle");
   pulseWidthSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(pulseWidthSlider);
 
   auto setupADSR = [this](juce::Slider &slider, juce::Label &label,
-                          const juce::String &text, int defaultVal) {
+                          const juce::String &text, const juce::String &tooltip,
+                          int defaultVal) {
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     label.setFont(juce::Font(10.0f));
@@ -366,14 +377,19 @@ void BreadbinEditor::setupVoiceEditor() {
     slider.setValue(defaultVal);
     slider.setSliderStyle(juce::Slider::LinearVertical);
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    slider.setTooltip(tooltip);
     slider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
     addAndMakeVisible(slider);
   };
 
-  setupADSR(attackSlider, attackLabel, "A", 0);
-  setupADSR(decaySlider, decayLabel, "D", 0);
-  setupADSR(sustainSlider, sustainLabel, "S", 15);
-  setupADSR(releaseSlider, releaseLabel, "R", 0);
+  setupADSR(attackSlider, attackLabel, "Atk",
+            "Attack: Time for volume to reach maximum (0-15)", 0);
+  setupADSR(decaySlider, decayLabel, "Dec",
+            "Decay: Time to fall to sustain level (0-15)", 0);
+  setupADSR(sustainSlider, sustainLabel, "Sus",
+            "Sustain: Volume level while key held (0-15)", 15);
+  setupADSR(releaseSlider, releaseLabel, "Rel",
+            "Release: Time to fade after key release (0-15)", 0);
 
   panLabel.setText("Pan:", juce::dontSendNotification);
   panLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
@@ -383,6 +399,7 @@ void BreadbinEditor::setupVoiceEditor() {
   panSlider.setValue(0.0);
   panSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   panSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  panSlider.setTooltip("Pan: Left (-1) to Right (+1)");
   panSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(panSlider);
 }
@@ -524,7 +541,7 @@ void BreadbinEditor::resized() {
   auto leftPanel = sidRow.removeFromLeft(sidWidth);
   leftSIDLabel.setBounds(leftPanel.removeFromTop(20));
   auto leftChipRow = leftPanel.removeFromTop(24);
-  leftChipSelector.setBounds(leftChipRow.removeFromLeft(60));
+  leftChipSelector.setBounds(leftChipRow.removeFromLeft(85));
 
   // Voice buttons with enable checkboxes
   auto leftVoicesRow = leftPanel.removeFromTop(30);
@@ -537,15 +554,15 @@ void BreadbinEditor::resized() {
   // Filter
   leftPanel.removeFromTop(pad);
   auto leftFilterRow = leftPanel.removeFromTop(50);
-  leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(25));
+  leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(40));
   leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(45));
-  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(25));
+  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(30));
   leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(45));
 
   auto leftModesRow = leftPanel.removeFromTop(22);
-  leftLPButton.setBounds(leftModesRow.removeFromLeft(40));
-  leftBPButton.setBounds(leftModesRow.removeFromLeft(40));
-  leftHPButton.setBounds(leftModesRow.removeFromLeft(40));
+  leftLPButton.setBounds(leftModesRow.removeFromLeft(65));
+  leftBPButton.setBounds(leftModesRow.removeFromLeft(45));
+  leftHPButton.setBounds(leftModesRow.removeFromLeft(45));
 
   sidRow.removeFromLeft(pad * 2);
 
@@ -553,7 +570,7 @@ void BreadbinEditor::resized() {
   auto rightPanel = sidRow;
   rightSIDLabel.setBounds(rightPanel.removeFromTop(20));
   auto rightChipRow = rightPanel.removeFromTop(24);
-  rightChipSelector.setBounds(rightChipRow.removeFromLeft(60));
+  rightChipSelector.setBounds(rightChipRow.removeFromLeft(85));
 
   // Voice buttons with enable checkboxes
   auto rightVoicesRow = rightPanel.removeFromTop(30);
@@ -566,15 +583,15 @@ void BreadbinEditor::resized() {
   // Filter
   rightPanel.removeFromTop(pad);
   auto rightFilterRow = rightPanel.removeFromTop(50);
-  rightCutoffLabel.setBounds(rightFilterRow.removeFromLeft(25));
+  rightCutoffLabel.setBounds(rightFilterRow.removeFromLeft(40));
   rightCutoffSlider.setBounds(rightFilterRow.removeFromLeft(45));
-  rightResonanceLabel.setBounds(rightFilterRow.removeFromLeft(25));
+  rightResonanceLabel.setBounds(rightFilterRow.removeFromLeft(30));
   rightResonanceSlider.setBounds(rightFilterRow.removeFromLeft(45));
 
   auto rightModesRow = rightPanel.removeFromTop(22);
-  rightLPButton.setBounds(rightModesRow.removeFromLeft(40));
-  rightBPButton.setBounds(rightModesRow.removeFromLeft(40));
-  rightHPButton.setBounds(rightModesRow.removeFromLeft(40));
+  rightLPButton.setBounds(rightModesRow.removeFromLeft(65));
+  rightBPButton.setBounds(rightModesRow.removeFromLeft(45));
+  rightHPButton.setBounds(rightModesRow.removeFromLeft(45));
 
   bounds.removeFromTop(pad * 2);
 
@@ -583,8 +600,8 @@ void BreadbinEditor::resized() {
   voiceEditorLabel.setBounds(editorRow.removeFromTop(18));
   auto controlsRow = editorRow;
 
-  waveformLabel.setBounds(controlsRow.removeFromLeft(35));
-  waveformSelector.setBounds(controlsRow.removeFromLeft(65));
+  waveformLabel.setBounds(controlsRow.removeFromLeft(40));
+  waveformSelector.setBounds(controlsRow.removeFromLeft(90));
   controlsRow.removeFromLeft(pad);
   pwLabel.setBounds(controlsRow.removeFromLeft(25));
   pulseWidthSlider.setBounds(controlsRow.removeFromLeft(80));
@@ -607,7 +624,7 @@ void BreadbinEditor::resized() {
                           adsrH);
 
   controlsRow.removeFromLeft(pad * 2);
-  panLabel.setBounds(controlsRow.removeFromLeft(30));
+  panLabel.setBounds(controlsRow.removeFromLeft(35));
   panSlider.setBounds(controlsRow.removeFromLeft(100));
 
   bounds.removeFromTop(pad);
@@ -624,13 +641,13 @@ void BreadbinEditor::resized() {
 
   // ===== ARPEGGIATOR (next to aging controls) =====
   agingRow.removeFromLeft(pad * 4);
-  arpEnableButton.setBounds(agingRow.removeFromLeft(45));
-  arpPatternSelector.setBounds(agingRow.removeFromLeft(65));
-  agingRow.removeFromLeft(pad);
-  arpRateSlider.setBounds(agingRow.removeFromLeft(100));
-  arpRateLabel.setBounds(agingRow.removeFromLeft(20));
-  agingRow.removeFromLeft(pad);
-  arpOctaveSelector.setBounds(agingRow.removeFromLeft(55));
+  arpEnableButton.setBounds(agingRow.removeFromLeft(50));
+  arpPatternSelector.setBounds(agingRow.removeFromLeft(85));
+  agingRow.removeFromLeft(pad * 2);
+  arpRateSlider.setBounds(agingRow.removeFromLeft(120));
+  arpRateLabel.setBounds(agingRow.removeFromLeft(25));
+  agingRow.removeFromLeft(pad * 2);
+  arpOctaveSelector.setBounds(agingRow.removeFromLeft(80));
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
