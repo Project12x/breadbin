@@ -262,7 +262,7 @@ void BreadbinEditor::setupLeftSID() {
   leftDetuneSlider.setRange(-50.0, 50.0, 1.0);
   leftDetuneSlider.setValue(0.0);
   leftDetuneSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  leftDetuneSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  leftDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
   leftDetuneSlider.setTooltip("Detune: -50 to +50 cents");
   leftDetuneSlider.onValueChange = [this]() {
     processor.setLeftDetune(static_cast<float>(leftDetuneSlider.getValue()));
@@ -365,7 +365,7 @@ void BreadbinEditor::setupRightSID() {
   rightDetuneSlider.setRange(-50.0, 50.0, 1.0);
   rightDetuneSlider.setValue(0.0);
   rightDetuneSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  rightDetuneSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  rightDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
   rightDetuneSlider.setTooltip("Detune: -50 to +50 cents");
   rightDetuneSlider.onValueChange = [this]() {
     processor.setRightDetune(static_cast<float>(rightDetuneSlider.getValue()));
@@ -615,7 +615,7 @@ void BreadbinEditor::resized() {
   // Detune
   auto leftDetuneRow = leftPanel.removeFromTop(20);
   leftDetuneLabel.setBounds(leftDetuneRow.removeFromLeft(45));
-  leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(100));
+  leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(130));
 
   sidRow.removeFromLeft(pad * 2);
 
@@ -650,7 +650,7 @@ void BreadbinEditor::resized() {
   // Detune
   auto rightDetuneRow = rightPanel.removeFromTop(20);
   rightDetuneLabel.setBounds(rightDetuneRow.removeFromLeft(45));
-  rightDetuneSlider.setBounds(rightDetuneRow.removeFromLeft(100));
+  rightDetuneSlider.setBounds(rightDetuneRow.removeFromLeft(130));
 
   bounds.removeFromTop(pad * 2);
 
