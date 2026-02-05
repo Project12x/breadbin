@@ -1,53 +1,54 @@
-# Breadbin SID VST - Project State
+# Project State
 
-**Last Updated**: 2026-02-05  
-**Version**: 0.3.1  
-**Build Status**: ✅ Compiles successfully (Debug & Release)
+**Last Updated**: 2026-02-03
 
-## Current Features
+## Current Status: Alpha
 
-### Engine
-- ✅ Triple SID (reSIDfp cycle-accurate)
-- ✅ 9 voices (3 per SID)
-- ✅ MOS6581 / MOS8580 chip models
+### Working Features
+- ✅ Dual SID emulation via reSIDfp
+- ✅ Three stereo modes (Split, Unison, Multitimbral)
+- ✅ Per-channel chip selection (6581/8580)
 - ✅ Time Machine aging simulation
+- ✅ Waveform selection (Triangle, Saw, Pulse, Noise)
+- ✅ ADSR envelope controls
+- ✅ Filter (Cutoff, Resonance, LP/BP/HP)
+- ✅ Virtual MIDI keyboard (standalone)
+- ✅ VST3 plugin builds and loads
+- ✅ Safety limiter active
 
-### Sound
-- ✅ Triangle, Saw, Pulse, Noise waveforms
-- ✅ Pulse width control
-- ✅ Per-voice ADSR
-- ✅ Ring Modulation
-- ✅ Hard Sync
-- ✅ Resonant LP/BP/HP filter per SID
+### Known Issues
+- Minor: Unused variable warnings in updateSynthFromControls
+- Linting errors related to JUCE includes (build succeeds)
 
-### Modes
-- ✅ Stereo/Unison (all SIDs play same notes)
-- ✅ Multitimbral (3-way keyboard split)
-- ✅ Per-SID panning
+### Not Yet Implemented
+- Full parameter automation
+- State save/restore in DAW
+- Preset save to disk
+- Arpeggiator
+- LFO modulation
 
-### Arpeggiator
-- ✅ PAL 50Hz / NTSC 60Hz / Sync modes
-- ✅ Up, Down, Up/Down, Random patterns
-- ✅ 1-3 octave range
+## Build Status
+- **Windows VST3**: ✅ Building
+- **Windows Standalone**: ✅ Building
+- **macOS**: 🔲 Not tested
+- **Linux**: 🔲 Not tested
 
-### GUI
-- ✅ 3-column SID panels (L/C/R)
-- ✅ Voice editor (waveform, PW, ADSR)
-- ✅ Arpeggiator section
-- ✅ Virtual keyboard
-- ✅ C64 background aesthetic
+## Directory Structure
+```
+primordial-shuttle/
+├── src/
+│   ├── PluginProcessor.cpp/h    # Audio processing, dual SID
+│   ├── PluginEditor.cpp/h       # UI editor
+│   ├── SIDEngine.cpp/h          # reSIDfp wrapper
+│   └── SafetyLimiter.h          # Audio protection
+├── assets/
+│   └── background.jpg           # Synthwave UI background
+├── JUCE/                        # (fetched by CMake)
+└── reSIDfp/                     # (fetched by CMake)
+```
 
-## Not Yet Implemented
-- ❌ Per-voice filter routing
-- ❌ Per-SID detune
-- ❌ LFO system
-- ❌ Portamento
-- ❌ Pitch bend / Mod wheel
-- ❌ Chord memory
-- ❌ External audio input
-
-## Code Quality
-- ~450 lines PluginProcessor.cpp
-- ~840 lines PluginEditor.cpp
-- ~260 lines SIDEngine.cpp
-- Compiler warnings: Font deprecation (cosmetic)
+## Recent Changes
+- Added proper labels above all rotary controls
+- Simplified Time Machine to 1982/NOW labels
+- Added semi-opaque text boxes for values
+- Enlarged controls for better usability

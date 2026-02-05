@@ -4,44 +4,23 @@
 BreadbinProcessor::BreadbinProcessor()
     : AudioProcessor(BusesProperties().withOutput(
           "Output", juce::AudioChannelSet::stereo(), true)) {
-  // Initialize all three SIDs with default models
+  // Initialize both SIDs with default models
   sidLeft.setChipModel(chipModelLeft);
-  sidCenter.setChipModel(chipModelCenter);
   sidRight.setChipModel(chipModelRight);
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
 
-void BreadbinProcessor::setDualMode(DualMode mode) {
-  dualMode = mode;
-
-  // Set per-SID panning based on mode
-  switch (mode) {
-  case DualMode::StereoSplit:
-  case DualMode::Multitimbral:
-    leftSIDPan = -0.75f; // 75% left
-    centerSIDPan = 0.0f; // Center
-    rightSIDPan = 0.75f; // 75% right
-    break;
-  case DualMode::Unison:
-    leftSIDPan = 0.0f;   // Center
-    centerSIDPan = 0.0f; // Center
-    rightSIDPan = 0.0f;  // Center
-    break;
-  }
-}
-
 void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
-  sidCenter.prepare(sampleRate);
   sidRight.prepare(sampleRate);
 
   // Initialize MIDI collector for virtual keyboard
   midiCollector.reset(sampleRate);
 
-  // Apply voice settings to all 9 voices (3 SIDs x 3 voices)
-  for (int v = 0; v < 9; ++v) {
+  // Apply voice settings to all 6 voices so they're ready for polyphony
+  for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
   }
 
@@ -63,33 +42,38 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     handleMidiEvent(metadata.getMessage());
   }
 
-  // Process arpeggiator timing
   const int numSamples = buffer.getNumSamples();
-  processArpeggiator(numSamples);
-
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
-  // Generate audio from SID engines with per-SID panning
+  // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
     float sampleL = sidLeft.clock();
-    float sampleC = sidCenter.clock();
     float sampleR = sidRight.clock();
 
-    // Apply per-SID panning
-    // Pan formula: pan -1.0 = full left, 0.0 = center, +1.0 = full right
-    // leftGain = (1 - pan) * 0.5, rightGain = (1 + pan) * 0.5
-    const float leftL = sampleL * (1.0f - leftSIDPan) * 0.5f;
-    const float leftR = sampleL * (1.0f + leftSIDPan) * 0.5f;
-    const float centerL = sampleC * (1.0f - centerSIDPan) * 0.5f;
-    const float centerR = sampleC * (1.0f + centerSIDPan) * 0.5f;
-    const float rightL = sampleR * (1.0f - rightSIDPan) * 0.5f;
-    const float rightR = sampleR * (1.0f + rightSIDPan) * 0.5f;
+    switch (dualMode) {
+    case DualMode::StereoSplit:
+      // Left SID -> Left, Right SID -> Right
+      leftChannel[i] = sampleL;
+      if (rightChannel)
+        rightChannel[i] = sampleR;
+      break;
 
-    leftChannel[i] = leftL + centerL + rightL;
-    if (rightChannel)
-      rightChannel[i] = leftR + centerR + rightR;
+    case DualMode::Unison:
+      // Mix both SIDs to both channels
+      leftChannel[i] = (sampleL + sampleR) * 0.5f;
+      if (rightChannel)
+        rightChannel[i] = leftChannel[i];
+      break;
+
+    case DualMode::Multitimbral:
+      // Same as stereo split, but MIDI routing differs
+      leftChannel[i] = sampleL;
+      if (rightChannel)
+        rightChannel[i] = sampleR;
+      break;
+    }
   }
 }
 
@@ -97,68 +81,39 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   if (msg.isNoteOn()) {
     const int note = msg.getNoteNumber();
     lastVelocity = msg.getVelocity();
+    const int channel = msg.getChannel();
 
-    if (arpEnabled) {
-      // When arp is on, collect notes in arpHeldNotes
-      arpHeldNotes.addIfNotAlreadyThere(note);
-      rebuildArpSequence();
-      // Don't directly trigger - let processArpeggiator handle timing
-    } else if (dualMode == DualMode::Multitimbral) {
-      // Split keyboard: below C4 -> left, C4-B4 -> center, C5+ -> right
-      const int splitLow = 60;  // Middle C
-      const int splitHigh = 72; // C5
-      if (note >= splitHigh) {
+    if (dualMode == DualMode::Multitimbral) {
+      // Channel 1 -> left SID, Channel 2 -> right SID
+      if (channel == 2) {
         rightNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(2); // right SID
-      } else if (note >= splitLow) {
-        centerNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(1); // center SID
+        updateSIDFromQueue(false); // right SID
       } else {
         leftNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(0); // left SID
+        updateSIDFromQueue(true); // left SID
       }
     } else {
-      // Stereo/Unison: all 3 SIDs play the same notes
+      // Stereo/Unison: both SIDs play the same notes
       leftNoteQueue.addIfNotAlreadyThere(note);
-      centerNoteQueue.addIfNotAlreadyThere(note);
       rightNoteQueue.addIfNotAlreadyThere(note);
-      updateSIDFromQueue(0); // left
-      updateSIDFromQueue(1); // center
-      updateSIDFromQueue(2); // right
+      updateSIDFromQueue(true);  // left
+      updateSIDFromQueue(false); // right
     }
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
 
-    if (arpEnabled) {
-      arpHeldNotes.removeFirstMatchingValue(note);
-      rebuildArpSequence();
-      // Release all notes if no more notes held
-      if (arpHeldNotes.isEmpty()) {
-        for (int v = 0; v < 9; ++v) {
-          releaseNote(v);
-        }
-        arpCurrentNote = -1;
-      }
-    } else {
-      // Remove from all queues
-      leftNoteQueue.removeFirstMatchingValue(note);
-      centerNoteQueue.removeFirstMatchingValue(note);
-      rightNoteQueue.removeFirstMatchingValue(note);
+    // Remove from queue(s)
+    leftNoteQueue.removeFirstMatchingValue(note);
+    rightNoteQueue.removeFirstMatchingValue(note);
 
-      // Update all SIDs to play the previous note (or off if queue empty)
-      updateSIDFromQueue(0); // left
-      updateSIDFromQueue(1); // center
-      updateSIDFromQueue(2); // right
-    }
+    // Update SIDs to play the previous note (or off if queue empty)
+    updateSIDFromQueue(true);  // left
+    updateSIDFromQueue(false); // right
   } else if (msg.isAllNotesOff()) {
-    arpHeldNotes.clear();
-    arpSequence.clear();
-    arpCurrentNote = -1;
     leftNoteQueue.clear();
-    centerNoteQueue.clear();
     rightNoteQueue.clear();
-    // Turn off all 9 voices
-    for (int v = 0; v < 9; ++v) {
+    // Turn off all voices
+    for (int v = 0; v < 6; ++v) {
       releaseNote(v);
     }
   }
@@ -169,53 +124,27 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
   voices[voiceIndex].note = midiNote;
   voices[voiceIndex].active = true;
 
-  // Route to appropriate SID (0-2=left, 3-5=center, 6-8=right)
-  SIDEngine *sid;
-  if (voiceIndex < 3)
-    sid = &sidLeft;
-  else if (voiceIndex < 6)
-    sid = &sidCenter;
-  else
-    sid = &sidRight;
-
+  // Route to appropriate SID
+  SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
   int sidVoice = voiceIndex % 3;
-  sid->noteOn(sidVoice, midiNote, velocity);
+
+  sid.noteOn(sidVoice, midiNote, velocity);
 }
 
 void BreadbinProcessor::releaseNote(int voiceIndex) {
   voices[voiceIndex].active = false;
 
-  // Route to appropriate SID (0-2=left, 3-5=center, 6-8=right)
-  SIDEngine *sid;
-  if (voiceIndex < 3)
-    sid = &sidLeft;
-  else if (voiceIndex < 6)
-    sid = &sidCenter;
-  else
-    sid = &sidRight;
-
+  SIDEngine &sid = (voiceIndex < 3) ? sidLeft : sidRight;
   int sidVoice = voiceIndex % 3;
-  sid->noteOff(sidVoice);
+
+  sid.noteOff(sidVoice);
 }
 
-void BreadbinProcessor::updateSIDFromQueue(int sidIndex) {
-  // sidIndex: 0=left, 1=center, 2=right
-  juce::Array<int> *queue;
-  switch (sidIndex) {
-  case 0:
-    queue = &leftNoteQueue;
-    break;
-  case 1:
-    queue = &centerNoteQueue;
-    break;
-  default:
-    queue = &rightNoteQueue;
-    break;
-  }
+void BreadbinProcessor::updateSIDFromQueue(bool isLeftSID) {
+  auto &queue = isLeftSID ? leftNoteQueue : rightNoteQueue;
+  const int startVoice = isLeftSID ? 0 : 3;
 
-  const int startVoice = sidIndex * 3; // 0, 3, or 6
-
-  if (queue->isEmpty()) {
+  if (queue.isEmpty()) {
     // No notes held - release all voices on this SID
     for (int v = startVoice; v < startVoice + 3; ++v) {
       if (voices[v].active) {
@@ -224,7 +153,7 @@ void BreadbinProcessor::updateSIDFromQueue(int sidIndex) {
     }
   } else {
     // Play latest note (last in queue) on ALL enabled voices
-    const int note = queue->getLast();
+    const int note = queue.getLast();
     for (int v = startVoice; v < startVoice + 3; ++v) {
       if (voiceSettings[v].enabled) {
         triggerNote(v, note, lastVelocity);
@@ -236,29 +165,19 @@ void BreadbinProcessor::updateSIDFromQueue(int sidIndex) {
 }
 
 void BreadbinProcessor::applyVoiceSettings(int voice) {
-  if (voice < 0 || voice > 8)
+  if (voice < 0 || voice > 5)
     return;
 
-  // Route to appropriate SID (0-2=left, 3-5=center, 6-8=right)
-  SIDEngine *sid;
-  if (voice < 3)
-    sid = &sidLeft;
-  else if (voice < 6)
-    sid = &sidCenter;
-  else
-    sid = &sidRight;
-
+  SIDEngine &sid = (voice < 3) ? sidLeft : sidRight;
   int sidVoice = voice % 3;
   const auto &settings = voiceSettings[voice];
 
-  sid->setWaveform(sidVoice, settings.waveform);
-  sid->setPulseWidth(sidVoice, settings.pulseWidth);
-  sid->setAttack(sidVoice, settings.attack);
-  sid->setDecay(sidVoice, settings.decay);
-  sid->setSustain(sidVoice, settings.sustain);
-  sid->setRelease(sidVoice, settings.release);
-  sid->setRingMod(sidVoice, settings.ringMod);
-  sid->setHardSync(sidVoice, settings.hardSync);
+  sid.setWaveform(sidVoice, settings.waveform);
+  sid.setPulseWidth(sidVoice, settings.pulseWidth);
+  sid.setAttack(sidVoice, settings.attack);
+  sid.setDecay(sidVoice, settings.decay);
+  sid.setSustain(sidVoice, settings.sustain);
+  sid.setRelease(sidVoice, settings.release);
 }
 
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
@@ -335,114 +254,7 @@ void BreadbinProcessor::prepareSafetyChain(double sampleRate,
   safetyLimiter.prepare(spec);
 }
 
-// ============== ARPEGGIATOR IMPLEMENTATION ==============
-
-void BreadbinProcessor::rebuildArpSequence() {
-  arpSequence.clear();
-
-  if (arpHeldNotes.isEmpty())
-    return;
-
-  // Sort held notes (lowest first)
-  juce::Array<int> sortedNotes = arpHeldNotes;
-  sortedNotes.sort();
-
-  // Build sequence with octave expansion
-  for (int octave = 0; octave < arpOctaveRange; ++octave) {
-    for (int note : sortedNotes) {
-      int transposed = note + (octave * 12);
-      if (transposed <= 127) // Keep within MIDI range
-        arpSequence.add(transposed);
-    }
-  }
-
-  // Reset index if current position is out of bounds
-  if (arpNoteIndex >= arpSequence.size())
-    arpNoteIndex = 0;
-}
-
-void BreadbinProcessor::processArpeggiator(int numSamples) {
-  if (!arpEnabled || arpSequence.isEmpty())
-    return;
-
-  // Calculate samples per arp step based on rate mode
-  int samplesPerStep;
-  switch (arpRateMode) {
-  case ArpRateMode::PAL50Hz:
-    samplesPerStep = static_cast<int>(hostSampleRate / 50.0);
-    break;
-  case ArpRateMode::NTSC60Hz:
-    samplesPerStep = static_cast<int>(hostSampleRate / 60.0);
-    break;
-  case ArpRateMode::Sync:
-    // Default to 8th notes at 120 BPM if no host tempo
-    samplesPerStep =
-        static_cast<int>(hostSampleRate / 4.0); // 4 Hz = 8th notes at 120
-    break;
-  }
-
-  // Process sample counter
-  arpSampleCounter += numSamples;
-
-  while (arpSampleCounter >= samplesPerStep) {
-    arpSampleCounter -= samplesPerStep;
-
-    // Advance through sequence based on pattern
-    switch (arpPattern) {
-    case ArpPattern::Up:
-      arpNoteIndex = (arpNoteIndex + 1) % arpSequence.size();
-      break;
-
-    case ArpPattern::Down:
-      arpNoteIndex--;
-      if (arpNoteIndex < 0)
-        arpNoteIndex = arpSequence.size() - 1;
-      break;
-
-    case ArpPattern::UpDown:
-      arpNoteIndex += arpDirection;
-      if (arpNoteIndex >= arpSequence.size()) {
-        arpDirection = -1;
-        arpNoteIndex = arpSequence.size() - 2;
-        if (arpNoteIndex < 0)
-          arpNoteIndex = 0;
-      } else if (arpNoteIndex < 0) {
-        arpDirection = 1;
-        arpNoteIndex = 1;
-        if (arpNoteIndex >= arpSequence.size())
-          arpNoteIndex = 0;
-      }
-      break;
-
-    case ArpPattern::Random:
-      arpNoteIndex =
-          juce::Random::getSystemRandom().nextInt(arpSequence.size());
-      break;
-    }
-
-    // Trigger the note
-    int note = arpSequence[arpNoteIndex];
-    triggerArpNote(note);
-  }
-}
-
-void BreadbinProcessor::triggerArpNote(int note) {
-  arpCurrentNote = note;
-
-  // Trigger on all SIDs (like Stereo/Unison mode)
-  // Add to all note queues and update
-  leftNoteQueue.clear();
-  centerNoteQueue.clear();
-  rightNoteQueue.clear();
-
-  leftNoteQueue.add(note);
-  centerNoteQueue.add(note);
-  rightNoteQueue.add(note);
-
-  updateSIDFromQueue(0); // left
-  updateSIDFromQueue(1); // center
-  updateSIDFromQueue(2); // right
-}
+// Plugin instantiation
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
   return new BreadbinProcessor();
 }

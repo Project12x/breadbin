@@ -166,20 +166,6 @@ void SIDEngine::setRelease(int voice, int release) {
   updateVoiceRegisters(voice);
 }
 
-void SIDEngine::setRingMod(int voice, bool enabled) {
-  if (voice < 0 || voice > 2)
-    return;
-  voiceCache[voice].ringMod = enabled;
-  updateVoiceRegisters(voice);
-}
-
-void SIDEngine::setHardSync(int voice, bool enabled) {
-  if (voice < 0 || voice > 2)
-    return;
-  voiceCache[voice].hardSync = enabled;
-  updateVoiceRegisters(voice);
-}
-
 void SIDEngine::setFilterCutoff(int cutoff) {
   filterCutoff = static_cast<uint16_t>(std::clamp(cutoff, 0, 2047));
   updateFilterRegisters();
@@ -225,13 +211,8 @@ void SIDEngine::updateVoiceRegisters(int voice) {
   int baseReg = voice * 7;
   auto &vc = voiceCache[voice];
 
-  // Control register: waveform + ring mod + sync + gate
-  // Bit 0 = Gate, Bit 1 = Sync, Bit 2 = Ring Mod, Bits 4-7 = Waveform
+  // Control register: waveform + gate
   uint8_t control = vc.waveform | (vc.gateOn ? 0x01 : 0x00);
-  if (vc.hardSync)
-    control |= 0x02;
-  if (vc.ringMod)
-    control |= 0x04;
   writeRegister(baseReg + 4, control);
 
   // Attack/Decay

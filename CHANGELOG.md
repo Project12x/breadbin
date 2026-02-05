@@ -1,41 +1,46 @@
 # Changelog
 
-All notable changes to Breadbin SID VST are documented here.
+All notable changes to this project will be documented in this file.
 
-## [0.3.0] - 2026-02-04
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
 ### Added
-- C64-accurate arpeggiator with PAL 50Hz / NTSC 60Hz / Sync rate modes
-- Arpeggiator patterns: Up, Down, Up/Down, Random
-- Octave range expansion (1-3 octaves)
-- Center SID GUI section with chip selector, voice buttons, filter controls
-- Arpeggiator GUI section with enable, pattern, rate mode, octave controls
+- Proper control labels (Attack, Decay, Sustain, Release, PW, Cutoff, Reso)
+- Semi-opaque text boxes for value display
+- Time Machine slider with 1982/NOW end labels
+- Synthwave background image integration
 
 ### Changed
-- Reorganized SID layout to 3 columns (Left/Center/Right)
+- Enlarged rotary controls for better usability (55px width, 70px height)
+- Control layout now shows labels above sliders
 
-## [0.2.0] - 2026-02-04
+## [0.2.0] - 2026-02-03
+
 ### Added
-- Triple SID architecture (sidLeft, sidCenter, sidRight)
-- Expanded to 9 voices (0-2=left, 3-5=center, 6-8=right)
-- Center note queue for center SID
-- 3-way keyboard split in Multitimbral mode (C4-B4 = center)
-- Per-SID panning (left, center, right)
+- Dual SID engine support with three stereo modes:
+  - **Stereo Split**: Left SID → Left channel, Right SID → Right channel
+  - **Unison**: Both SIDs summed to stereo with detune
+  - **Multitimbral**: Voice 1 left, Voice 2 right, Voice 3 center
+- Per-channel SID chip selection (6581/8580)
+- Time Machine aging simulation (1982-NOW)
+- Virtual MIDI keyboard for standalone testing
+- Waveform selector (Triangle, Sawtooth, Pulse, Noise)
+- ADSR envelope controls
+- Filter controls (Cutoff, Resonance, LP/BP/HP modes)
+- Preset system with C64 classics (Last Ninja, Monty)
+- Safety limiter to prevent harsh audio artifacts
 
-### Changed
-- Updated voice routing for 3 SIDs
-- Updated Multitimbral split: below C4 → left, C4-B4 → center, C5+ → right
+### Fixed
+- Audio output from virtual keyboard
+- Waveform selection affecting sound
 
 ## [0.1.0] - 2026-02-03
+
 ### Added
-- Initial dual SID implementation (Left/Right)
-- reSIDfp cycle-accurate emulation
-- 6 voices (3 per SID)
-- Per-voice ADSR envelope
-- Waveforms: Triangle, Sawtooth, Pulse, Noise
-- Pulse width control
-- Chip model selection (MOS6581 / MOS8580)
-- Time Machine component aging simulation
-- Stereo/Unison and Multitimbral dual modes
-- Resonant multimode filter per SID (LP/BP/HP)
-- Virtual MIDI keyboard for standalone
-- Background image with C64 aesthetic
+- Initial project scaffold
+- JUCE 8 + reSIDfp integration
+- Basic SIDEngine wrapper class
+- VST3 and Standalone build targets

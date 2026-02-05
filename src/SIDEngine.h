@@ -41,11 +41,6 @@ public:
   void setSustain(int voice, int sustain); // 0-15
   void setRelease(int voice, int release); // 0-15
 
-  // Ring modulation and Hard sync
-  void setRingMod(int voice,
-                  bool enabled); // Voice ring-mods with previous voice
-  void setHardSync(int voice, bool enabled); // Voice syncs from previous voice
-
   // Filter parameters
   void setFilterCutoff(int cutoff);       // 0-2047
   void setFilterResonance(int resonance); // 0-15
@@ -83,8 +78,6 @@ private:
     uint8_t sustain = 15;
     uint8_t release = 0;
     bool gateOn = false;
-    bool ringMod = false;
-    bool hardSync = false;
   };
   std::array<VoiceCache, 3> voiceCache;
 
