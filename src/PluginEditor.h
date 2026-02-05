@@ -49,7 +49,7 @@ private:
   // ========== RIGHT SID SECTION ==========
   juce::Label rightSIDLabel;
   juce::ComboBox rightChipSelector;
-  // R SID Voices (3-5)
+  // R SID Voices (6-8)
   std::array<juce::TextButton, 3> rightVoiceButtons;
   std::array<juce::ToggleButton, 3> rightVoiceEnables;
   // R SID Filter
@@ -59,6 +59,28 @@ private:
   juce::ToggleButton rightBPButton{"BP"};
   juce::ToggleButton rightHPButton{"HP"};
   juce::Label rightCutoffLabel, rightResonanceLabel;
+
+  // ========== CENTER SID SECTION ==========
+  juce::Label centerSIDLabel;
+  juce::ComboBox centerChipSelector;
+  // C SID Voices (3-5)
+  std::array<juce::TextButton, 3> centerVoiceButtons;
+  std::array<juce::ToggleButton, 3> centerVoiceEnables;
+  // C SID Filter
+  juce::Slider centerCutoffSlider;
+  juce::Slider centerResonanceSlider;
+  juce::ToggleButton centerLPButton{"LP"};
+  juce::ToggleButton centerBPButton{"BP"};
+  juce::ToggleButton centerHPButton{"HP"};
+  juce::Label centerCutoffLabel, centerResonanceLabel;
+
+  // ========== ARPEGGIATOR SECTION ==========
+  juce::Label arpLabel;
+  juce::ToggleButton arpEnableButton{"ON"};
+  juce::ComboBox arpPatternSelector;
+  juce::ComboBox arpRateModeSelector;
+  juce::Slider arpOctaveSlider;
+  juce::Label arpPatternLabel, arpRateModeLabel, arpOctaveLabel;
 
   // ========== VOICE EDITOR (edits selected voice) ==========
   juce::Label voiceEditorLabel;
@@ -79,7 +101,9 @@ private:
 
   void setupControls();
   void setupLeftSID();
+  void setupCenterSID();
   void setupRightSID();
+  void setupArpeggiator();
   void setupVoiceEditor();
   void selectVoice(int voice);
   void loadVoiceToUI(int voice);

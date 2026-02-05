@@ -10,6 +10,16 @@ public:
   // Dual SID routing modes
   enum class DualMode { StereoSplit, Unison, Multitimbral };
 
+  // Arpeggiator patterns
+  enum class ArpPattern { Up, Down, UpDown, Random };
+
+  // Arpeggiator rate modes
+  enum class ArpRateMode {
+    PAL50Hz,  // C64 PAL: 50 Hz (authentic)
+    NTSC60Hz, // C64 NTSC: 60 Hz (authentic)
+    Sync      // Sync to host tempo
+  };
+
   BreadbinProcessor();
   ~BreadbinProcessor() override;
 
@@ -58,6 +68,18 @@ public:
   float getAgingFactor() const { return agingFactor; }
   void setAgingFactor(float aging);
 
+  // Arpeggiator accessors
+  bool getArpEnabled() const { return arpEnabled; }
+  void setArpEnabled(bool enabled) { arpEnabled = enabled; }
+  ArpPattern getArpPattern() const { return arpPattern; }
+  void setArpPattern(ArpPattern pattern) { arpPattern = pattern; }
+  ArpRateMode getArpRateMode() const { return arpRateMode; }
+  void setArpRateMode(ArpRateMode mode) { arpRateMode = mode; }
+  int getArpOctaveRange() const { return arpOctaveRange; }
+  void setArpOctaveRange(int octaves) {
+    arpOctaveRange = juce::jlimit(1, 3, octaves);
+  }
+
   // MIDI collector for virtual keyboard (standalone)
   juce::MidiMessageCollector &getMidiMessageCollector() {
     return midiCollector;
@@ -65,6 +87,7 @@ public:
 
   // Synth parameter accessors for GUI
   SIDEngine &getLeftSID() { return sidLeft; }
+  SIDEngine &getCenterSID() { return sidCenter; }
   SIDEngine &getRightSID() { return sidRight; }
 
   // Per-voice settings (6 voices: 0-2 = SID L, 3-5 = SID R)
@@ -104,6 +127,18 @@ private:
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;
 
+  // Arpeggiator state
+  bool arpEnabled = false;
+  ArpPattern arpPattern = ArpPattern::Up;
+  ArpRateMode arpRateMode = ArpRateMode::PAL50Hz;
+  int arpOctaveRange = 1;        // 1-3 octaves
+  int arpSampleCounter = 0;      // Sample counter for timing
+  int arpNoteIndex = 0;          // Current note in sequence
+  int arpDirection = 1;          // For UpDown pattern: 1 = up, -1 = down
+  juce::Array<int> arpHeldNotes; // Notes currently held by user
+  juce::Array<int> arpSequence;  // Computed sequence (with octaves)
+  int arpCurrentNote = -1;       // Note currently playing from arp
+
   // Per-voice settings storage (9 voices: 3 per SID)
   // Voices 0-2: Left SID, Voices 3-5: Center SID, Voices 6-8: Right SID
   std::array<VoiceSettings, 9> voiceSettings;
@@ -139,6 +174,11 @@ private:
   // sidIndex: 0 = left, 1 = center, 2 = right
   void updateSIDFromQueue(int sidIndex);
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
+
+  // Arpeggiator helpers
+  void rebuildArpSequence(); // Build sequence from held notes + octave range
+  void processArpeggiator(int numSamples); // Process arp timing per block
+  void triggerArpNote(int note);           // Trigger arp note on all SIDs
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

@@ -13,7 +13,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
 
   setupControls();
   setupLeftSID();
+  setupCenterSID();
   setupRightSID();
+  setupArpeggiator();
   setupVoiceEditor();
 
   selectVoice(0);
@@ -270,6 +272,175 @@ void BreadbinEditor::setupRightSID() {
   processor.getRightSID().setFilterCutoff(1024);
 }
 
+void BreadbinEditor::setupCenterSID() {
+  centerSIDLabel.setText("CENTER SID", juce::dontSendNotification);
+  centerSIDLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+  centerSIDLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
+  centerSIDLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(centerSIDLabel);
+
+  centerChipSelector.addItem("6581", 1);
+  centerChipSelector.addItem("8580", 2);
+  centerChipSelector.setSelectedId(1);
+  centerChipSelector.onChange = [this]() {
+    processor.getCenterSID().setChipModel(centerChipSelector.getSelectedId() ==
+                                                  1
+                                              ? SIDEngine::ChipModel::MOS6581
+                                              : SIDEngine::ChipModel::MOS8580);
+  };
+  addAndMakeVisible(centerChipSelector);
+
+  // Voice buttons and enables for C SID (voices 3-5)
+  for (int i = 0; i < 3; ++i) {
+    centerVoiceButtons[i].setButtonText(juce::String(i + 4));
+    centerVoiceButtons[i].onClick = [this, i]() { selectVoice(i + 3); };
+    addAndMakeVisible(centerVoiceButtons[i]);
+
+    centerVoiceEnables[i].setButtonText("");
+    centerVoiceEnables[i].setToggleState(true, juce::dontSendNotification);
+    centerVoiceEnables[i].onClick = [this, i]() {
+      processor.getVoiceSettings(i + 3).enabled =
+          centerVoiceEnables[i].getToggleState();
+    };
+    addAndMakeVisible(centerVoiceEnables[i]);
+  }
+
+  // Filter
+  centerCutoffLabel.setText("Cut", juce::dontSendNotification);
+  centerCutoffLabel.setColour(juce::Label::textColourId,
+                              juce::Colours::lightgrey);
+  centerCutoffLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(centerCutoffLabel);
+
+  centerCutoffSlider.setRange(0, 2047, 1);
+  centerCutoffSlider.setValue(1024);
+  centerCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+  centerCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  centerCutoffSlider.onValueChange = [this]() {
+    processor.getCenterSID().setFilterCutoff(
+        static_cast<int>(centerCutoffSlider.getValue()));
+  };
+  addAndMakeVisible(centerCutoffSlider);
+
+  centerResonanceLabel.setText("Res", juce::dontSendNotification);
+  centerResonanceLabel.setColour(juce::Label::textColourId,
+                                 juce::Colours::lightgrey);
+  centerResonanceLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(centerResonanceLabel);
+
+  centerResonanceSlider.setRange(0, 15, 1);
+  centerResonanceSlider.setValue(0);
+  centerResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+  centerResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  centerResonanceSlider.onValueChange = [this]() {
+    processor.getCenterSID().setFilterResonance(
+        static_cast<int>(centerResonanceSlider.getValue()));
+  };
+  addAndMakeVisible(centerResonanceSlider);
+
+  auto setupButton = [this](juce::ToggleButton &btn) {
+    btn.setColour(juce::ToggleButton::textColourId, juce::Colours::lightgrey);
+    btn.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+    btn.onClick = [this]() { updateFiltersFromUI(); };
+    addAndMakeVisible(btn);
+  };
+  setupButton(centerLPButton);
+  setupButton(centerBPButton);
+  setupButton(centerHPButton);
+  centerLPButton.setToggleState(true, juce::dontSendNotification);
+
+  processor.getCenterSID().setFilterVoices(true, true, true);
+  processor.getCenterSID().setFilterMode(true, false, false);
+  processor.getCenterSID().setFilterCutoff(1024);
+}
+
+void BreadbinEditor::setupArpeggiator() {
+  arpLabel.setText("ARPEGGIATOR", juce::dontSendNotification);
+  arpLabel.setFont(juce::Font(12.0f, juce::Font::bold));
+  arpLabel.setColour(juce::Label::textColourId, juce::Colours::yellow);
+  arpLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(arpLabel);
+
+  arpEnableButton.setColour(juce::ToggleButton::textColourId,
+                            juce::Colours::yellow);
+  arpEnableButton.setColour(juce::ToggleButton::tickColourId,
+                            juce::Colours::yellow);
+  arpEnableButton.onClick = [this]() {
+    processor.setArpEnabled(arpEnableButton.getToggleState());
+  };
+  addAndMakeVisible(arpEnableButton);
+
+  arpPatternLabel.setText("Pattern", juce::dontSendNotification);
+  arpPatternLabel.setColour(juce::Label::textColourId,
+                            juce::Colours::lightgrey);
+  arpPatternLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(arpPatternLabel);
+
+  arpPatternSelector.addItem("Up", 1);
+  arpPatternSelector.addItem("Down", 2);
+  arpPatternSelector.addItem("Up/Down", 3);
+  arpPatternSelector.addItem("Random", 4);
+  arpPatternSelector.setSelectedId(1);
+  arpPatternSelector.onChange = [this]() {
+    using AP = BreadbinProcessor::ArpPattern;
+    switch (arpPatternSelector.getSelectedId()) {
+    case 1:
+      processor.setArpPattern(AP::Up);
+      break;
+    case 2:
+      processor.setArpPattern(AP::Down);
+      break;
+    case 3:
+      processor.setArpPattern(AP::UpDown);
+      break;
+    case 4:
+      processor.setArpPattern(AP::Random);
+      break;
+    }
+  };
+  addAndMakeVisible(arpPatternSelector);
+
+  arpRateModeLabel.setText("Rate", juce::dontSendNotification);
+  arpRateModeLabel.setColour(juce::Label::textColourId,
+                             juce::Colours::lightgrey);
+  arpRateModeLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(arpRateModeLabel);
+
+  arpRateModeSelector.addItem("PAL 50Hz", 1);
+  arpRateModeSelector.addItem("NTSC 60Hz", 2);
+  arpRateModeSelector.addItem("Sync", 3);
+  arpRateModeSelector.setSelectedId(1);
+  arpRateModeSelector.onChange = [this]() {
+    using ARM = BreadbinProcessor::ArpRateMode;
+    switch (arpRateModeSelector.getSelectedId()) {
+    case 1:
+      processor.setArpRateMode(ARM::PAL50Hz);
+      break;
+    case 2:
+      processor.setArpRateMode(ARM::NTSC60Hz);
+      break;
+    case 3:
+      processor.setArpRateMode(ARM::Sync);
+      break;
+    }
+  };
+  addAndMakeVisible(arpRateModeSelector);
+
+  arpOctaveLabel.setText("Octaves", juce::dontSendNotification);
+  arpOctaveLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  arpOctaveLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(arpOctaveLabel);
+
+  arpOctaveSlider.setRange(1, 3, 1);
+  arpOctaveSlider.setValue(1);
+  arpOctaveSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+  arpOctaveSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 15);
+  arpOctaveSlider.onValueChange = [this]() {
+    processor.setArpOctaveRange(static_cast<int>(arpOctaveSlider.getValue()));
+  };
+  addAndMakeVisible(arpOctaveSlider);
+}
+
 void BreadbinEditor::setupVoiceEditor() {
   voiceEditorLabel.setText("VOICE EDITOR", juce::dontSendNotification);
   voiceEditorLabel.setFont(juce::Font(12.0f, juce::Font::bold));
@@ -456,67 +627,106 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromTop(pad * 2);
 
-  // ===== SID PANELS: Left and Right side by side =====
-  auto sidRow = bounds.removeFromTop(160);
-  const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
+  // ===== SID PANELS: Left, Center, Right side by side =====
+  auto sidRow = bounds.removeFromTop(140);
+  const int sidWidth = (sidRow.getWidth() - pad * 4) / 3;
 
   // ----- LEFT SID -----
   auto leftPanel = sidRow.removeFromLeft(sidWidth);
-  leftSIDLabel.setBounds(leftPanel.removeFromTop(20));
-  auto leftChipRow = leftPanel.removeFromTop(24);
+  leftSIDLabel.setBounds(leftPanel.removeFromTop(18));
+  auto leftChipRow = leftPanel.removeFromTop(22);
   leftChipSelector.setBounds(leftChipRow.removeFromLeft(60));
 
   // Voice buttons with enable checkboxes
-  auto leftVoicesRow = leftPanel.removeFromTop(30);
+  auto leftVoicesRow = leftPanel.removeFromTop(26);
   for (int i = 0; i < 3; ++i) {
-    leftVoiceEnables[i].setBounds(leftVoicesRow.removeFromLeft(20));
-    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(40));
-    leftVoicesRow.removeFromLeft(pad);
+    leftVoiceEnables[i].setBounds(leftVoicesRow.removeFromLeft(18));
+    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(35));
+    leftVoicesRow.removeFromLeft(2);
   }
 
   // Filter
-  leftPanel.removeFromTop(pad);
-  auto leftFilterRow = leftPanel.removeFromTop(50);
-  leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(25));
-  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(45));
-  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(25));
-  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(45));
+  leftPanel.removeFromTop(2);
+  auto leftFilterRow = leftPanel.removeFromTop(40);
+  leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(22));
+  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(38));
+  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(22));
+  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(38));
 
-  auto leftModesRow = leftPanel.removeFromTop(22);
-  leftLPButton.setBounds(leftModesRow.removeFromLeft(40));
-  leftBPButton.setBounds(leftModesRow.removeFromLeft(40));
-  leftHPButton.setBounds(leftModesRow.removeFromLeft(40));
+  auto leftModesRow = leftPanel.removeFromTop(20);
+  leftLPButton.setBounds(leftModesRow.removeFromLeft(35));
+  leftBPButton.setBounds(leftModesRow.removeFromLeft(35));
+  leftHPButton.setBounds(leftModesRow.removeFromLeft(35));
+
+  sidRow.removeFromLeft(pad * 2);
+
+  // ----- CENTER SID -----
+  auto centerPanel = sidRow.removeFromLeft(sidWidth);
+  centerSIDLabel.setBounds(centerPanel.removeFromTop(18));
+  auto centerChipRow = centerPanel.removeFromTop(22);
+  centerChipSelector.setBounds(centerChipRow.removeFromLeft(60));
+
+  auto centerVoicesRow = centerPanel.removeFromTop(26);
+  for (int i = 0; i < 3; ++i) {
+    centerVoiceEnables[i].setBounds(centerVoicesRow.removeFromLeft(18));
+    centerVoiceButtons[i].setBounds(centerVoicesRow.removeFromLeft(35));
+    centerVoicesRow.removeFromLeft(2);
+  }
+
+  centerPanel.removeFromTop(2);
+  auto centerFilterRow = centerPanel.removeFromTop(40);
+  centerCutoffLabel.setBounds(centerFilterRow.removeFromLeft(22));
+  centerCutoffSlider.setBounds(centerFilterRow.removeFromLeft(38));
+  centerResonanceLabel.setBounds(centerFilterRow.removeFromLeft(22));
+  centerResonanceSlider.setBounds(centerFilterRow.removeFromLeft(38));
+
+  auto centerModesRow = centerPanel.removeFromTop(20);
+  centerLPButton.setBounds(centerModesRow.removeFromLeft(35));
+  centerBPButton.setBounds(centerModesRow.removeFromLeft(35));
+  centerHPButton.setBounds(centerModesRow.removeFromLeft(35));
 
   sidRow.removeFromLeft(pad * 2);
 
   // ----- RIGHT SID -----
   auto rightPanel = sidRow;
-  rightSIDLabel.setBounds(rightPanel.removeFromTop(20));
-  auto rightChipRow = rightPanel.removeFromTop(24);
+  rightSIDLabel.setBounds(rightPanel.removeFromTop(18));
+  auto rightChipRow = rightPanel.removeFromTop(22);
   rightChipSelector.setBounds(rightChipRow.removeFromLeft(60));
 
-  // Voice buttons with enable checkboxes
-  auto rightVoicesRow = rightPanel.removeFromTop(30);
+  auto rightVoicesRow = rightPanel.removeFromTop(26);
   for (int i = 0; i < 3; ++i) {
-    rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromLeft(20));
-    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromLeft(40));
-    rightVoicesRow.removeFromLeft(pad);
+    rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromLeft(18));
+    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromLeft(35));
+    rightVoicesRow.removeFromLeft(2);
   }
 
-  // Filter
-  rightPanel.removeFromTop(pad);
-  auto rightFilterRow = rightPanel.removeFromTop(50);
-  rightCutoffLabel.setBounds(rightFilterRow.removeFromLeft(25));
-  rightCutoffSlider.setBounds(rightFilterRow.removeFromLeft(45));
-  rightResonanceLabel.setBounds(rightFilterRow.removeFromLeft(25));
-  rightResonanceSlider.setBounds(rightFilterRow.removeFromLeft(45));
+  rightPanel.removeFromTop(2);
+  auto rightFilterRow = rightPanel.removeFromTop(40);
+  rightCutoffLabel.setBounds(rightFilterRow.removeFromLeft(22));
+  rightCutoffSlider.setBounds(rightFilterRow.removeFromLeft(38));
+  rightResonanceLabel.setBounds(rightFilterRow.removeFromLeft(22));
+  rightResonanceSlider.setBounds(rightFilterRow.removeFromLeft(38));
 
-  auto rightModesRow = rightPanel.removeFromTop(22);
-  rightLPButton.setBounds(rightModesRow.removeFromLeft(40));
-  rightBPButton.setBounds(rightModesRow.removeFromLeft(40));
-  rightHPButton.setBounds(rightModesRow.removeFromLeft(40));
+  auto rightModesRow = rightPanel.removeFromTop(20);
+  rightLPButton.setBounds(rightModesRow.removeFromLeft(35));
+  rightBPButton.setBounds(rightModesRow.removeFromLeft(35));
+  rightHPButton.setBounds(rightModesRow.removeFromLeft(35));
 
   bounds.removeFromTop(pad * 2);
+
+  // ===== ARPEGGIATOR SECTION =====
+  auto arpRow = bounds.removeFromTop(60);
+  arpLabel.setBounds(arpRow.removeFromLeft(90));
+  arpEnableButton.setBounds(arpRow.removeFromLeft(40));
+  arpRow.removeFromLeft(pad);
+  arpPatternLabel.setBounds(arpRow.removeFromLeft(50));
+  arpPatternSelector.setBounds(arpRow.removeFromLeft(80));
+  arpRow.removeFromLeft(pad);
+  arpRateModeLabel.setBounds(arpRow.removeFromLeft(35));
+  arpRateModeSelector.setBounds(arpRow.removeFromLeft(90));
+  arpRow.removeFromLeft(pad);
+  arpOctaveLabel.setBounds(arpRow.removeFromLeft(50));
+  arpOctaveSlider.setBounds(arpRow.removeFromLeft(50));
 
   // ===== VOICE EDITOR =====
   auto editorRow = bounds.removeFromTop(80);
