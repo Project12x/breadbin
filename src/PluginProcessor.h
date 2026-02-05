@@ -1,14 +1,21 @@
 #pragma once
 
 #include "SIDEngine.h"
+#include <algorithm>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <random>
+#include <vector>
+
 
 class BreadbinProcessor : public juce::AudioProcessor {
 public:
   // Dual SID routing modes
   enum class DualMode { StereoSplit, Unison, Multitimbral };
+
+  // Arpeggiator patterns
+  enum class ArpPattern { Up, Down, UpDown, Random };
 
   BreadbinProcessor();
   ~BreadbinProcessor() override;
@@ -77,6 +84,16 @@ public:
   }
   void applyVoiceSettings(int voice); // Apply settings to SID engine
 
+  // Arpeggiator controls
+  bool isArpEnabled() const { return arpEnabled; }
+  void setArpEnabled(bool enabled) { arpEnabled = enabled; }
+  ArpPattern getArpPattern() const { return arpPattern; }
+  void setArpPattern(ArpPattern pattern);
+  float getArpRate() const { return arpRateHz; }
+  void setArpRate(float hz) { arpRateHz = juce::jlimit(1.0f, 100.0f, hz); }
+  int getArpOctaves() const { return arpOctaves; }
+  void setArpOctaves(int octaves) { arpOctaves = juce::jlimit(1, 4, octaves); }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -121,6 +138,19 @@ private:
   void releaseNote(int voiceIndex);
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
+
+  // Arpeggiator
+  bool arpEnabled = false;
+  ArpPattern arpPattern = ArpPattern::Up;
+  float arpRateHz = 50.0f; // PAL default
+  int arpOctaves = 1;
+  std::vector<int> arpHeldNotes; // Notes currently held
+  std::vector<int> arpSequence;  // Generated sequence
+  int arpIndex = 0;
+  double arpTimer = 0.0;
+  int lastArpNote = -1;
+  void processArpeggiator(int numSamples);
+  void rebuildArpSequence();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

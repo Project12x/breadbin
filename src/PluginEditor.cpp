@@ -17,7 +17,7 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupVoiceEditor();
 
   selectVoice(0);
-  setSize(700, 550);
+  setSize(850, 600);
 }
 
 BreadbinEditor::~BreadbinEditor() { keyboardState.removeListener(this); }
@@ -111,6 +111,52 @@ void BreadbinEditor::setupControls() {
     processor.setAgingFactor(static_cast<float>(agingSlider.getValue()));
   };
   addAndMakeVisible(agingSlider);
+
+  // ========== ARPEGGIATOR ==========
+  arpEnableButton.setToggleState(processor.isArpEnabled(),
+                                 juce::dontSendNotification);
+  arpEnableButton.onClick = [this]() {
+    processor.setArpEnabled(arpEnableButton.getToggleState());
+  };
+  addAndMakeVisible(arpEnableButton);
+
+  arpPatternSelector.addItem("Up", 1);
+  arpPatternSelector.addItem("Down", 2);
+  arpPatternSelector.addItem("Up/Dn", 3);
+  arpPatternSelector.addItem("Rand", 4);
+  arpPatternSelector.setSelectedId(static_cast<int>(processor.getArpPattern()) +
+                                       1,
+                                   juce::dontSendNotification);
+  arpPatternSelector.onChange = [this]() {
+    processor.setArpPattern(static_cast<BreadbinProcessor::ArpPattern>(
+        arpPatternSelector.getSelectedId() - 1));
+  };
+  addAndMakeVisible(arpPatternSelector);
+
+  arpRateSlider.setRange(1.0, 100.0, 1.0);
+  arpRateSlider.setValue(processor.getArpRate());
+  arpRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  arpRateSlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 35, 18);
+  arpRateSlider.setTooltip("Arp Rate (Hz) - PAL=50, NTSC=60");
+  arpRateSlider.onValueChange = [this]() {
+    processor.setArpRate(static_cast<float>(arpRateSlider.getValue()));
+  };
+  addAndMakeVisible(arpRateSlider);
+
+  arpRateLabel.setText("Hz", juce::dontSendNotification);
+  arpRateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(arpRateLabel);
+
+  arpOctaveSelector.addItem("1 Oct", 1);
+  arpOctaveSelector.addItem("2 Oct", 2);
+  arpOctaveSelector.addItem("3 Oct", 3);
+  arpOctaveSelector.addItem("4 Oct", 4);
+  arpOctaveSelector.setSelectedId(processor.getArpOctaves(),
+                                  juce::dontSendNotification);
+  arpOctaveSelector.onChange = [this]() {
+    processor.setArpOctaves(arpOctaveSelector.getSelectedId());
+  };
+  addAndMakeVisible(arpOctaveSelector);
 
   // Keyboard
   keyboard.setKeyWidth(16.0f);
@@ -575,6 +621,16 @@ void BreadbinEditor::resized() {
   agingStartLabel.setBounds(agingRow.removeFromLeft(22));
   agingSlider.setBounds(agingRow.removeFromLeft(200));
   agingEndLabel.setBounds(agingRow.removeFromLeft(30));
+
+  // ===== ARPEGGIATOR (next to aging controls) =====
+  agingRow.removeFromLeft(pad * 4);
+  arpEnableButton.setBounds(agingRow.removeFromLeft(45));
+  arpPatternSelector.setBounds(agingRow.removeFromLeft(65));
+  agingRow.removeFromLeft(pad);
+  arpRateSlider.setBounds(agingRow.removeFromLeft(100));
+  arpRateLabel.setBounds(agingRow.removeFromLeft(20));
+  agingRow.removeFromLeft(pad);
+  arpOctaveSelector.setBounds(agingRow.removeFromLeft(55));
 }
 
 void BreadbinEditor::applyPreset(int presetId) {

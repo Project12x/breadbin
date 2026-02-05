@@ -42,7 +42,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     handleMidiEvent(metadata.getMessage());
   }
 
+  // Process arpeggiator
   const int numSamples = buffer.getNumSamples();
+  if (arpEnabled && !arpSequence.empty()) {
+    processArpeggiator(numSamples);
+  }
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -101,6 +105,17 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     lastVelocity = msg.getVelocity();
     const int channel = msg.getChannel();
 
+    // Track for arpeggiator
+    if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note) ==
+        arpHeldNotes.end()) {
+      arpHeldNotes.push_back(note);
+      rebuildArpSequence();
+    }
+
+    // If arp is enabled, don't do normal note handling
+    if (arpEnabled)
+      return;
+
     if (dualMode == DualMode::Multitimbral) {
       // Channel 1 -> left SID, Channel 2 -> right SID
       if (channel == 2) {
@@ -120,6 +135,25 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
 
+    // Remove from arp tracking
+    auto it = std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note);
+    if (it != arpHeldNotes.end()) {
+      arpHeldNotes.erase(it);
+      rebuildArpSequence();
+    }
+
+    // If arp is enabled, handle release when no notes held
+    if (arpEnabled) {
+      if (arpHeldNotes.empty() && lastArpNote >= 0) {
+        // Release all voices
+        for (int v = 0; v < 6; ++v) {
+          releaseNote(v);
+        }
+        lastArpNote = -1;
+      }
+      return;
+    }
+
     // Remove from queue(s)
     leftNoteQueue.removeFirstMatchingValue(note);
     rightNoteQueue.removeFirstMatchingValue(note);
@@ -128,6 +162,10 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     updateSIDFromQueue(true);  // left
     updateSIDFromQueue(false); // right
   } else if (msg.isAllNotesOff()) {
+    arpHeldNotes.clear();
+    arpSequence.clear();
+    lastArpNote = -1;
+
     leftNoteQueue.clear();
     rightNoteQueue.clear();
     // Turn off all voices
@@ -305,6 +343,111 @@ void BreadbinProcessor::prepareSafetyChain(double sampleRate,
   safetyLimiter.setThreshold(-3.0f);
   safetyLimiter.setRelease(100.0f);
   safetyLimiter.prepare(spec);
+}
+
+// ============ ARPEGGIATOR ============
+
+void BreadbinProcessor::setArpPattern(ArpPattern pattern) {
+  arpPattern = pattern;
+  rebuildArpSequence();
+}
+
+void BreadbinProcessor::rebuildArpSequence() {
+  arpSequence.clear();
+  if (arpHeldNotes.empty())
+    return;
+
+  // Sort held notes
+  std::vector<int> sorted = arpHeldNotes;
+  std::sort(sorted.begin(), sorted.end());
+
+  // Build base sequence with octave expansion
+  std::vector<int> base;
+  for (int oct = 0; oct < arpOctaves; ++oct) {
+    for (int note : sorted) {
+      int transposed = note + (oct * 12);
+      if (transposed <= 127) {
+        base.push_back(transposed);
+      }
+    }
+  }
+
+  // Apply pattern
+  switch (arpPattern) {
+  case ArpPattern::Up:
+    arpSequence = base;
+    break;
+
+  case ArpPattern::Down:
+    arpSequence = base;
+    std::reverse(arpSequence.begin(), arpSequence.end());
+    break;
+
+  case ArpPattern::UpDown:
+    arpSequence = base;
+    if (base.size() > 1) {
+      // Add reversed (excluding first and last to avoid doubles)
+      for (int i = static_cast<int>(base.size()) - 2; i > 0; --i) {
+        arpSequence.push_back(base[i]);
+      }
+    }
+    break;
+
+  case ArpPattern::Random:
+    arpSequence = base;
+    {
+      static std::mt19937 rng(std::random_device{}());
+      std::shuffle(arpSequence.begin(), arpSequence.end(), rng);
+    }
+    break;
+  }
+
+  // Reset index if out of bounds
+  if (arpIndex >= static_cast<int>(arpSequence.size())) {
+    arpIndex = 0;
+  }
+}
+
+void BreadbinProcessor::processArpeggiator(int numSamples) {
+  if (arpSequence.empty())
+    return;
+
+  double samplesPerStep = hostSampleRate / static_cast<double>(arpRateHz);
+  arpTimer += numSamples;
+
+  while (arpTimer >= samplesPerStep) {
+    arpTimer -= samplesPerStep;
+
+    // Get next note
+    int note = arpSequence[arpIndex];
+
+    // Release previous note if different
+    if (lastArpNote >= 0 && lastArpNote != note) {
+      for (int v = 0; v < 6; ++v) {
+        if (voices[v].note == lastArpNote) {
+          releaseNote(v);
+        }
+      }
+    }
+
+    // Trigger new note on all enabled voices
+    for (int v = 0; v < 6; ++v) {
+      if (voiceSettings[v].enabled) {
+        triggerNote(v, note, lastVelocity);
+      }
+    }
+
+    lastArpNote = note;
+
+    // Advance index
+    arpIndex = (arpIndex + 1) % static_cast<int>(arpSequence.size());
+
+    // Reshuffle on wrap for random mode
+    if (arpPattern == ArpPattern::Random && arpIndex == 0) {
+      static std::mt19937 rng(std::random_device{}());
+      std::shuffle(arpSequence.begin(), arpSequence.end(), rng);
+    }
+  }
 }
 
 // Plugin instantiation

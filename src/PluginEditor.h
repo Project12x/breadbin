@@ -72,6 +72,13 @@ private:
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
   juce::Label panLabel;
 
+  // ========== ARPEGGIATOR ==========
+  juce::ToggleButton arpEnableButton{"Arp"};
+  juce::ComboBox arpPatternSelector;
+  juce::Slider arpRateSlider;
+  juce::ComboBox arpOctaveSelector;
+  juce::Label arpRateLabel;
+
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
