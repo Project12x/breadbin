@@ -37,7 +37,15 @@ public:
 
   // Public accessors for editor
   DualMode getDualMode() const { return dualMode; }
-  void setDualMode(DualMode mode) { dualMode = mode; }
+  void setDualMode(DualMode mode);
+
+  // Per-SID pan accessors
+  float getLeftSIDPan() const { return leftSIDPan; }
+  float getRightSIDPan() const { return rightSIDPan; }
+  void setLeftSIDPan(float pan) { leftSIDPan = juce::jlimit(-1.0f, 1.0f, pan); }
+  void setRightSIDPan(float pan) {
+    rightSIDPan = juce::jlimit(-1.0f, 1.0f, pan);
+  }
 
   // Per-channel chip model accessors
   SIDEngine::ChipModel getLeftChipModel() const { return chipModelLeft; }
@@ -85,6 +93,10 @@ private:
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
   float agingFactor = 0.0f;
+
+  // Per-SID stereo panning (-1.0 = left, 0.0 = center, +1.0 = right)
+  float leftSIDPan = -0.75f; // Default: left SID panned 75% left
+  float rightSIDPan = 0.75f; // Default: right SID panned 75% right
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;

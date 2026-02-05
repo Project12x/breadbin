@@ -11,6 +11,23 @@ BreadbinProcessor::BreadbinProcessor()
 
 BreadbinProcessor::~BreadbinProcessor() = default;
 
+void BreadbinProcessor::setDualMode(DualMode mode) {
+  dualMode = mode;
+
+  // Set per-SID panning based on mode
+  switch (mode) {
+  case DualMode::StereoSplit:
+  case DualMode::Multitimbral:
+    leftSIDPan = -0.75f; // 75% left
+    rightSIDPan = 0.75f; // 75% right
+    break;
+  case DualMode::Unison:
+    leftSIDPan = 0.0f;  // Center
+    rightSIDPan = 0.0f; // Center
+    break;
+  }
+}
+
 void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
@@ -47,33 +64,22 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
-  // Generate audio from SID engines
+  // Generate audio from SID engines with per-SID panning
   for (int i = 0; i < numSamples; ++i) {
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
 
-    switch (dualMode) {
-    case DualMode::StereoSplit:
-      // Left SID -> Left, Right SID -> Right
-      leftChannel[i] = sampleL;
-      if (rightChannel)
-        rightChannel[i] = sampleR;
-      break;
+    // Apply per-SID panning
+    // Pan formula: pan -1.0 = full left, 0.0 = center, +1.0 = full right
+    // leftGain = (1 - pan) * 0.5, rightGain = (1 + pan) * 0.5
+    const float leftL = sampleL * (1.0f - leftSIDPan) * 0.5f;
+    const float leftR = sampleL * (1.0f + leftSIDPan) * 0.5f;
+    const float rightL = sampleR * (1.0f - rightSIDPan) * 0.5f;
+    const float rightR = sampleR * (1.0f + rightSIDPan) * 0.5f;
 
-    case DualMode::Unison:
-      // Mix both SIDs to both channels
-      leftChannel[i] = (sampleL + sampleR) * 0.5f;
-      if (rightChannel)
-        rightChannel[i] = leftChannel[i];
-      break;
-
-    case DualMode::Multitimbral:
-      // Same as stereo split, but MIDI routing differs
-      leftChannel[i] = sampleL;
-      if (rightChannel)
-        rightChannel[i] = sampleR;
-      break;
-    }
+    leftChannel[i] = leftL + rightL;
+    if (rightChannel)
+      rightChannel[i] = leftR + rightR;
   }
 }
 
@@ -84,8 +90,9 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     const int channel = msg.getChannel();
 
     if (dualMode == DualMode::Multitimbral) {
-      // Channel 1 -> left SID, Channel 2 -> right SID
-      if (channel == 2) {
+      // Split keyboard: below C4 (60) -> left SID, C4 and above -> right SID
+      const int splitPoint = 60; // Middle C
+      if (note >= splitPoint) {
         rightNoteQueue.addIfNotAlreadyThere(note);
         updateSIDFromQueue(false); // right SID
       } else {
