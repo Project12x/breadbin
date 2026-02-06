@@ -111,6 +111,16 @@ public:
     glideTimeMs = juce::jlimit(0.0f, 2000.0f, ms);
   }
 
+  // Pitch Bend (±2 to ±12 semitones range)
+  int getPitchBendRange() const { return pitchBendRange; }
+  void setPitchBendRange(int semitones) {
+    pitchBendRange = juce::jlimit(2, 12, semitones);
+  }
+  float getPitchBendValue() const { return pitchBendValue; }
+
+  // Mod Wheel (CC1) -> Filter cutoff modulation
+  float getModWheelValue() const { return modWheelValue; }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -122,6 +132,13 @@ private:
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
   float glideTimeMs = 0.0f;
+
+  // Pitch bend and mod wheel
+  float pitchBendValue = 0.0f;     // -1.0 to +1.0 (normalized)
+  int pitchBendRange = 2;          // Semitones (±2 to ±12)
+  float modWheelValue = 0.0f;      // 0.0 to 1.0
+  int baseFilterCutoffLeft = 1024; // Store base cutoff for mod wheel
+  int baseFilterCutoffRight = 1024;
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;
@@ -162,6 +179,8 @@ private:
   void releaseNote(int voiceIndex);
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
+  void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
+  void applyModWheelToFilter();     // Apply mod wheel to filter cutoff
 
   // Arpeggiator
   bool arpEnabled = false;

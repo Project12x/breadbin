@@ -204,6 +204,17 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     for (int v = 0; v < 6; ++v) {
       releaseNote(v);
     }
+  } else if (msg.isPitchWheel()) {
+    // Convert 14-bit value (0-16383, center=8192) to -1.0 to +1.0
+    pitchBendValue = (msg.getPitchWheelValue() - 8192) / 8192.0f;
+    updateAllVoiceFrequencies();
+  } else if (msg.isController()) {
+    int cc = msg.getControllerNumber();
+    int value = msg.getControllerValue();
+    if (cc == 1) { // Mod wheel
+      modWheelValue = value / 127.0f;
+      applyModWheelToFilter();
+    }
   }
 }
 
@@ -290,6 +301,34 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   sid.setSync(sidVoice, settings.sync);
 }
 
+void BreadbinProcessor::updateAllVoiceFrequencies() {
+  // Apply pitch bend to all active voices
+  for (int v = 0; v < 6; ++v) {
+    if (voices[v].active) {
+      float detune = (v < 3) ? leftDetuneCents : rightDetuneCents;
+      float bendSemitones = pitchBendValue * static_cast<float>(pitchBendRange);
+      double note = static_cast<double>(voices[v].note) + bendSemitones +
+                    (detune / 100.0);
+      double hz = 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
+
+      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+      sid.setFrequency(v % 3, hz);
+    }
+  }
+}
+
+void BreadbinProcessor::applyModWheelToFilter() {
+  // Mod wheel adds 0-1000 to filter cutoff (opening the filter)
+  int modOffset = static_cast<int>(modWheelValue * 1000.0f);
+
+  // Apply to both SIDs (clamped to valid range 0-2047)
+  int leftCutoff = juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffset);
+  int rightCutoff = juce::jlimit(0, 2047, baseFilterCutoffRight + modOffset);
+
+  sidLeft.setFilterCutoff(leftCutoff);
+  sidRight.setFilterCutoff(rightCutoff);
+}
+
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
   chipModelLeft = model;
   sidLeft.setChipModel(model);
@@ -322,6 +361,7 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   state.setProperty("chipModelRight", static_cast<int>(chipModelRight),
                     nullptr);
   state.setProperty("agingFactor", agingFactor, nullptr);
+  state.setProperty("pitchBendRange", pitchBendRange, nullptr);
 
   // Save per-voice settings
   for (int v = 0; v < 6; ++v) {
@@ -354,6 +394,7 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     setRightChipModel(static_cast<SIDEngine::ChipModel>(
         static_cast<int>(state.getProperty("chipModelRight", 0))));
     setAgingFactor(state.getProperty("agingFactor", 0.0f));
+    pitchBendRange = state.getProperty("pitchBendRange", 2);
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
