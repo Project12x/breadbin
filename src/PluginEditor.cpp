@@ -31,6 +31,8 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupRightSID();
   setupVoiceEditor();
 
+  // Apply Init preset to initialize all voices
+  applyGlobalPreset(1);
   selectVoice(0);
   setSize(700, 500);
   setResizable(true, true);
