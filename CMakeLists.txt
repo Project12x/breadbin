@@ -54,10 +54,12 @@ set(PLUGIN_SOURCES
     src/residfp/version.cc
 )
 
-# Add binary assets (background image)
+# Add binary assets (background image, fonts)
 juce_add_binary_data(BreadbinAssets
     SOURCES
         assets/background.jpg
+        assets/PressStart2P-Regular.ttf
+        assets/Roboto-Bold.ttf
 )
 
 juce_add_plugin(Breadbin

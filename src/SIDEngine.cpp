@@ -193,6 +193,22 @@ void SIDEngine::setRelease(int voice, int release) {
   updateVoiceRegisters(voice);
 }
 
+void SIDEngine::setRingMod(int voice, bool enabled) {
+  if (voice < 0 || voice > 2)
+    return;
+  voiceCache[voice].ringMod = enabled;
+  // Don't call updateVoiceRegisters - ring mod bit will be applied on next
+  // noteOn or waveform change. Calling it here can interfere with gate timing.
+}
+
+void SIDEngine::setSync(int voice, bool enabled) {
+  if (voice < 0 || voice > 2)
+    return;
+  voiceCache[voice].sync = enabled;
+  // Don't call updateVoiceRegisters - sync bit will be applied on next noteOn
+  // or waveform change. Calling it here can interfere with gate timing.
+}
+
 void SIDEngine::setFilterCutoff(int cutoff) {
   filterCutoff = static_cast<uint16_t>(std::clamp(cutoff, 0, 2047));
   updateFilterRegisters();
@@ -238,8 +254,12 @@ void SIDEngine::updateVoiceRegisters(int voice) {
   int baseReg = voice * 7;
   auto &vc = voiceCache[voice];
 
-  // Control register: waveform + gate
+  // Control register: waveform + ring mod + sync + gate
   uint8_t control = vc.waveform | (vc.gateOn ? 0x01 : 0x00);
+  if (vc.sync)
+    control |= 0x02; // Bit 1: hard sync
+  if (vc.ringMod)
+    control |= 0x04; // Bit 2: ring modulation
   writeRegister(baseReg + 4, control);
 
   // Attack/Decay

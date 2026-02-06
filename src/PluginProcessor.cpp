@@ -286,6 +286,8 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   sid.setDecay(sidVoice, settings.decay);
   sid.setSustain(sidVoice, settings.sustain);
   sid.setRelease(sidVoice, settings.release);
+  sid.setRingMod(sidVoice, settings.ringMod);
+  sid.setSync(sidVoice, settings.sync);
 }
 
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {

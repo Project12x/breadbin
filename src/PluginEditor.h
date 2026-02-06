@@ -4,6 +4,21 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+// Custom LookAndFeel for professional ComboBox fonts
+class BreadbinLookAndFeel : public juce::LookAndFeel_V4 {
+public:
+  void setProFont(const juce::Font &font) { proFont = font; }
+
+  juce::Font getComboBoxFont(juce::ComboBox &) override {
+    return proFont.withHeight(11.0f);
+  }
+
+  juce::Font getPopupMenuFont() override { return proFont.withHeight(11.0f); }
+
+private:
+  juce::Font proFont;
+};
+
 class BreadbinEditor : public juce::AudioProcessorEditor,
                        private juce::MidiKeyboardState::Listener {
 public:
@@ -16,6 +31,13 @@ public:
 private:
   BreadbinProcessor &processor;
 
+  // Retro font for section headers (Press Start 2P)
+  juce::Font retroFont;
+  // Professional font for UI controls (Inter)
+  juce::Font proFont;
+  // Custom look and feel for ComboBox fonts
+  BreadbinLookAndFeel customLookAndFeel;
+
   // Currently selected voice (0-5)
   int selectedVoice = 0;
 
@@ -23,10 +45,12 @@ private:
   juce::Label titleLabel;
   juce::ComboBox dualModeSelector;
   juce::Label modeLabel;
-  juce::ComboBox presetSelector;
+  juce::ComboBox globalPresetSelector; // Factory global presets
+  juce::Label globalPresetLabel;
+  juce::ComboBox presetSelector; // Voice presets
   juce::Label presetLabel;
-  juce::TextButton savePresetButton{"Save"};
-  juce::TextButton loadPresetButton{"Load"};
+  juce::TextButton savePresetButton{"Save All"};
+  juce::TextButton loadPresetButton{"Load All"};
 
   // Time Machine (aging)
   juce::Slider agingSlider;
@@ -77,6 +101,8 @@ private:
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
   juce::Label panLabel;
+  juce::ToggleButton ringModButton{"Ring"};
+  juce::ToggleButton syncButton{"Sync"};
 
   // ========== ARPEGGIATOR ==========
   juce::ToggleButton arpEnableButton{"Arp"};
@@ -106,6 +132,7 @@ private:
   void updateVoiceButtonStates();
   void updateFiltersFromUI();
   void applyPreset(int presetId);
+  void applyGlobalPreset(int presetId);
   void savePresetToFile();
   void loadPresetFromFile();
 
