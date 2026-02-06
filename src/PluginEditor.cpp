@@ -130,12 +130,12 @@ void BreadbinEditor::setupControls() {
 
   agingStartLabel.setText("Fresh", juce::dontSendNotification);
   agingStartLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingStartLabel.setFont(juce::Font(10.0f));
+  agingStartLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(agingStartLabel);
 
   agingEndLabel.setText("Vintage", juce::dontSendNotification);
   agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingEndLabel.setFont(juce::Font(10.0f));
+  agingEndLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(agingEndLabel);
 
   agingSlider.setRange(0.0, 1.0, 0.01);
@@ -201,7 +201,7 @@ void BreadbinEditor::setupControls() {
   // Glide/Portamento
   glideTimeLabel.setText("Glide", juce::dontSendNotification);
   glideTimeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  glideTimeLabel.setFont(juce::Font(10.0f));
+  glideTimeLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(glideTimeLabel);
 
   glideTimeSlider.setRange(0.0, 2000.0, 1.0);
@@ -218,7 +218,7 @@ void BreadbinEditor::setupControls() {
   pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
   pitchBendRangeLabel.setColour(juce::Label::textColourId,
                                 juce::Colours::lightgrey);
-  pitchBendRangeLabel.setFont(juce::Font(10.0f));
+  pitchBendRangeLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(pitchBendRangeLabel);
 
   pitchBendRangeSelector.addItem("+/-2", 2);
@@ -245,7 +245,7 @@ void BreadbinEditor::setupControls() {
 
   extInputLabel.setText("Level", juce::dontSendNotification);
   extInputLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  extInputLabel.setFont(juce::Font(10.0f));
+  extInputLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(extInputLabel);
 
   extInputLevelSlider.setRange(0.0, 2.0, 0.01);
@@ -529,7 +529,7 @@ void BreadbinEditor::setupVoiceEditor() {
                           int defaultVal) {
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(juce::Font(10.0f));
+    label.setFont(juce::Font(juce::FontOptions(10.0f)));
     addAndMakeVisible(label);
 
     slider.setRange(0, 15, 1);
@@ -612,7 +612,7 @@ void BreadbinEditor::updateVoiceButtonStates() {
 
   // Update voice editor label to show which voice
   juce::String sidName = selectedVoice < 3 ? "L" : "R";
-  int voiceNum = (selectedVoice % 3) + 1;
+
   voiceEditorLabel.setText("VOICE " + juce::String(selectedVoice + 1) + " (" +
                                sidName + ")",
                            juce::dontSendNotification);
