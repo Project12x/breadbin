@@ -155,6 +155,7 @@ void BreadbinEditor::setupControls() {
   arpEnableButton.onClick = [this]() {
     processor.setArpEnabled(arpEnableButton.getToggleState());
   };
+  arpEnableButton.setTooltip("Enable the arpeggiator");
   addAndMakeVisible(arpEnableButton);
 
   arpPatternSelector.addItem("Up", 1);
@@ -168,6 +169,7 @@ void BreadbinEditor::setupControls() {
     processor.setArpPattern(static_cast<BreadbinProcessor::ArpPattern>(
         arpPatternSelector.getSelectedId() - 1));
   };
+  arpPatternSelector.setTooltip("Arp pattern: Up, Down, Up/Down, or Random");
   addAndMakeVisible(arpPatternSelector);
 
   arpRateSlider.setRange(1.0, 100.0, 1.0);
@@ -193,6 +195,7 @@ void BreadbinEditor::setupControls() {
   arpOctaveSelector.onChange = [this]() {
     processor.setArpOctaves(arpOctaveSelector.getSelectedId());
   };
+  arpOctaveSelector.setTooltip("Arpeggiator range: 1-4 octaves");
   addAndMakeVisible(arpOctaveSelector);
 
   // Glide/Portamento
@@ -252,12 +255,16 @@ void BreadbinEditor::setupLeftSID() {
                                    ? SIDEngine::ChipModel::MOS6581
                                    : SIDEngine::ChipModel::MOS8580);
   };
+  leftChipSelector.setTooltip(
+      "6581: Classic warm sound, 8580: Cleaner with better filters");
   addAndMakeVisible(leftChipSelector);
 
   // Voice buttons and enables for L SID (voices 0-2)
   for (int i = 0; i < 3; ++i) {
     leftVoiceButtons[i].setButtonText(juce::String(i + 1));
     leftVoiceButtons[i].onClick = [this, i]() { selectVoice(i); };
+    leftVoiceButtons[i].setTooltip("Select Voice " + juce::String(i + 1) +
+                                   " for editing");
     addAndMakeVisible(leftVoiceButtons[i]);
 
     leftVoiceEnables[i].setButtonText("");
@@ -266,6 +273,8 @@ void BreadbinEditor::setupLeftSID() {
       processor.getVoiceSettings(i).enabled =
           leftVoiceEnables[i].getToggleState();
     };
+    leftVoiceEnables[i].setTooltip("Enable/disable Voice " +
+                                   juce::String(i + 1));
     addAndMakeVisible(leftVoiceEnables[i]);
   }
 
@@ -317,7 +326,10 @@ void BreadbinEditor::setupLeftSID() {
   leftLPButton.setButtonText("LP");
   leftLPButton.setToggleState(true, juce::dontSendNotification);
   leftFilterEnableButton.setToggleState(true, juce::dontSendNotification);
-  leftFilterEnableButton.setTooltip("Enable filter routing");
+  leftFilterEnableButton.setTooltip("Enable filter routing for all voices");
+  leftLPButton.setTooltip("Low-pass filter - cuts high frequencies");
+  leftBPButton.setTooltip("Band-pass filter - cuts lows and highs");
+  leftHPButton.setTooltip("High-pass filter - cuts low frequencies");
 
   processor.getLeftSID().setFilterVoices(true, true, true);
   processor.getLeftSID().setFilterMode(true, false, false);
@@ -356,12 +368,16 @@ void BreadbinEditor::setupRightSID() {
                                     ? SIDEngine::ChipModel::MOS6581
                                     : SIDEngine::ChipModel::MOS8580);
   };
+  rightChipSelector.setTooltip(
+      "6581: Classic warm sound, 8580: Cleaner with better filters");
   addAndMakeVisible(rightChipSelector);
 
   // Voice buttons and enables for R SID (voices 3-5)
   for (int i = 0; i < 3; ++i) {
     rightVoiceButtons[i].setButtonText(juce::String(i + 4));
     rightVoiceButtons[i].onClick = [this, i]() { selectVoice(i + 3); };
+    rightVoiceButtons[i].setTooltip("Select Voice " + juce::String(i + 4) +
+                                    " for editing");
     addAndMakeVisible(rightVoiceButtons[i]);
 
     rightVoiceEnables[i].setButtonText("");
@@ -370,6 +386,8 @@ void BreadbinEditor::setupRightSID() {
       processor.getVoiceSettings(i + 3).enabled =
           rightVoiceEnables[i].getToggleState();
     };
+    rightVoiceEnables[i].setTooltip("Enable/disable Voice " +
+                                    juce::String(i + 4));
     addAndMakeVisible(rightVoiceEnables[i]);
   }
 
@@ -420,7 +438,10 @@ void BreadbinEditor::setupRightSID() {
   setupButton(rightFilterEnableButton);
   rightLPButton.setToggleState(true, juce::dontSendNotification);
   rightFilterEnableButton.setToggleState(true, juce::dontSendNotification);
-  rightFilterEnableButton.setTooltip("Enable filter routing");
+  rightFilterEnableButton.setTooltip("Enable filter routing for all voices");
+  rightLPButton.setTooltip("Low-pass filter - cuts high frequencies");
+  rightBPButton.setTooltip("Band-pass filter - cuts lows and highs");
+  rightHPButton.setTooltip("High-pass filter - cuts low frequencies");
 
   processor.getRightSID().setFilterVoices(true, true, true);
   processor.getRightSID().setFilterMode(true, false, false);
