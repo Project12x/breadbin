@@ -121,6 +121,14 @@ public:
   // Mod Wheel (CC1) -> Filter cutoff modulation
   float getModWheelValue() const { return modWheelValue; }
 
+  // External audio input (routes through SID filter)
+  bool isExtInputEnabled() const { return extInputEnabled; }
+  void setExtInputEnabled(bool enabled) { extInputEnabled = enabled; }
+  float getExtInputLevel() const { return extInputLevel; }
+  void setExtInputLevel(float level) {
+    extInputLevel = juce::jlimit(0.0f, 2.0f, level);
+  }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -139,6 +147,10 @@ private:
   float modWheelValue = 0.0f;      // 0.0 to 1.0
   int baseFilterCutoffLeft = 1024; // Store base cutoff for mod wheel
   int baseFilterCutoffRight = 1024;
+
+  // External audio input
+  bool extInputEnabled = false;
+  float extInputLevel = 1.0f; // 0.0 to 2.0 (0-200%)
 
   double hostSampleRate = 44100.0;
   juce::MidiMessageCollector midiCollector;

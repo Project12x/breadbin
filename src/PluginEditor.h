@@ -119,6 +119,11 @@ private:
   juce::ComboBox pitchBendRangeSelector;
   juce::Label pitchBendRangeLabel;
 
+  // ========== EXTERNAL AUDIO INPUT ==========
+  juce::ToggleButton extInputEnableButton{"Ext In"};
+  juce::Slider extInputLevelSlider;
+  juce::Label extInputLabel;
+
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;

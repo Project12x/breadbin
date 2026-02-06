@@ -246,6 +246,13 @@ void SIDEngine::setVolume(int volume) {
   updateFilterRegisters();
 }
 
+void SIDEngine::setExternalInput(float sample) {
+  // Convert float (-1.0 to +1.0) to 16-bit signed integer
+  // The reSIDfp input() function accepts a 16-bit sample value
+  int value = static_cast<int>(std::clamp(sample, -1.0f, 1.0f) * 32767.0f);
+  sid->input(value);
+}
+
 void SIDEngine::writeRegister(uint8_t reg, uint8_t value) {
   sid->write(reg, value);
 }

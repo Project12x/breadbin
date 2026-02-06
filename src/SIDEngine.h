@@ -57,6 +57,9 @@ public:
   // Master volume
   void setVolume(int volume); // 0-15
 
+  // External audio input (routes through filter)
+  void setExternalInput(float sample); // -1.0 to +1.0
+
 private:
   std::unique_ptr<reSIDfp::SID> sid;
 

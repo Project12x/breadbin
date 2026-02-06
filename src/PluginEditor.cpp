@@ -234,6 +234,32 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(pitchBendRangeSelector);
 
+  // External Audio Input
+  extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
+                                      juce::dontSendNotification);
+  extInputEnableButton.onClick = [this]() {
+    processor.setExtInputEnabled(extInputEnableButton.getToggleState());
+  };
+  extInputEnableButton.setTooltip("Route external audio through SID filters");
+  addAndMakeVisible(extInputEnableButton);
+
+  extInputLabel.setText("Level", juce::dontSendNotification);
+  extInputLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  extInputLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(extInputLabel);
+
+  extInputLevelSlider.setRange(0.0, 2.0, 0.01);
+  extInputLevelSlider.setValue(processor.getExtInputLevel());
+  extInputLevelSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  extInputLevelSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40,
+                                      18);
+  extInputLevelSlider.setTooltip("External input level (0-200%)");
+  extInputLevelSlider.onValueChange = [this]() {
+    processor.setExtInputLevel(
+        static_cast<float>(extInputLevelSlider.getValue()));
+  };
+  addAndMakeVisible(extInputLevelSlider);
+
   // Keyboard
   keyboard.setKeyWidth(16.0f);
   keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
@@ -827,6 +853,11 @@ void BreadbinEditor::resized() {
   row2.removeFromLeft(pad * 2);
   pitchBendRangeLabel.setBounds(row2.removeFromLeft(55));
   pitchBendRangeSelector.setBounds(row2.removeFromLeft(65));
+  row2.removeFromLeft(pad * 2);
+  extInputEnableButton.setBounds(row2.removeFromLeft(55));
+  row2.removeFromLeft(pad);
+  extInputLabel.setBounds(row2.removeFromLeft(35));
+  extInputLevelSlider.setBounds(row2.removeFromLeft(100));
 
   bounds.removeFromTop(pad);
 

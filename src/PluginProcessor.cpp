@@ -83,8 +83,25 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
+  // Get input channels for external audio routing
+  const float *inputLeft = nullptr;
+  const float *inputRight = nullptr;
+  if (extInputEnabled && buffer.getNumChannels() > 0) {
+    inputLeft = buffer.getReadPointer(0);
+    inputRight =
+        buffer.getNumChannels() > 1 ? buffer.getReadPointer(1) : inputLeft;
+  }
+
   // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
+    // Feed external audio to SID filters if enabled
+    if (extInputEnabled && inputLeft != nullptr) {
+      float extL = inputLeft[i] * extInputLevel;
+      float extR = inputRight[i] * extInputLevel;
+      sidLeft.setExternalInput(extL);
+      sidRight.setExternalInput(extR);
+    }
+
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
 
@@ -362,6 +379,8 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
                     nullptr);
   state.setProperty("agingFactor", agingFactor, nullptr);
   state.setProperty("pitchBendRange", pitchBendRange, nullptr);
+  state.setProperty("extInputEnabled", extInputEnabled, nullptr);
+  state.setProperty("extInputLevel", extInputLevel, nullptr);
 
   // Save per-voice settings
   for (int v = 0; v < 6; ++v) {
@@ -395,6 +414,8 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         static_cast<int>(state.getProperty("chipModelRight", 0))));
     setAgingFactor(state.getProperty("agingFactor", 0.0f));
     pitchBendRange = state.getProperty("pitchBendRange", 2);
+    extInputEnabled = state.getProperty("extInputEnabled", false);
+    extInputLevel = state.getProperty("extInputLevel", 1.0f);
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
