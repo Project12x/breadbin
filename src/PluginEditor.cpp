@@ -211,6 +211,26 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(glideTimeSlider);
 
+  // Pitch Bend Range
+  pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
+  pitchBendRangeLabel.setColour(juce::Label::textColourId,
+                                juce::Colours::lightgrey);
+  pitchBendRangeLabel.setFont(juce::Font(10.0f));
+  addAndMakeVisible(pitchBendRangeLabel);
+
+  pitchBendRangeSelector.addItem("+/-2", 2);
+  pitchBendRangeSelector.addItem("+/-3", 3);
+  pitchBendRangeSelector.addItem("+/-5", 5);
+  pitchBendRangeSelector.addItem("+/-7", 7);
+  pitchBendRangeSelector.addItem("+/-12", 12);
+  pitchBendRangeSelector.setSelectedId(processor.getPitchBendRange(),
+                                       juce::dontSendNotification);
+  pitchBendRangeSelector.setTooltip("Pitch bend range in semitones");
+  pitchBendRangeSelector.onChange = [this]() {
+    processor.setPitchBendRange(pitchBendRangeSelector.getSelectedId());
+  };
+  addAndMakeVisible(pitchBendRangeSelector);
+
   // Keyboard
   keyboard.setKeyWidth(16.0f);
   keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
@@ -783,6 +803,9 @@ void BreadbinEditor::resized() {
   ringModButton.setBounds(row2.removeFromLeft(55));
   row2.removeFromLeft(pad);
   syncButton.setBounds(row2.removeFromLeft(55));
+  row2.removeFromLeft(pad * 2);
+  pitchBendRangeLabel.setBounds(row2.removeFromLeft(55));
+  pitchBendRangeSelector.setBounds(row2.removeFromLeft(65));
 
   bounds.removeFromTop(pad);
 

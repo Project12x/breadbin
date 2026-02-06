@@ -115,6 +115,10 @@ private:
   juce::Slider glideTimeSlider;
   juce::Label glideTimeLabel;
 
+  // ========== PITCH BEND ==========
+  juce::ComboBox pitchBendRangeSelector;
+  juce::Label pitchBendRangeLabel;
+
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
