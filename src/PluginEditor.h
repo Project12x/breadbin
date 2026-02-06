@@ -103,6 +103,7 @@ private:
   juce::Label panLabel;
   juce::ToggleButton ringModButton{"Ring"};
   juce::ToggleButton syncButton{"Sync"};
+  juce::ToggleButton voiceFilterButton{"Flt"};
 
   // ========== ARPEGGIATOR ==========
   juce::ToggleButton arpEnableButton{"Arp"};
@@ -123,6 +124,10 @@ private:
   juce::ToggleButton extInputEnableButton{"Ext In"};
   juce::Slider extInputLevelSlider;
   juce::Label extInputLabel;
+
+  // ========== CLOCK MODE (PAL/NTSC) ==========
+  juce::ComboBox clockModeSelector;
+  juce::Label clockModeLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;

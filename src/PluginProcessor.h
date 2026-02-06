@@ -78,6 +78,7 @@ public:
     float pan = 0.0f;     // -1.0 = full left, 0.0 = center, 1.0 = full right
     bool ringMod = false; // Ring modulation with previous voice
     bool sync = false;    // Hard sync with previous voice
+    bool filterEnabled = true; // Route this voice through filter
   };
   VoiceSettings &getVoiceSettings(int voice) { return voiceSettings[voice]; }
   const VoiceSettings &getVoiceSettings(int voice) const {
@@ -129,6 +130,14 @@ public:
     extInputLevel = juce::jlimit(0.0f, 2.0f, level);
   }
 
+  // Clock mode (PAL/NTSC)
+  SIDEngine::ClockMode getClockMode() const { return clockMode; }
+  void setClockMode(SIDEngine::ClockMode mode) {
+    clockMode = mode;
+    sidLeft.setClockMode(mode);
+    sidRight.setClockMode(mode);
+  }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -140,6 +149,7 @@ private:
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
   float glideTimeMs = 0.0f;
+  SIDEngine::ClockMode clockMode = SIDEngine::ClockMode::PAL;
 
   // Pitch bend and mod wheel
   float pitchBendValue = 0.0f;     // -1.0 to +1.0 (normalized)

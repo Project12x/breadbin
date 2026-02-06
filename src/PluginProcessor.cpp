@@ -316,6 +316,13 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   sid.setRelease(sidVoice, settings.release);
   sid.setRingMod(sidVoice, settings.ringMod);
   sid.setSync(sidVoice, settings.sync);
+
+  // Update per-voice filter routing on this SID
+  bool isLeft = (voice < 3);
+  auto &v0 = voiceSettings[isLeft ? 0 : 3];
+  auto &v1 = voiceSettings[isLeft ? 1 : 4];
+  auto &v2 = voiceSettings[isLeft ? 2 : 5];
+  sid.setFilterVoices(v0.filterEnabled, v1.filterEnabled, v2.filterEnabled);
 }
 
 void BreadbinProcessor::updateAllVoiceFrequencies() {
@@ -381,6 +388,7 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   state.setProperty("pitchBendRange", pitchBendRange, nullptr);
   state.setProperty("extInputEnabled", extInputEnabled, nullptr);
   state.setProperty("extInputLevel", extInputLevel, nullptr);
+  state.setProperty("clockMode", static_cast<int>(clockMode), nullptr);
 
   // Save per-voice settings
   for (int v = 0; v < 6; ++v) {
@@ -395,6 +403,7 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
     voiceState.setProperty("release", vs.release, nullptr);
     voiceState.setProperty("pan", vs.pan, nullptr);
     voiceState.setProperty("presetId", vs.presetId, nullptr);
+    voiceState.setProperty("filterEnabled", vs.filterEnabled, nullptr);
     state.addChild(voiceState, -1, nullptr);
   }
 
@@ -416,6 +425,8 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     pitchBendRange = state.getProperty("pitchBendRange", 2);
     extInputEnabled = state.getProperty("extInputEnabled", false);
     extInputLevel = state.getProperty("extInputLevel", 1.0f);
+    setClockMode(static_cast<SIDEngine::ClockMode>(
+        static_cast<int>(state.getProperty("clockMode", 0))));
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
@@ -432,6 +443,7 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         vs.release = voiceState.getProperty("release", 0);
         vs.pan = voiceState.getProperty("pan", 0.0f);
         vs.presetId = voiceState.getProperty("presetId", 1);
+        vs.filterEnabled = voiceState.getProperty("filterEnabled", true);
         applyVoiceSettings(v);
       }
     }

@@ -260,6 +260,25 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(extInputLevelSlider);
 
+  // Clock mode (PAL/NTSC)
+  clockModeLabel.setText("Clock:", juce::dontSendNotification);
+  clockModeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  clockModeLabel.setFont(retroFont.withHeight(7.0f));
+  addAndMakeVisible(clockModeLabel);
+
+  clockModeSelector.addItem("PAL", 1);
+  clockModeSelector.addItem("NTSC", 2);
+  clockModeSelector.setSelectedId(
+      processor.getClockMode() == SIDEngine::ClockMode::NTSC ? 2 : 1);
+  clockModeSelector.setTooltip(
+      "PAL (985 kHz) or NTSC (1023 kHz) clock frequency");
+  clockModeSelector.onChange = [this]() {
+    processor.setClockMode(clockModeSelector.getSelectedId() == 2
+                               ? SIDEngine::ClockMode::NTSC
+                               : SIDEngine::ClockMode::PAL);
+  };
+  addAndMakeVisible(clockModeSelector);
+
   // Keyboard
   keyboard.setKeyWidth(16.0f);
   keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
@@ -576,6 +595,12 @@ void BreadbinEditor::setupVoiceEditor() {
   syncButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(syncButton);
 
+  // Per-voice filter routing button
+  voiceFilterButton.setTooltip("Route this voice through the SID filter.");
+  voiceFilterButton.setToggleState(true, juce::dontSendNotification);
+  voiceFilterButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  addAndMakeVisible(voiceFilterButton);
+
   // Update Ring Mod enable state when waveform changes
   waveformSelector.onChange = [this]() {
     saveUIToVoice(selectedVoice);
@@ -648,6 +673,8 @@ void BreadbinEditor::loadVoiceToUI(int voice) {
   // Ring mod and sync
   ringModButton.setToggleState(settings.ringMod, juce::dontSendNotification);
   syncButton.setToggleState(settings.sync, juce::dontSendNotification);
+  voiceFilterButton.setToggleState(settings.filterEnabled,
+                                   juce::dontSendNotification);
 
   // Ring mod only works with Triangle waveform
   bool isTriangle = (waveformId == 1);
@@ -682,21 +709,27 @@ void BreadbinEditor::saveUIToVoice(int voice) {
   // Ring mod and sync
   settings.ringMod = ringModButton.getToggleState();
   settings.sync = syncButton.getToggleState();
+  settings.filterEnabled = voiceFilterButton.getToggleState();
 
   processor.applyVoiceSettings(voice);
 }
 
 void BreadbinEditor::updateFiltersFromUI() {
-  // Route voices through filter only if filter is enabled
-  bool leftEnabled = leftFilterEnableButton.getToggleState();
-  processor.getLeftSID().setFilterVoices(leftEnabled, leftEnabled, leftEnabled);
+  // Master filter enable (SID panel) combined with per-voice routing
+  bool leftMaster = leftFilterEnableButton.getToggleState();
+  processor.getLeftSID().setFilterVoices(
+      leftMaster && processor.getVoiceSettings(0).filterEnabled,
+      leftMaster && processor.getVoiceSettings(1).filterEnabled,
+      leftMaster && processor.getVoiceSettings(2).filterEnabled);
   processor.getLeftSID().setFilterMode(leftLPButton.getToggleState(),
                                        leftBPButton.getToggleState(),
                                        leftHPButton.getToggleState());
 
-  bool rightEnabled = rightFilterEnableButton.getToggleState();
-  processor.getRightSID().setFilterVoices(rightEnabled, rightEnabled,
-                                          rightEnabled);
+  bool rightMaster = rightFilterEnableButton.getToggleState();
+  processor.getRightSID().setFilterVoices(
+      rightMaster && processor.getVoiceSettings(3).filterEnabled,
+      rightMaster && processor.getVoiceSettings(4).filterEnabled,
+      rightMaster && processor.getVoiceSettings(5).filterEnabled);
   processor.getRightSID().setFilterMode(rightLPButton.getToggleState(),
                                         rightBPButton.getToggleState(),
                                         rightHPButton.getToggleState());
@@ -850,6 +883,8 @@ void BreadbinEditor::resized() {
   ringModButton.setBounds(row2.removeFromLeft(55));
   row2.removeFromLeft(pad);
   syncButton.setBounds(row2.removeFromLeft(55));
+  row2.removeFromLeft(pad);
+  voiceFilterButton.setBounds(row2.removeFromLeft(45));
   row2.removeFromLeft(pad * 2);
   pitchBendRangeLabel.setBounds(row2.removeFromLeft(55));
   pitchBendRangeSelector.setBounds(row2.removeFromLeft(65));
@@ -886,6 +921,9 @@ void BreadbinEditor::resized() {
   agingSlider.setBounds(agingRow.removeFromRight(120));
   agingStartLabel.setBounds(agingRow.removeFromRight(40));
   agingLabel.setBounds(agingRow.removeFromRight(60));
+  agingRow.removeFromRight(pad * 3);
+  clockModeSelector.setBounds(agingRow.removeFromRight(65));
+  clockModeLabel.setBounds(agingRow.removeFromRight(40));
 }
 
 void BreadbinEditor::applyPreset(int presetId) {

@@ -12,6 +12,7 @@ class SID;
 class SIDEngine {
 public:
   enum class ChipModel { MOS6581, MOS8580 };
+  enum class ClockMode { PAL, NTSC };
   enum class Waveform {
     Triangle = 0x10,
     Sawtooth = 0x20,
@@ -24,6 +25,8 @@ public:
 
   void prepare(double sampleRate);
   void setChipModel(ChipModel model);
+  void setClockMode(ClockMode mode);
+  ClockMode getClockMode() const { return currentClockMode; }
   void setAgingFactor(float aging); // 0.0 = fresh, 1.0 = vintage
 
   // Generate one sample at host sample rate (handles internal clock/resample)
@@ -65,6 +68,8 @@ private:
 
   double hostSampleRate = 44100.0;
   static constexpr double SID_CLOCK_PAL = 985248.0;
+  static constexpr double SID_CLOCK_NTSC = 1022727.0;
+  ClockMode currentClockMode = ClockMode::PAL;
 
   // Resampling state
   double clockAccumulator = 0.0;

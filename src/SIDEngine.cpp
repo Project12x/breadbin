@@ -19,11 +19,13 @@ SIDEngine::~SIDEngine() = default;
 
 void SIDEngine::prepare(double sampleRate) {
   hostSampleRate = sampleRate;
-  clockRatio = SID_CLOCK_PAL / hostSampleRate;
+  double clockHz =
+      (currentClockMode == ClockMode::NTSC) ? SID_CLOCK_NTSC : SID_CLOCK_PAL;
+  clockRatio = clockHz / hostSampleRate;
   clockAccumulator = 0.0;
 
   // Configure SID sampling
-  sid->setSamplingParameters(SID_CLOCK_PAL, reSIDfp::SamplingMethod::RESAMPLE,
+  sid->setSamplingParameters(clockHz, reSIDfp::SamplingMethod::RESAMPLE,
                              sampleRate);
 
   // Initialize all voice registers so noteOn will work immediately
@@ -45,6 +47,12 @@ void SIDEngine::setChipModel(ChipModel model) {
   } else {
     sid->setChipModel(reSIDfp::ChipModel::MOS8580);
   }
+}
+
+void SIDEngine::setClockMode(ClockMode mode) {
+  currentClockMode = mode;
+  if (hostSampleRate > 0)
+    prepare(hostSampleRate);
 }
 
 void SIDEngine::setAgingFactor(float aging) {
