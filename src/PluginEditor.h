@@ -110,7 +110,7 @@ private:
   juce::ComboBox arpPatternSelector;
   juce::Slider arpRateSlider;
   juce::ComboBox arpOctaveSelector;
-  juce::Label arpRateLabel;
+  juce::Label arpRateLabel, arpPatternLabel, arpOctaveLabel;
 
   // ========== GLIDE/PORTAMENTO ==========
   juce::Slider glideTimeSlider;

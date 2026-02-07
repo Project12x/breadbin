@@ -280,7 +280,8 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(clockModeSelector);
 
   // ===== LFO =====
-  lfoEnableButton.setTooltip("Enable Low Frequency Oscillator");
+  lfoEnableButton.setTooltip("Global LFO: Toggle all LFO modulations");
+  lfoEnableButton.setButtonText("LFO");
   lfoEnableButton.setToggleState(processor.getLFO().enabled,
                                  juce::dontSendNotification);
   lfoEnableButton.onClick = [this]() {
@@ -294,14 +295,15 @@ void BreadbinEditor::setupControls() {
   lfoWaveformSelector.addItem("S&H", 4);
   lfoWaveformSelector.setSelectedId(
       static_cast<int>(processor.getLFO().waveform) + 1);
-  lfoWaveformSelector.setTooltip("LFO waveform shape");
+  lfoWaveformSelector.setTooltip(
+      "LFO Shape: Tri (Smooth), Saw (Ramp), Sq (Hard), S&H (Random)");
   lfoWaveformSelector.onChange = [this]() {
     processor.getLFO().waveform = static_cast<BreadbinProcessor::LFOWaveform>(
         lfoWaveformSelector.getSelectedId() - 1);
   };
   addAndMakeVisible(lfoWaveformSelector);
 
-  lfoRateLabel.setText("Rate", juce::dontSendNotification);
+  lfoRateLabel.setText("Hz", juce::dontSendNotification);
   lfoRateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   lfoRateLabel.setFont(retroFont.withHeight(7.0f));
   addAndMakeVisible(lfoRateLabel);
@@ -309,8 +311,8 @@ void BreadbinEditor::setupControls() {
   lfoRateSlider.setRange(0.1, 20.0, 0.1);
   lfoRateSlider.setValue(processor.getLFO().rate);
   lfoRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  lfoRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
-  lfoRateSlider.setTooltip("LFO rate in Hz");
+  lfoRateSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  lfoRateSlider.setTooltip("LFO Rate: Adjust modulation speed (0.1Hz - 20Hz)");
   lfoRateSlider.onValueChange = [this]() {
     processor.getLFO().rate = static_cast<float>(lfoRateSlider.getValue());
   };
@@ -335,22 +337,25 @@ void BreadbinEditor::setupControls() {
   };
 
   setupDepthSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt",
-                   "LFO depth: Filter cutoff", processor.getLFO().depthFilter);
+                   "Filter Mod: Depth of LFO influence on SID filter cutoff",
+                   processor.getLFO().depthFilter);
   lfoDepthFilterSlider.onValueChange = [this]() {
     processor.getLFO().depthFilter =
         static_cast<float>(lfoDepthFilterSlider.getValue());
   };
 
-  setupDepthSlider(lfoDepthPWSlider, lfoDepthPWLabel, "PW",
-                   "LFO depth: Pulse width",
-                   processor.getLFO().depthPulseWidth);
+  setupDepthSlider(
+      lfoDepthPWSlider, lfoDepthPWLabel, "PWM",
+      "PWM: Depth of LFO influence on pulse width of all active voices",
+      processor.getLFO().depthPulseWidth);
   lfoDepthPWSlider.onValueChange = [this]() {
     processor.getLFO().depthPulseWidth =
         static_cast<float>(lfoDepthPWSlider.getValue());
   };
 
   setupDepthSlider(lfoDepthPitchSlider, lfoDepthPitchLabel, "Vib",
-                   "LFO depth: Pitch vibrato", processor.getLFO().depthPitch);
+                   "Vibrato: Depth of LFO influence on oscillator pitch",
+                   processor.getLFO().depthPitch);
   lfoDepthPitchSlider.onValueChange = [this]() {
     processor.getLFO().depthPitch =
         static_cast<float>(lfoDepthPitchSlider.getValue());
@@ -923,14 +928,48 @@ void BreadbinEditor::resized() {
   auto editorArea = bounds.removeFromTop(120);
   voiceEditorLabel.setBounds(editorArea.removeFromTop(18));
 
-  // Row 1: Waveform, Pulse Width, ADSR
+  // Row 1: Waveform, Pulse Width, GLOBAL LFO, ADSR
   auto row1 = editorArea.removeFromTop(65);
   waveformLabel.setBounds(row1.removeFromLeft(40));
   waveformSelector.setBounds(row1.removeFromLeft(90));
+  row1.removeFromLeft(pad);
+  pwLabel.setBounds(row1.removeFromLeft(30));
+  pulseWidthSlider.setBounds(row1.removeFromLeft(90));
   row1.removeFromLeft(pad * 2);
-  pwLabel.setBounds(row1.removeFromLeft(40));
-  pulseWidthSlider.setBounds(row1.removeFromLeft(140));
-  row1.removeFromLeft(pad * 2);
+
+  // Global LFO section in Row 1 (center-right)
+  auto lfoArea = row1.removeFromLeft(250);
+  // Vertical centering helper for buttons/combos in the 65px row
+  const int rowCenterY = row1.getY() + (65 - 20) / 2;
+  lfoEnableButton.setBounds(lfoArea.getX(), rowCenterY, 40, 20);
+  lfoArea.removeFromLeft(42);
+  lfoWaveformSelector.setBounds(lfoArea.getX(), rowCenterY, 55, 20);
+  lfoArea.removeFromLeft(57);
+
+  auto lfoRateArea = lfoArea.removeFromLeft(70);
+  lfoRateSlider.setBounds(lfoRateArea.removeFromTop(40));
+  lfoRateLabel.setBounds(lfoRateArea.getX(), lfoRateArea.getY() - 5, 30, 15);
+
+  lfoArea.removeFromLeft(pad);
+
+  const int depthW = 22;
+  auto fDepthArea = lfoArea.removeFromLeft(depthW);
+  lfoDepthFilterLabel.setBounds(fDepthArea.getX(), row1.getY() + 4, depthW, 12);
+  lfoDepthFilterSlider.setBounds(fDepthArea.getX(), row1.getY() + 16, depthW,
+                                 20);
+
+  lfoArea.removeFromLeft(2);
+  auto pDepthArea = lfoArea.removeFromLeft(depthW);
+  lfoDepthPWLabel.setBounds(pDepthArea.getX(), row1.getY() + 4, depthW, 12);
+  lfoDepthPWSlider.setBounds(pDepthArea.getX(), row1.getY() + 16, depthW, 20);
+
+  lfoArea.removeFromLeft(2);
+  auto vDepthArea = lfoArea.removeFromLeft(depthW);
+  lfoDepthPitchLabel.setBounds(vDepthArea.getX(), row1.getY() + 4, depthW, 12);
+  lfoDepthPitchSlider.setBounds(vDepthArea.getX(), row1.getY() + 16, depthW,
+                                20);
+
+  row1.removeFromLeft(pad);
 
   // ADSR sliders
   const int adsrW = 35;
@@ -979,46 +1018,20 @@ void BreadbinEditor::resized() {
   // Add some space above keyboard for the logo (lower-left)
   bounds.removeFromBottom(pad * 2);
 
-  // ===== ARPEGGIATOR + LFO ROW (right-justified) =====
+  // ===== ARPEGGIATOR ROW =====
   auto arpRow = bounds.removeFromBottom(28);
-  arpOctaveSelector.setBounds(arpRow.removeFromRight(85));
-  arpRow.removeFromRight(pad * 2);
-  arpRateSlider.setBounds(arpRow.removeFromRight(100));
-  arpRateLabel.setBounds(arpRow.removeFromRight(35));
-  arpRow.removeFromRight(pad * 2);
-  arpPatternSelector.setBounds(arpRow.removeFromRight(90));
-  arpRow.removeFromRight(pad);
-  arpEnableButton.setBounds(arpRow.removeFromRight(50));
-
-  // LFO controls (continue right-justified on same row)
-  arpRow.removeFromRight(pad * 4); // Separator between arp and LFO
-
-  // 3 depth knobs (compact: label 8px top, knob fills rest)
-  const int knobW = 28;
-  const int knobLabelH = 8;
-  auto lfoDepthArea = arpRow.removeFromRight(knobW * 3 + pad * 2);
-  // Pitch (Vib)
-  auto vibCol = lfoDepthArea.removeFromRight(knobW);
-  lfoDepthPitchLabel.setBounds(vibCol.removeFromTop(knobLabelH));
-  lfoDepthPitchSlider.setBounds(vibCol);
-  lfoDepthArea.removeFromRight(pad);
-  // PW
-  auto pwCol = lfoDepthArea.removeFromRight(knobW);
-  lfoDepthPWLabel.setBounds(pwCol.removeFromTop(knobLabelH));
-  lfoDepthPWSlider.setBounds(pwCol);
-  lfoDepthArea.removeFromRight(pad);
-  // Filter
-  auto fltCol = lfoDepthArea.removeFromRight(knobW);
-  lfoDepthFilterLabel.setBounds(fltCol.removeFromTop(knobLabelH));
-  lfoDepthFilterSlider.setBounds(fltCol);
-
-  arpRow.removeFromRight(pad * 2);
-  lfoRateSlider.setBounds(arpRow.removeFromRight(90));
-  lfoRateLabel.setBounds(arpRow.removeFromRight(30));
-  arpRow.removeFromRight(pad);
-  lfoWaveformSelector.setBounds(arpRow.removeFromRight(55));
-  arpRow.removeFromRight(pad);
-  lfoEnableButton.setBounds(arpRow.removeFromRight(45));
+  arpPatternLabel.setText("Arp", juce::dontSendNotification);
+  arpPatternLabel.setBounds(arpRow.removeFromLeft(30));
+  arpPatternSelector.setBounds(arpRow.removeFromLeft(90));
+  arpRow.removeFromLeft(pad);
+  arpRateLabel.setBounds(arpRow.removeFromLeft(35));
+  arpRateSlider.setBounds(arpRow.removeFromLeft(100));
+  arpRow.removeFromLeft(pad);
+  arpOctaveLabel.setText("Oct", juce::dontSendNotification);
+  arpOctaveLabel.setBounds(arpRow.removeFromLeft(30));
+  arpOctaveSelector.setBounds(arpRow.removeFromLeft(50));
+  arpRow.removeFromLeft(pad);
+  arpEnableButton.setBounds(arpRow.removeFromLeft(50));
 
   bounds.removeFromBottom(pad);
 

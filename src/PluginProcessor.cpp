@@ -82,8 +82,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Process LFO modulation
   if (lfo.enabled) {
     processLFO(numSamples);
-    applyLFOModulation();
   }
+  applyLFOModulation(); // Always apply to handle resets when disabled
 
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
@@ -563,7 +563,10 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
   if (arpSequence.empty())
     return;
 
-  double samplesPerStep = hostSampleRate / static_cast<double>(arpRateHz);
+  // Sync Arp clock with chip clock mode (NTSC = 1.2x speed)
+  double clockScale = (clockMode == SIDEngine::ClockMode::NTSC) ? 1.2 : 1.0;
+  double samplesPerStep =
+      hostSampleRate / (static_cast<double>(arpRateHz) * clockScale);
   arpTimer += numSamples;
 
   while (arpTimer >= samplesPerStep) {
@@ -634,7 +637,7 @@ void BreadbinProcessor::processLFO(int numSamples) {
 }
 
 void BreadbinProcessor::applyLFOModulation() {
-  float val = lfo.currentValue;
+  float val = lfo.enabled ? lfo.currentValue : 0.0f;
 
   // Filter cutoff modulation
   if (lfo.depthFilter > 0.0f) {
