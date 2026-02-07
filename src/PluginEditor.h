@@ -19,14 +19,55 @@ private:
   juce::Font proFont;
 };
 
+// Custom Slider class for MIDI Learning
+class MappableSlider : public juce::Slider {
+public:
+  MappableSlider(BreadbinProcessor &p, BreadbinProcessor::ControlParam param)
+      : processor(p), controlParam(param) {}
+
+  void mouseDown(const juce::MouseEvent &e) override {
+    if (e.mods.isRightButtonDown()) {
+      juce::PopupMenu m;
+      m.addItem("MIDI Learn",
+                [this] { processor.startLearning(controlParam); });
+      m.addItem("Unlearn",
+                [this] { processor.clearMIDIMappingForParam(controlParam); });
+      m.showMenuAsync(juce::PopupMenu::Options{});
+    } else {
+      juce::Slider::mouseDown(e);
+    }
+  }
+
+  void paint(juce::Graphics &g) override {
+    juce::Slider::paint(g);
+    if (processor.isLearning() &&
+        processor.getLearningParam() == controlParam) {
+      g.setColour(juce::Colours::gold.withAlpha(0.4f));
+      g.drawRect(getLocalBounds(), 2);
+
+      auto font = g.getCurrentFont();
+      font.setHeight(10.0f);
+      font.setBold(true);
+      g.setFont(font);
+      g.drawText("LEARN", getLocalBounds(), juce::Justification::centred);
+    }
+  }
+
+private:
+  BreadbinProcessor &processor;
+  BreadbinProcessor::ControlParam controlParam;
+};
+
 class BreadbinEditor : public juce::AudioProcessorEditor,
-                       private juce::MidiKeyboardState::Listener {
+                       private juce::MidiKeyboardState::Listener,
+                       private juce::Timer {
 public:
   explicit BreadbinEditor(BreadbinProcessor &);
   ~BreadbinEditor() override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
+  void timerCallback() override;
 
 private:
   BreadbinProcessor &processor;
@@ -63,10 +104,15 @@ private:
                                     juce::Colours::white};
 
   // Time Machine (aging)
-  juce::Slider agingSlider;
-  juce::Label agingLabel;
+  MappableSlider agingSlider{processor, BreadbinProcessor::ControlParam::Aging};
+  juce::Label agingLabel{"Aging", "AGING"};
   juce::Label agingStartLabel;
   juce::Label agingEndLabel;
+
+  // Master Volume
+  juce::Label masterVolLabel{"Master", "MASTER"};
+  MappableSlider masterVolSlider{processor,
+                                 BreadbinProcessor::ControlParam::MasterVolume};
 
   // ========== LEFT SID SECTION ==========
   juce::Label leftSIDLabel;
@@ -75,14 +121,17 @@ private:
   std::array<juce::TextButton, 3> leftVoiceButtons;
   std::array<juce::ToggleButton, 3> leftVoiceEnables;
   // L SID Filter
-  juce::Slider leftCutoffSlider;
-  juce::Slider leftResonanceSlider;
+  MappableSlider leftCutoffSlider{processor,
+                                  BreadbinProcessor::ControlParam::LeftCutoff};
+  MappableSlider leftResonanceSlider{
+      processor, BreadbinProcessor::ControlParam::LeftResonance};
   juce::ToggleButton leftLPButton{"LP"};
   juce::ToggleButton leftBPButton{"BP"};
   juce::ToggleButton leftHPButton{"HP"};
   juce::ToggleButton leftFilterEnableButton{"Flt"};
   juce::Label leftCutoffLabel, leftResonanceLabel;
-  juce::Slider leftDetuneSlider;
+  MappableSlider leftDetuneSlider{processor,
+                                  BreadbinProcessor::ControlParam::LeftDetune};
   juce::Label leftDetuneLabel;
 
   // ========== RIGHT SID SECTION ==========
@@ -92,22 +141,34 @@ private:
   std::array<juce::TextButton, 3> rightVoiceButtons;
   std::array<juce::ToggleButton, 3> rightVoiceEnables;
   // R SID Filter
-  juce::Slider rightCutoffSlider;
-  juce::Slider rightResonanceSlider;
+  MappableSlider rightCutoffSlider{
+      processor, BreadbinProcessor::ControlParam::RightCutoff};
+  MappableSlider rightResonanceSlider{
+      processor, BreadbinProcessor::ControlParam::RightResonance};
   juce::ToggleButton rightLPButton{"LP"};
   juce::ToggleButton rightBPButton{"BP"};
   juce::ToggleButton rightHPButton{"HP"};
   juce::ToggleButton rightFilterEnableButton{"Flt"};
   juce::Label rightCutoffLabel, rightResonanceLabel;
-  juce::Slider rightDetuneSlider;
+  MappableSlider rightDetuneSlider{
+      processor, BreadbinProcessor::ControlParam::RightDetune};
   juce::Label rightDetuneLabel;
 
   // ========== VOICE EDITOR (edits selected voice) ==========
   juce::Label voiceEditorLabel;
   juce::ComboBox waveformSelector;
-  juce::Slider pulseWidthSlider;
-  juce::Slider attackSlider, decaySlider, sustainSlider, releaseSlider;
-  juce::Slider panSlider;
+  MappableSlider pulseWidthSlider{processor,
+                                  BreadbinProcessor::ControlParam::VoicePW};
+  MappableSlider attackSlider{processor,
+                              BreadbinProcessor::ControlParam::VoiceAttack};
+  MappableSlider decaySlider{processor,
+                             BreadbinProcessor::ControlParam::VoiceDecay};
+  MappableSlider sustainSlider{processor,
+                               BreadbinProcessor::ControlParam::VoiceSustain};
+  MappableSlider releaseSlider{processor,
+                               BreadbinProcessor::ControlParam::VoiceRelease};
+  MappableSlider panSlider{processor,
+                           BreadbinProcessor::ControlParam::VoicePan};
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
   juce::Label panLabel;
@@ -118,12 +179,14 @@ private:
   // ========== ARPEGGIATOR ==========
   juce::ToggleButton arpEnableButton{"Arp"};
   juce::ComboBox arpPatternSelector;
-  juce::Slider arpRateSlider;
+  MappableSlider arpRateSlider{processor,
+                               BreadbinProcessor::ControlParam::ArpRate};
   juce::ComboBox arpOctaveSelector;
   juce::Label arpRateLabel, arpPatternLabel, arpOctaveLabel;
 
   // ========== GLIDE/PORTAMENTO ==========
-  juce::Slider glideTimeSlider;
+  MappableSlider glideTimeSlider{processor,
+                                 BreadbinProcessor::ControlParam::GlobalGlide};
   juce::Label glideTimeLabel;
 
   // ========== PITCH BEND ==========
@@ -132,7 +195,8 @@ private:
 
   // ========== EXTERNAL AUDIO INPUT ==========
   juce::ToggleButton extInputEnableButton{"Ext In"};
-  juce::Slider extInputLevelSlider;
+  MappableSlider extInputLevelSlider{
+      processor, BreadbinProcessor::ControlParam::ExtInputLevel};
   juce::Label extInputLabel;
 
   // ========== CLOCK MODE (PAL/NTSC) ==========
@@ -146,11 +210,15 @@ private:
   // ========== LFO ==========
   juce::ToggleButton lfoEnableButton{"LFO"};
   juce::ComboBox lfoWaveformSelector;
-  juce::Slider lfoRateSlider;
+  MappableSlider lfoRateSlider{processor,
+                               BreadbinProcessor::ControlParam::LFORate};
   juce::Label lfoRateLabel;
-  juce::Slider lfoDepthFilterSlider;
-  juce::Slider lfoDepthPWSlider;
-  juce::Slider lfoDepthPitchSlider;
+  MappableSlider lfoDepthFilterSlider{
+      processor, BreadbinProcessor::ControlParam::LFODepthFilter};
+  MappableSlider lfoDepthPWSlider{processor,
+                                  BreadbinProcessor::ControlParam::LFODepthPW};
+  MappableSlider lfoDepthPitchSlider{
+      processor, BreadbinProcessor::ControlParam::LFODepthPitch};
   juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
 
   // Virtual keyboard

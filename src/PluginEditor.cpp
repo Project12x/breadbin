@@ -34,12 +34,12 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   // Apply Init preset to initialize all voices
   applyGlobalPreset(1);
   selectVoice(0);
-  setSize(760, 580);
-  setResizable(true, true);
   setResizeLimits(650, 500, 1200, 900);
+  startTimerHz(30);
 }
 
 BreadbinEditor::~BreadbinEditor() {
+  stopTimer();
   setLookAndFeel(nullptr); // Must reset before customLookAndFeel is destroyed
   keyboardState.removeListener(this);
 }
@@ -54,6 +54,12 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
                                    int midiNoteNumber, float velocity) {
   auto msg = juce::MidiMessage::noteOff(midiChannel, midiNoteNumber, velocity);
   processor.getMidiMessageCollector().addMessageToQueue(msg);
+}
+
+void BreadbinEditor::timerCallback() {
+  if (processor.isLearning()) {
+    repaint();
+  }
 }
 
 void BreadbinEditor::setupControls() {
@@ -249,6 +255,22 @@ void BreadbinEditor::setupControls() {
     processor.setPitchBendRange(pitchBendRangeSelector.getSelectedId());
   };
   addAndMakeVisible(pitchBendRangeSelector);
+
+  // Master Volume
+  masterVolLabel.setText("Master", juce::dontSendNotification);
+  masterVolLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  masterVolLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
+  addAndMakeVisible(masterVolLabel);
+
+  masterVolSlider.setRange(0.0, 1.0, 0.01);
+  masterVolSlider.setValue(processor.getMasterVolume());
+  masterVolSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  masterVolSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
+  masterVolSlider.setTooltip("Master output volume (affects both SID chips)");
+  masterVolSlider.onValueChange = [this]() {
+    processor.setMasterVolume(static_cast<float>(masterVolSlider.getValue()));
+  };
+  addAndMakeVisible(masterVolSlider);
 
   // External Audio Input
   extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
@@ -865,6 +887,11 @@ void BreadbinEditor::resized() {
   savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
   topRow.removeFromLeft(pad);
   loadPatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
+  topRow.removeFromLeft(pad * 2);
+
+  // Master Volume in header
+  masterVolLabel.setBounds(topRow.removeFromLeft(45));
+  masterVolSlider.setBounds(topRow.removeFromLeft(90));
 
   // Ext In on the right of header
   extInputLevelSlider.setBounds(topRow.removeFromRight(80));

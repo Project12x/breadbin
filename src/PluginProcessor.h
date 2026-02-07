@@ -29,6 +29,34 @@ public:
     float shValue = 0.0f; // Sample & Hold latched value
   };
 
+  enum class ControlParam {
+    None = 0,
+    MasterVolume,
+    Aging,
+    LeftCutoff,
+    LeftResonance,
+    RightCutoff,
+    RightResonance,
+    GlobalGlide,
+    PitchBendRange,
+    LFORate,
+    LFODepthFilter,
+    LFODepthPW,
+    LFODepthPitch,
+    VoiceWaveform,
+    VoicePW,
+    VoiceAttack,
+    VoiceDecay,
+    VoiceSustain,
+    VoiceRelease,
+    VoicePan,
+    VoiceRingMod,
+    VoiceSync,
+    VoiceFilterEnable,
+    ArpRate,
+    ExtInputLevel
+  };
+
   BreadbinProcessor();
   ~BreadbinProcessor() override;
 
@@ -143,6 +171,10 @@ public:
     extInputLevel = juce::jlimit(0.0f, 2.0f, level);
   }
 
+  // Master Volume (0.0 - 1.0)
+  float getMasterVolume() const { return masterVolume; }
+  void setMasterVolume(float vol);
+
   // Preset helpers for granular saving/loading
   juce::ValueTree getVoiceState(int voiceIndex) const;
   void setVoiceState(int voiceIndex, const juce::ValueTree &state);
@@ -158,6 +190,20 @@ public:
   // LFO
   LFOState &getLFO() { return lfo; }
   const LFOState &getLFO() const { return lfo; }
+
+  // MIDI Learn
+  void startLearning(ControlParam param) { learningParam = param; }
+  void stopLearning() { learningParam = ControlParam::None; }
+  bool isLearning() const { return learningParam != ControlParam::None; }
+  ControlParam getLearningParam() const { return learningParam; }
+
+  void setSelectedVoice(int v) { selectedVoice = juce::jlimit(0, 5, v); }
+  int getSelectedVoice() const { return selectedVoice; }
+
+  void setMIDIMapping(int cc, ControlParam param);
+  ControlParam getMIDIMapping(int cc) const;
+  void clearMIDIMapping(int cc);
+  void clearMIDIMappingForParam(ControlParam param);
 
 private:
   SIDEngine sidLeft;
@@ -193,6 +239,14 @@ private:
   juce::Array<int> leftNoteQueue;  // Notes held on left SID
   juce::Array<int> rightNoteQueue; // Notes held on right SID
   int lastVelocity = 100;
+
+  // MIDI Mapping
+  std::array<ControlParam, 128> midiMappings;
+  ControlParam learningParam = ControlParam::None;
+  int selectedVoice = 0;
+
+  void handleCC(int cc, int value);
+  void applyMappedParameter(ControlParam param, int value);
 
   // Voice state for MIDI
   struct VoiceState {
@@ -242,6 +296,11 @@ private:
 
   // LFO state
   LFOState lfo;
+
+  // Master Control & MIDI
+  float masterVolume = 0.8f;
+  bool sustainActive = false;
+  juce::Array<int> sustainedNotes;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

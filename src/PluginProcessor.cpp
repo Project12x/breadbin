@@ -7,6 +7,9 @@ BreadbinProcessor::BreadbinProcessor()
   // Initialize both SIDs with default models
   sidLeft.setChipModel(chipModelLeft);
   sidRight.setChipModel(chipModelRight);
+
+  // Initialize MIDI mappings
+  midiMappings.fill(ControlParam::None);
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
@@ -199,7 +202,7 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
 
     // If arp is enabled, handle release when no notes held
     if (arpEnabled) {
-      if (arpHeldNotes.empty() && lastArpNote >= 0) {
+      if (arpHeldNotes.empty() && lastArpNote >= 0 && !sustainActive) {
         // Release all voices
         for (int v = 0; v < 6; ++v) {
           releaseNote(v);
@@ -208,6 +211,10 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       }
       return;
     }
+
+    // If sustain is active, don't remove from queue yet
+    if (sustainActive)
+      return;
 
     // Remove from queue(s)
     leftNoteQueue.removeFirstMatchingValue(note);
@@ -234,9 +241,48 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   } else if (msg.isController()) {
     int cc = msg.getControllerNumber();
     int value = msg.getControllerValue();
+
+    handleCC(cc, value);
+
     if (cc == 1) { // Mod wheel
       modWheelValue = value / 127.0f;
       applyModWheelToFilter();
+    } else if (cc == 64) { // Sustain pedal
+      bool pedalDown = (value >= 64);
+      if (sustainActive != pedalDown) {
+        sustainActive = pedalDown;
+
+        // DEBUG: Log sustain activity
+        juce::Logger::writeToLog("Sustain: " + (sustainActive
+                                                    ? juce::String("ON")
+                                                    : juce::String("OFF")));
+
+        if (!sustainActive) {
+          // If arp is NOT enabled, we need to release notes that are only
+          // held by sustain
+          if (!arpEnabled) {
+            // Check left SID queue
+            for (int i = leftNoteQueue.size(); --i >= 0;) {
+              int n = leftNoteQueue[i];
+              if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), n) ==
+                  arpHeldNotes.end()) {
+                leftNoteQueue.remove(i);
+              }
+            }
+            updateSIDFromQueue(true);
+
+            // Check right SID queue
+            for (int i = rightNoteQueue.size(); --i >= 0;) {
+              int n = rightNoteQueue[i];
+              if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), n) ==
+                  arpHeldNotes.end()) {
+                rightNoteQueue.remove(i);
+              }
+            }
+            updateSIDFromQueue(false);
+          }
+        }
+      }
     }
   }
 }
@@ -359,6 +405,13 @@ void BreadbinProcessor::applyModWheelToFilter() {
   sidRight.setFilterCutoff(rightCutoff);
 }
 
+void BreadbinProcessor::setMasterVolume(float vol) {
+  masterVolume = juce::jlimit(0.0f, 1.0f, vol);
+  int sidVol = static_cast<int>(masterVolume * 15.0f);
+  sidLeft.setVolume(sidVol);
+  sidRight.setVolume(sidVol);
+}
+
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
   chipModelLeft = model;
   sidLeft.setChipModel(model);
@@ -432,7 +485,11 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   state.setProperty("chipModelRight", static_cast<int>(chipModelRight),
                     nullptr);
   state.setProperty("agingFactor", agingFactor, nullptr);
+  state.setProperty("leftDetune", leftDetuneCents, nullptr);
+  state.setProperty("rightDetune", rightDetuneCents, nullptr);
+  state.setProperty("glideTime", glideTimeMs, nullptr);
   state.setProperty("pitchBendRange", pitchBendRange, nullptr);
+  state.setProperty("masterVolume", masterVolume, nullptr);
   state.setProperty("extInputEnabled", extInputEnabled, nullptr);
   state.setProperty("extInputLevel", extInputLevel, nullptr);
   state.setProperty("clockMode", static_cast<int>(clockMode), nullptr);
@@ -462,6 +519,19 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
     state.addChild(voiceState, -1, nullptr);
   }
 
+  // Save MIDI mappings
+  juce::ValueTree mappings("MidiMappings");
+  for (int i = 0; i < 128; ++i) {
+    if (midiMappings[i] != ControlParam::None) {
+      juce::ValueTree m("Map");
+      m.setProperty("cc", i, nullptr);
+      m.setProperty("param", static_cast<int>(midiMappings[i]), nullptr);
+      mappings.addChild(m, -1, nullptr);
+    }
+  }
+  state.addChild(mappings, -1, nullptr);
+  state.setProperty("selectedVoice", selectedVoice, nullptr);
+
   juce::MemoryOutputStream stream(destData, false);
   state.writeToStream(stream);
 }
@@ -477,7 +547,11 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     setRightChipModel(static_cast<SIDEngine::ChipModel>(
         static_cast<int>(state.getProperty("chipModelRight", 0))));
     setAgingFactor(state.getProperty("agingFactor", 0.0f));
-    pitchBendRange = state.getProperty("pitchBendRange", 2);
+    setLeftDetune(state.getProperty("leftDetune", 0.0f));
+    setRightDetune(state.getProperty("rightDetune", 0.0f));
+    setGlideTimeMs(state.getProperty("glideTime", 0.0f));
+    setPitchBendRange(state.getProperty("pitchBendRange", 2));
+    setMasterVolume(state.getProperty("masterVolume", 0.8f));
     extInputEnabled = state.getProperty("extInputEnabled", false);
     extInputLevel = state.getProperty("extInputLevel", 1.0f);
     setClockMode(static_cast<SIDEngine::ClockMode>(
@@ -491,6 +565,21 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     lfo.depthFilter = state.getProperty("lfoDepthFilter", 0.0f);
     lfo.depthPulseWidth = state.getProperty("lfoDepthPW", 0.0f);
     lfo.depthPitch = state.getProperty("lfoDepthPitch", 0.0f);
+
+    // Restore MIDI mappings
+    midiMappings.fill(ControlParam::None);
+    auto mappings = state.getChildWithName("MidiMappings");
+    if (mappings.isValid()) {
+      for (int i = 0; i < mappings.getNumChildren(); ++i) {
+        auto m = mappings.getChild(i);
+        int cc = m.getProperty("cc", -1);
+        int param = m.getProperty("param", 0);
+        if (cc >= 0 && cc < 128) {
+          midiMappings[cc] = static_cast<ControlParam>(param);
+        }
+      }
+    }
+    selectedVoice = state.getProperty("selectedVoice", 0);
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
@@ -735,4 +824,149 @@ void BreadbinProcessor::applyLFOModulation() {
 // Plugin instantiation
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
   return new BreadbinProcessor();
+}
+
+void BreadbinProcessor::handleCC(int cc, int value) {
+  if (cc < 0 || cc >= 128)
+    return;
+
+  // Learn mode logic
+  if (learningParam != ControlParam::None) {
+    midiMappings[cc] = learningParam;
+    learningParam = ControlParam::None; // Stop learning once mapped
+
+    // DEBUG: Log new mapping
+    juce::Logger::writeToLog("MIDI Mapped: CC " + juce::String(cc) +
+                             " to Param " +
+                             juce::String(static_cast<int>(midiMappings[cc])));
+    return;
+  }
+
+  // Normal mapping logic
+  ControlParam mapped = midiMappings[cc];
+  if (mapped != ControlParam::None) {
+    applyMappedParameter(mapped, value);
+  }
+}
+
+void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
+  float normalized = value / 127.0f;
+
+  switch (param) {
+  case ControlParam::MasterVolume:
+    setMasterVolume(normalized);
+    break;
+  case ControlParam::Aging:
+    setAgingFactor(normalized);
+    break;
+  case ControlParam::LeftCutoff:
+    sidLeft.setFilterCutoff(static_cast<int>(normalized * 2047.0f));
+    break;
+  case ControlParam::LeftResonance:
+    sidLeft.setFilterResonance(static_cast<int>(normalized * 15.0f));
+    break;
+  case ControlParam::RightCutoff:
+    sidRight.setFilterCutoff(static_cast<int>(normalized * 2047.0f));
+    break;
+  case ControlParam::RightResonance:
+    sidRight.setFilterResonance(static_cast<int>(normalized * 15.0f));
+    break;
+  case ControlParam::GlobalGlide:
+    setGlideTimeMs(normalized * 2000.0f);
+    break;
+  case ControlParam::PitchBendRange:
+    setPitchBendRange(2 + static_cast<int>(normalized * 10.0f));
+    break;
+  case ControlParam::LFORate:
+    lfo.rate = 0.1f + (normalized * 19.9f);
+    break;
+  case ControlParam::LFODepthFilter:
+    lfo.depthFilter = normalized;
+    break;
+  case ControlParam::LFODepthPW:
+    lfo.depthPulseWidth = normalized;
+    break;
+  case ControlParam::LFODepthPitch:
+    lfo.depthPitch = normalized;
+    break;
+
+  // Per-voice parameters (mapped to selectedVoice)
+  case ControlParam::VoiceWaveform: {
+    int wfIdx = static_cast<int>(normalized * 3.0f);
+    SIDEngine::Waveform wfs[] = {
+        SIDEngine::Waveform::Triangle, SIDEngine::Waveform::Sawtooth,
+        SIDEngine::Waveform::Pulse, SIDEngine::Waveform::Noise};
+    voiceSettings[selectedVoice].waveform = wfs[wfIdx];
+    applyVoiceSettings(selectedVoice);
+  } break;
+  case ControlParam::VoicePW:
+    voiceSettings[selectedVoice].pulseWidth =
+        static_cast<int>(normalized * 4095.0f);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceAttack:
+    voiceSettings[selectedVoice].attack = static_cast<int>(normalized * 15.0f);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceDecay:
+    voiceSettings[selectedVoice].decay = static_cast<int>(normalized * 15.0f);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceSustain:
+    voiceSettings[selectedVoice].sustain = static_cast<int>(normalized * 15.0f);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceRelease:
+    voiceSettings[selectedVoice].release = static_cast<int>(normalized * 15.0f);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoicePan:
+    voiceSettings[selectedVoice].pan = (normalized * 2.0f) - 1.0f;
+    break;
+  case ControlParam::VoiceRingMod:
+    voiceSettings[selectedVoice].ringMod = (value >= 64);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceSync:
+    voiceSettings[selectedVoice].sync = (value >= 64);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::VoiceFilterEnable:
+    voiceSettings[selectedVoice].filterEnabled = (value >= 64);
+    applyVoiceSettings(selectedVoice);
+    break;
+  case ControlParam::ArpRate:
+    setArpRate(1.0f + (normalized * 99.0f));
+    break;
+  case ControlParam::ExtInputLevel:
+    setExtInputLevel(normalized * 2.0f);
+    break;
+  default:
+    break;
+  }
+}
+
+void BreadbinProcessor::setMIDIMapping(int cc, ControlParam param) {
+  if (cc >= 0 && cc < 128)
+    midiMappings[cc] = param;
+}
+
+BreadbinProcessor::ControlParam
+BreadbinProcessor::getMIDIMapping(int cc) const {
+  if (cc >= 0 && cc < 128)
+    return midiMappings[cc];
+  return ControlParam::None;
+}
+
+void BreadbinProcessor::clearMIDIMapping(int cc) {
+  if (cc >= 0 && cc < 128)
+    midiMappings[cc] = ControlParam::None;
+}
+
+void BreadbinProcessor::clearMIDIMappingForParam(ControlParam param) {
+  for (int i = 0; i < 128; ++i) {
+    if (midiMappings[i] == param) {
+      midiMappings[i] = ControlParam::None;
+    }
+  }
 }
