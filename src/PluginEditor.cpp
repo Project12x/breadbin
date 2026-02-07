@@ -12,12 +12,12 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   auto retroTypeface = juce::Typeface::createSystemTypefaceFor(
       BinaryData::PressStart2PRegular_ttf,
       BinaryData::PressStart2PRegular_ttfSize);
-  retroFont = juce::Font(juce::FontOptions(retroTypeface).withHeight(10.0f));
+  retroFont = juce::Font(juce::FontOptions(retroTypeface).withHeight(12.0f));
 
   // Load professional font (Roboto Bold) from binary assets
   auto proTypeface = juce::Typeface::createSystemTypefaceFor(
       BinaryData::RobotoBold_ttf, BinaryData::RobotoBold_ttfSize);
-  proFont = juce::Font(juce::FontOptions(proTypeface).withHeight(12.0f));
+  proFont = juce::Font(juce::FontOptions(proTypeface).withHeight(14.0f));
 
   // Setup custom look and feel with Roboto Bold font for ComboBoxes
   customLookAndFeel.setProFont(proFont);
@@ -34,9 +34,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   // Apply Init preset to initialize all voices
   applyGlobalPreset(1);
   selectVoice(0);
-  setSize(700, 500);
+  setSize(760, 580);
   setResizable(true, true);
-  setResizeLimits(600, 400, 1200, 800);
+  setResizeLimits(650, 500, 1200, 900);
 }
 
 BreadbinEditor::~BreadbinEditor() {
@@ -113,14 +113,30 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(presetSelector);
 
-  // Save/Load preset buttons (save full state)
-  savePresetButton.setTooltip("Save all settings to a .breadbin file");
-  savePresetButton.onClick = [this]() { savePresetToFile(); };
-  addAndMakeVisible(savePresetButton);
+  // Save/Load Patch buttons (full state) - Now Icon-based
+  auto diskPath = makeDiskPath();
+  auto folderPath = makeFolderPath();
 
-  loadPresetButton.setTooltip("Load settings from a .breadbin file");
-  loadPresetButton.onClick = [this]() { loadPresetFromFile(); };
-  addAndMakeVisible(loadPresetButton);
+  savePatchButton.setShape(diskPath, true, true, false);
+  savePatchButton.setTooltip("Save all settings to a .breadbin patch file");
+  savePatchButton.onClick = [this]() { savePresetToFile(); };
+  addAndMakeVisible(savePatchButton);
+
+  loadPatchButton.setShape(folderPath, true, true, false);
+  loadPatchButton.setTooltip("Load settings from a .breadbin patch file");
+  loadPatchButton.onClick = [this]() { loadPresetFromFile(); };
+  addAndMakeVisible(loadPatchButton);
+
+  // Save/Load Voice buttons (selected oscillator)
+  saveVoiceButton.setShape(diskPath, true, true, false);
+  saveVoiceButton.setTooltip("Save this voice's settings to a .voice file");
+  saveVoiceButton.onClick = [this]() { saveVoicePresetToFile(); };
+  addAndMakeVisible(saveVoiceButton);
+
+  loadVoiceButton.setShape(folderPath, true, true, false);
+  loadVoiceButton.setTooltip("Load settings for this voice from a .voice file");
+  loadVoiceButton.onClick = [this]() { loadVoicePresetFromFile(); };
+  addAndMakeVisible(loadVoiceButton);
 
   // Chip Age (Time Machine)
   agingLabel.setText("Chip Age:", juce::dontSendNotification);
@@ -311,46 +327,59 @@ void BreadbinEditor::setupControls() {
   lfoRateSlider.setRange(0.1, 20.0, 0.1);
   lfoRateSlider.setValue(processor.getLFO().rate);
   lfoRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  lfoRateSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  lfoRateSlider.setTooltip("LFO Rate: Adjust modulation speed (0.1Hz - 20Hz)");
-  lfoRateSlider.onValueChange = [this]() {
-    processor.getLFO().rate = static_cast<float>(lfoRateSlider.getValue());
-  };
+  lfoRateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 12);
+  lfoRateSlider.setColour(juce::Slider::textBoxTextColourId,
+                          juce::Colours::cyan);
+  lfoRateSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                          juce::Colours::transparentBlack);
+  lfoRateSlider.setTooltip(
+      "LFO Rate: Adjust modulation speed (0.1Hz - 20Hz). Click to type Hz.");
   addAndMakeVisible(lfoRateSlider);
 
-  lfoTargetLabel.setText("Mod Target", juce::dontSendNotification);
-  lfoTargetLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  lfoTargetLabel.setFont(retroFont.withHeight(7.0f));
-  addAndMakeVisible(lfoTargetLabel);
+  // Depth sliders - larger rotary style
+  auto setupDepthSlider = [this](juce::Slider &slider, juce::Label &label,
+                                 const juce::String &name,
+                                 const juce::String &tooltip, float initVal) {
+    label.setText(name, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    label.setFont(retroFont.withHeight(10.0f));
+    label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
 
-  lfoTargetSelector.addItem("Filter", 1);
-  lfoTargetSelector.addItem("PWM", 2);
-  lfoTargetSelector.addItem("Pitch", 3);
-  lfoTargetSelector.setSelectedId(static_cast<int>(processor.getLFO().target) +
-                                  1);
-  lfoTargetSelector.onChange = [this]() {
-    processor.getLFO().target = static_cast<BreadbinProcessor::LFOTarget>(
-        lfoTargetSelector.getSelectedId() - 1);
+    slider.setRange(0.0, 1.0, 0.01);
+    slider.setValue(initVal);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 12);
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
+    slider.setColour(juce::Slider::textBoxOutlineColourId,
+                     juce::Colours::transparentBlack);
+    slider.setTooltip(tooltip);
+    addAndMakeVisible(slider);
   };
-  lfoTargetSelector.setTooltip(
-      "Mod Target: Select which parameter the LFO modulates");
-  addAndMakeVisible(lfoTargetSelector);
 
-  lfoDepthLabel.setText("Depth", juce::dontSendNotification);
-  lfoDepthLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  lfoDepthLabel.setFont(retroFont.withHeight(7.0f));
-  lfoDepthLabel.setJustificationType(juce::Justification::centred);
-  addAndMakeVisible(lfoDepthLabel);
-
-  lfoDepthSlider.setRange(0.0, 1.0, 0.01);
-  lfoDepthSlider.setValue(processor.getLFO().depth);
-  lfoDepthSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-  lfoDepthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  lfoDepthSlider.setTooltip("LFO Depth: Adjust modulation intensity");
-  lfoDepthSlider.onValueChange = [this]() {
-    processor.getLFO().depth = static_cast<float>(lfoDepthSlider.getValue());
+  setupDepthSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt",
+                   "Filter Mod: LFO influence on SID filter cutoff",
+                   processor.getLFO().depthFilter);
+  lfoDepthFilterSlider.onValueChange = [this]() {
+    processor.getLFO().depthFilter =
+        static_cast<float>(lfoDepthFilterSlider.getValue());
   };
-  addAndMakeVisible(lfoDepthSlider);
+
+  setupDepthSlider(lfoDepthPWSlider, lfoDepthPWLabel, "PW",
+                   "PWM: LFO influence on pulse width",
+                   processor.getLFO().depthPulseWidth);
+  lfoDepthPWSlider.onValueChange = [this]() {
+    processor.getLFO().depthPulseWidth =
+        static_cast<float>(lfoDepthPWSlider.getValue());
+  };
+
+  setupDepthSlider(lfoDepthPitchSlider, lfoDepthPitchLabel, "Vib",
+                   "Vibrato: LFO influence on pitch",
+                   processor.getLFO().depthPitch);
+  lfoDepthPitchSlider.onValueChange = [this]() {
+    processor.getLFO().depthPitch =
+        static_cast<float>(lfoDepthPitchSlider.getValue());
+  };
 
   // Keyboard
   keyboard.setKeyWidth(16.0f);
@@ -824,20 +853,24 @@ void BreadbinEditor::resized() {
   const int rowH = 28;
   const int pad = 4;
 
-  // ===== TOP ROW: Mode, Global Preset, Voice Preset, Save/Load =====
+  // ===== TOP ROW: Mode, Patch (Global), Ext In =====
   auto topRow = bounds.removeFromTop(rowH);
   modeLabel.setBounds(topRow.removeFromLeft(35));
   dualModeSelector.setBounds(topRow.removeFromLeft(100));
   topRow.removeFromLeft(pad * 2);
+
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
   globalPresetSelector.setBounds(topRow.removeFromLeft(100));
-  topRow.removeFromLeft(pad * 2);
-  presetLabel.setBounds(topRow.removeFromLeft(40));
-  presetSelector.setBounds(topRow.removeFromLeft(145));
   topRow.removeFromLeft(pad);
-  savePresetButton.setBounds(topRow.removeFromLeft(55));
+  savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
   topRow.removeFromLeft(pad);
-  loadPresetButton.setBounds(topRow.removeFromLeft(55));
+  loadPatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
+
+  // Ext In on the right of header
+  extInputLevelSlider.setBounds(topRow.removeFromRight(80));
+  extInputLabel.setBounds(topRow.removeFromRight(35));
+  topRow.removeFromRight(pad);
+  extInputEnableButton.setBounds(topRow.removeFromRight(55));
 
   bounds.removeFromTop(pad * 2);
 
@@ -919,10 +952,23 @@ void BreadbinEditor::resized() {
   auto editorArea = bounds.removeFromTop(120);
   voiceEditorLabel.setBounds(editorArea.removeFromTop(18));
 
-  // Row 1: Waveform, Pulse Width, ADSR, GLOBAL LFO
+  // Row 1: Voice Select, Save/Load Voice, Waveform, Pulse Width, ADSR, GLOBAL
+  // LFO
   auto row1 = editorArea.removeFromTop(65);
+
+  // Voice Presets selector and Save/Load moved here
+  presetLabel.setBounds(row1.removeFromLeft(40));
+  presetSelector.setBounds(
+      row1.removeFromLeft(100).withHeight(20).translated(0, 22));
+  row1.removeFromLeft(pad);
+  saveVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 20));
+  row1.removeFromLeft(pad);
+  loadVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 20));
+  row1.removeFromLeft(pad * 2);
+
   waveformLabel.setBounds(row1.removeFromLeft(40));
-  waveformSelector.setBounds(row1.removeFromLeft(90));
+  waveformSelector.setBounds(
+      row1.removeFromLeft(90).withHeight(20).translated(0, 22));
   row1.removeFromLeft(pad);
   pwLabel.setBounds(row1.removeFromLeft(30));
   pulseWidthSlider.setBounds(row1.removeFromLeft(90));
@@ -946,26 +992,7 @@ void BreadbinEditor::resized() {
 
   row1.removeFromLeft(pad * 2);
 
-  // Global LFO section at the end of Row 1
-  auto lfoArea = row1.removeFromLeft(260);
-  const int rowCenterY = row1.getY() + (65 - 20) / 2;
-  lfoEnableButton.setBounds(lfoArea.getX(), rowCenterY, 40, 20);
-  lfoArea.removeFromLeft(42);
-  lfoWaveformSelector.setBounds(lfoArea.getX(), rowCenterY, 55, 20);
-  lfoArea.removeFromLeft(57);
-
-  auto lfoRateArea = lfoArea.removeFromLeft(50);
-  lfoRateSlider.setBounds(lfoRateArea.removeFromTop(40));
-  lfoRateLabel.setBounds(lfoRateArea.getX(), lfoRateArea.getY() - 5, 30, 15);
-
-  lfoArea.removeFromLeft(pad);
-
-  lfoTargetSelector.setBounds(lfoArea.getX(), rowCenterY, 65, 20);
-  lfoTargetLabel.setBounds(lfoArea.getX(), rowCenterY - 14, 65, 12);
-  lfoArea.removeFromLeft(67 + pad);
-
-  lfoDepthLabel.setBounds(lfoArea.getX(), row1.getY() + 4, 30, 12);
-  lfoDepthSlider.setBounds(lfoArea.getX(), row1.getY() + 16, 25, 25);
+  // LFO moved to global stack below
 
   // Row 2: Pan, Glide, Ring Mod, Sync
   editorArea.removeFromTop(pad);
@@ -985,45 +1012,95 @@ void BreadbinEditor::resized() {
   pitchBendRangeLabel.setBounds(row2.removeFromLeft(55));
   pitchBendRangeSelector.setBounds(row2.removeFromLeft(65));
   row2.removeFromLeft(pad * 2);
-  extInputEnableButton.setBounds(row2.removeFromLeft(55));
-  row2.removeFromLeft(pad);
-  extInputLabel.setBounds(row2.removeFromLeft(35));
-  extInputLevelSlider.setBounds(row2.removeFromLeft(100));
+  // Ext input removed from here (now in header)
 
   bounds.removeFromTop(pad);
 
   // ===== KEYBOARD =====
   keyboard.setBounds(bounds.removeFromBottom(60));
-
-  // Add some space above keyboard for the logo (lower-left)
-  bounds.removeFromBottom(pad * 2);
-
-  // ===== ARPEGGIATOR ROW (right-justified) =====
-  auto arpRow = bounds.removeFromBottom(28);
-  arpEnableButton.setBounds(arpRow.removeFromRight(50));
-  arpRow.removeFromRight(pad);
-  arpOctaveSelector.setBounds(arpRow.removeFromRight(50));
-  arpOctaveLabel.setText("Oct", juce::dontSendNotification);
-  arpOctaveLabel.setBounds(arpRow.removeFromRight(30));
-  arpRow.removeFromRight(pad);
-  arpRateSlider.setBounds(arpRow.removeFromRight(100));
-  arpRateLabel.setBounds(arpRow.removeFromRight(35));
-  arpRow.removeFromRight(pad);
-  arpPatternSelector.setBounds(arpRow.removeFromRight(90));
-  arpPatternLabel.setText("Arp", juce::dontSendNotification);
-  arpPatternLabel.setBounds(arpRow.removeFromRight(30));
-
   bounds.removeFromBottom(pad);
 
-  // ===== CHIP AGE ROW (right-justified) =====
-  auto agingRow = bounds.removeFromBottom(26);
-  agingEndLabel.setBounds(agingRow.removeFromRight(50));
-  agingSlider.setBounds(agingRow.removeFromRight(120));
-  agingStartLabel.setBounds(agingRow.removeFromRight(40));
-  agingLabel.setBounds(agingRow.removeFromRight(60));
-  agingRow.removeFromRight(pad * 3);
-  clockModeSelector.setBounds(agingRow.removeFromRight(65));
-  clockModeLabel.setBounds(agingRow.removeFromRight(40));
+  // ===== BOTTOM GLOBAL CONTROLS (Right-justified Stack) =====
+  const int globalRowW = 500;
+  const int globalRowH = 30; // Increased height
+
+  // 1. Bottom Row: Chip Age & Clock (Right-justified)
+  auto bottomRow = bounds.removeFromBottom(globalRowH);
+  auto bottomStack = bottomRow.removeFromRight(globalRowW);
+
+  clockModeSelector.setBounds(bottomStack.removeFromRight(65));
+  clockModeLabel.setBounds(bottomStack.removeFromRight(40));
+  bottomStack.removeFromRight(pad * 2);
+
+  agingEndLabel.setBounds(bottomStack.removeFromRight(50));
+  agingSlider.setBounds(bottomStack.removeFromRight(120));
+  agingStartLabel.setBounds(bottomStack.removeFromRight(40));
+  agingLabel.setBounds(bottomStack.removeFromRight(60));
+
+  bounds.removeFromBottom(8); // Increased pad
+
+  // 2. Middle Row: Arpeggiator (Right-justified, Toggle on Left)
+  auto middleRow = bounds.removeFromBottom(globalRowH);
+  auto arpStack = middleRow.removeFromRight(408); // Exact width for content
+
+  arpEnableButton.setBounds(
+      arpStack.removeFromLeft(50).withSize(50, 20).translated(0, 5));
+  arpStack.removeFromLeft(15); // Clear gap
+
+  arpPatternLabel.setText("Arp", juce::dontSendNotification);
+  arpPatternLabel.setBounds(
+      arpStack.removeFromLeft(30).withSize(30, 20).translated(0, 5));
+  arpPatternSelector.setBounds(
+      arpStack.removeFromLeft(90).withSize(90, 20).translated(0, 5));
+  arpStack.removeFromLeft(pad);
+
+  arpRateLabel.setBounds(
+      arpStack.removeFromLeft(35).withSize(35, 20).translated(0, 5));
+  arpRateSlider.setBounds(
+      arpStack.removeFromLeft(100).withSize(100, 20).translated(0, 5));
+  arpStack.removeFromLeft(pad);
+
+  arpOctaveLabel.setText("Oct", juce::dontSendNotification);
+  arpOctaveLabel.setBounds(
+      arpStack.removeFromLeft(30).withSize(30, 20).translated(0, 5));
+  arpOctaveSelector.setBounds(
+      arpStack.removeFromLeft(50).withSize(50, 20).translated(0, 5));
+
+  bounds.removeFromBottom(10); // Separation from LFO
+
+  // 3. Top Row: Global LFO (Right-justified)
+  auto lfoRow = bounds.removeFromBottom(60);
+  auto lfoStack = lfoRow.removeFromRight(349); // Exact width for content
+
+  lfoEnableButton.setBounds(
+      lfoStack.removeFromLeft(40).withSize(40, 20).translated(0, 8));
+  lfoStack.removeFromLeft(10);
+  lfoWaveformSelector.setBounds(
+      lfoStack.removeFromLeft(80).withSize(80, 20).translated(0, 8));
+  lfoStack.removeFromLeft(pad * 2);
+
+  // LFO Rate
+  auto rateArea = lfoStack.removeFromLeft(60);
+  lfoRateSlider.setBounds(rateArea.withSize(60, 48).translated(0, 2));
+  lfoRateLabel.setBounds(rateArea.getX(), lfoRow.getY() + 2, 30, 12);
+
+  lfoStack.removeFromLeft(pad * 2);
+
+  // Three Depths
+  const int dW = 45;
+  auto fArea = lfoStack.removeFromLeft(dW);
+  lfoDepthFilterLabel.setBounds(fArea.getX(), lfoRow.getY() + 2, dW, 12);
+  lfoDepthFilterSlider.setBounds(fArea.getX(), lfoRow.getY() + 14, dW, 44);
+
+  lfoStack.removeFromLeft(pad);
+  auto pArea = lfoStack.removeFromLeft(dW);
+  lfoDepthPWLabel.setBounds(pArea.getX(), lfoRow.getY() + 2, dW, 12);
+  lfoDepthPWSlider.setBounds(pArea.getX(), lfoRow.getY() + 14, dW, 44);
+
+  lfoStack.removeFromLeft(pad);
+  auto vArea = lfoStack.removeFromLeft(dW);
+  lfoDepthPitchLabel.setBounds(vArea.getX(), lfoRow.getY() + 2, dW, 12);
+  lfoDepthPitchSlider.setBounds(vArea.getX(), lfoRow.getY() + 14, dW, 44);
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
@@ -1288,25 +1365,109 @@ void BreadbinEditor::loadPresetFromFile() {
 
           // Refresh UI to show loaded state
           loadVoiceToUI(selectedVoice);
+          updateVoiceButtonStates();
 
           // Update global controls
           dualModeSelector.setSelectedId(
               static_cast<int>(processor.getDualMode()) + 1,
               juce::dontSendNotification);
-          leftChipSelector.setSelectedId(
-              static_cast<int>(processor.getLeftChipModel()) + 1,
-              juce::dontSendNotification);
-          rightChipSelector.setSelectedId(
-              static_cast<int>(processor.getRightChipModel()) + 1,
-              juce::dontSendNotification);
           agingSlider.setValue(processor.getAgingFactor(),
                                juce::dontSendNotification);
+          pitchBendRangeSelector.setSelectedId(processor.getPitchBendRange(),
+                                               juce::dontSendNotification);
+          clockModeSelector.setSelectedId(
+              static_cast<int>(processor.getClockMode()) + 1,
+              juce::dontSendNotification);
+          extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
+                                              juce::dontSendNotification);
+          extInputLevelSlider.setValue(processor.getExtInputLevel(),
+                                       juce::dontSendNotification);
+
+          lfoEnableButton.setToggleState(processor.getLFO().enabled,
+                                         juce::dontSendNotification);
+          lfoWaveformSelector.setSelectedId(
+              static_cast<int>(processor.getLFO().waveform) + 1,
+              juce::dontSendNotification);
+          lfoRateSlider.setValue(processor.getLFO().rate,
+                                 juce::dontSendNotification);
+          lfoDepthFilterSlider.setValue(processor.getLFO().depthFilter,
+                                        juce::dontSendNotification);
+          lfoDepthPWSlider.setValue(processor.getLFO().depthPulseWidth,
+                                    juce::dontSendNotification);
+          lfoDepthPitchSlider.setValue(processor.getLFO().depthPitch,
+                                       juce::dontSendNotification);
         }
       }
     }
   });
 
-  // Keep chooser alive
   static std::unique_ptr<juce::FileChooser> savedChooser;
   savedChooser = std::move(chooser);
+}
+
+void BreadbinEditor::saveVoicePresetToFile() {
+  saveUIToVoice(selectedVoice);
+  auto state = processor.getVoiceState(selectedVoice);
+
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Save Voice Settings",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.voice", true);
+
+  auto chooserFlags = juce::FileBrowserComponent::saveMode |
+                      juce::FileBrowserComponent::canSelectFiles |
+                      juce::FileBrowserComponent::warnAboutOverwriting;
+
+  chooser->launchAsync(chooserFlags, [state](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file != juce::File{}) {
+      if (!file.hasFileExtension(".voice"))
+        file = file.withFileExtension(".voice");
+
+      auto xml = state.createXml();
+      if (xml != nullptr)
+        xml->writeTo(file);
+    }
+  });
+
+  static std::unique_ptr<juce::FileChooser> savedVoiceChooser;
+  savedVoiceChooser = std::move(chooser);
+}
+
+void BreadbinEditor::loadVoicePresetFromFile() {
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Load Voice Settings",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.voice", true);
+
+  auto chooserFlags = juce::FileBrowserComponent::openMode |
+                      juce::FileBrowserComponent::canSelectFiles;
+
+  chooser->launchAsync(chooserFlags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file.existsAsFile()) {
+      auto xml = juce::XmlDocument::parse(file);
+      if (xml != nullptr) {
+        auto state = juce::ValueTree::fromXml(*xml);
+        if (state.isValid()) {
+          processor.setVoiceState(selectedVoice, state);
+          loadVoiceToUI(selectedVoice);
+        }
+      }
+    }
+  });
+
+  static std::unique_ptr<juce::FileChooser> savedVoiceChooser;
+  savedVoiceChooser = std::move(chooser);
+}
+
+juce::Path BreadbinEditor::makeDiskPath() {
+  return juce::Drawable::parseSVGPath(
+      "M3 3h14l4 4v14H3V3zm16 16V7.83L16.17 5H5v14h14zM7 7h7v4H7V7zm0 "
+      "10h10v-4H7v4z");
+}
+
+juce::Path BreadbinEditor::makeFolderPath() {
+  return juce::Drawable::parseSVGPath(
+      "M3 3h7l2 2h9v16H3V3zm16 16V7h-8l-2-2H5v14h14z");
 }

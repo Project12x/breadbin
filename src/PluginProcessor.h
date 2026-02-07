@@ -16,14 +16,13 @@ public:
   // Arpeggiator patterns
   enum class ArpPattern { Up, Down, UpDown, Random };
   enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold };
-  enum class LFOTarget { Filter, PulseWidth, Pitch };
-
   struct LFOState {
     bool enabled = false;
     LFOWaveform waveform = LFOWaveform::Triangle;
-    LFOTarget target = LFOTarget::Filter;
-    float rate = 2.0f;  // Hz (0.1 - 20.0)
-    float depth = 0.0f; // 0.0 - 1.0
+    float rate = 2.0f;            // Hz (0.1 - 20.0)
+    float depthFilter = 0.0f;     // 0.0 - 1.0
+    float depthPulseWidth = 0.0f; // 0.0 - 1.0
+    float depthPitch = 0.0f;      // 0.0 - 1.0
     // Runtime (not persisted)
     double phase = 0.0;
     float currentValue = 0.0f;
@@ -143,6 +142,10 @@ public:
   void setExtInputLevel(float level) {
     extInputLevel = juce::jlimit(0.0f, 2.0f, level);
   }
+
+  // Preset helpers for granular saving/loading
+  juce::ValueTree getVoiceState(int voiceIndex) const;
+  void setVoiceState(int voiceIndex, const juce::ValueTree &state);
 
   // Clock mode (PAL/NTSC)
   SIDEngine::ClockMode getClockMode() const { return clockMode; }

@@ -10,10 +10,10 @@ public:
   void setProFont(const juce::Font &font) { proFont = font; }
 
   juce::Font getComboBoxFont(juce::ComboBox &) override {
-    return proFont.withHeight(11.0f);
+    return proFont.withHeight(14.0f);
   }
 
-  juce::Font getPopupMenuFont() override { return proFont.withHeight(11.0f); }
+  juce::Font getPopupMenuFont() override { return proFont.withHeight(14.0f); }
 
 private:
   juce::Font proFont;
@@ -49,8 +49,18 @@ private:
   juce::Label globalPresetLabel;
   juce::ComboBox presetSelector; // Voice presets
   juce::Label presetLabel;
-  juce::TextButton savePresetButton{"Save All"};
-  juce::TextButton loadPresetButton{"Load All"};
+  juce::ShapeButton savePatchButton{"Save Patch", juce::Colours::cyan,
+                                    juce::Colours::cyan.withAlpha(0.7f),
+                                    juce::Colours::white};
+  juce::ShapeButton loadPatchButton{"Load Patch", juce::Colours::cyan,
+                                    juce::Colours::cyan.withAlpha(0.7f),
+                                    juce::Colours::white};
+  juce::ShapeButton saveVoiceButton{"Save", juce::Colours::cyan,
+                                    juce::Colours::cyan.withAlpha(0.7f),
+                                    juce::Colours::white};
+  juce::ShapeButton loadVoiceButton{"Load", juce::Colours::cyan,
+                                    juce::Colours::cyan.withAlpha(0.7f),
+                                    juce::Colours::white};
 
   // Time Machine (aging)
   juce::Slider agingSlider;
@@ -129,14 +139,19 @@ private:
   juce::ComboBox clockModeSelector;
   juce::Label clockModeLabel;
 
+  // Editor constants
+  static constexpr int width = 1000;
+  static constexpr int height = 550;
+
   // ========== LFO ==========
   juce::ToggleButton lfoEnableButton{"LFO"};
   juce::ComboBox lfoWaveformSelector;
   juce::Slider lfoRateSlider;
   juce::Label lfoRateLabel;
-  juce::ComboBox lfoTargetSelector;
-  juce::Slider lfoDepthSlider;
-  juce::Label lfoTargetLabel, lfoDepthLabel;
+  juce::Slider lfoDepthFilterSlider;
+  juce::Slider lfoDepthPWSlider;
+  juce::Slider lfoDepthPitchSlider;
+  juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
@@ -152,12 +167,17 @@ private:
   void selectVoice(int voice);
   void loadVoiceToUI(int voice);
   void saveUIToVoice(int voice);
+  juce::Path makeDiskPath();
+  juce::Path makeFolderPath();
+
   void updateVoiceButtonStates();
   void updateFiltersFromUI();
   void applyPreset(int presetId);
   void applyGlobalPreset(int presetId);
-  void savePresetToFile();
-  void loadPresetFromFile();
+  void savePresetToFile();        // Overall Patch
+  void loadPresetFromFile();      // Overall Patch
+  void saveVoicePresetToFile();   // Selected Voice
+  void loadVoicePresetFromFile(); // Selected Voice
 
   // MidiKeyboardState::Listener
   void handleNoteOn(juce::MidiKeyboardState *, int midiChannel,

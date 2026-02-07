@@ -380,6 +380,47 @@ void BreadbinProcessor::setAgingFactor(float aging) {
   sidRight.setAgingFactor(aging);
 }
 
+juce::ValueTree BreadbinProcessor::getVoiceState(int v) const {
+  juce::ValueTree voiceState("Voice" + juce::String(v));
+  const auto &vs = voiceSettings[v];
+  voiceState.setProperty("enabled", vs.enabled, nullptr);
+  voiceState.setProperty("waveform", static_cast<int>(vs.waveform), nullptr);
+  voiceState.setProperty("pulseWidth", vs.pulseWidth, nullptr);
+  voiceState.setProperty("attack", vs.attack, nullptr);
+  voiceState.setProperty("decay", vs.decay, nullptr);
+  voiceState.setProperty("sustain", vs.sustain, nullptr);
+  voiceState.setProperty("release", vs.release, nullptr);
+  voiceState.setProperty("pan", vs.pan, nullptr);
+  voiceState.setProperty("presetId", vs.presetId, nullptr);
+  voiceState.setProperty("filterEnabled", vs.filterEnabled, nullptr);
+  voiceState.setProperty("ringMod", vs.ringMod, nullptr);
+  voiceState.setProperty("sync", vs.sync, nullptr);
+  return voiceState;
+}
+
+void BreadbinProcessor::setVoiceState(int v,
+                                      const juce::ValueTree &voiceState) {
+  if (!voiceState.isValid())
+    return;
+
+  auto &vs = voiceSettings[v];
+  vs.enabled = voiceState.getProperty("enabled", true);
+  vs.waveform = static_cast<SIDEngine::Waveform>(
+      static_cast<int>(voiceState.getProperty("waveform", 0)));
+  vs.pulseWidth = voiceState.getProperty("pulseWidth", 2048);
+  vs.attack = voiceState.getProperty("attack", 0);
+  vs.decay = voiceState.getProperty("decay", 0);
+  vs.sustain = voiceState.getProperty("sustain", 15);
+  vs.release = voiceState.getProperty("release", 0);
+  vs.pan = voiceState.getProperty("pan", 0.0f);
+  vs.presetId = voiceState.getProperty("presetId", 1);
+  vs.filterEnabled = voiceState.getProperty("filterEnabled", true);
+  vs.ringMod = voiceState.getProperty("ringMod", false);
+  vs.sync = voiceState.getProperty("sync", false);
+
+  applyVoiceSettings(v);
+}
+
 juce::AudioProcessorEditor *BreadbinProcessor::createEditor() {
   return new BreadbinEditor(*this);
 }
@@ -399,9 +440,10 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   // Save LFO settings
   state.setProperty("lfoEnabled", lfo.enabled, nullptr);
   state.setProperty("lfoWaveform", static_cast<int>(lfo.waveform), nullptr);
-  state.setProperty("lfoTarget", static_cast<int>(lfo.target), nullptr);
   state.setProperty("lfoRate", lfo.rate, nullptr);
-  state.setProperty("lfoDepth", lfo.depth, nullptr);
+  state.setProperty("lfoDepthFilter", lfo.depthFilter, nullptr);
+  state.setProperty("lfoDepthPW", lfo.depthPulseWidth, nullptr);
+  state.setProperty("lfoDepthPitch", lfo.depthPitch, nullptr);
 
   // Save per-voice settings
   for (int v = 0; v < 6; ++v) {
@@ -445,10 +487,10 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     lfo.enabled = state.getProperty("lfoEnabled", false);
     lfo.waveform = static_cast<LFOWaveform>(
         static_cast<int>(state.getProperty("lfoWaveform", 0)));
-    lfo.target = static_cast<LFOTarget>(
-        static_cast<int>(state.getProperty("lfoTarget", 0)));
     lfo.rate = state.getProperty("lfoRate", 2.0f);
-    lfo.depth = state.getProperty("lfoDepth", 0.0f);
+    lfo.depthFilter = state.getProperty("lfoDepthFilter", 0.0f);
+    lfo.depthPulseWidth = state.getProperty("lfoDepthPW", 0.0f);
+    lfo.depthPitch = state.getProperty("lfoDepthPitch", 0.0f);
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
@@ -637,40 +679,22 @@ void BreadbinProcessor::processLFO(int numSamples) {
 
 void BreadbinProcessor::applyLFOModulation() {
   float val = lfo.enabled ? lfo.currentValue : 0.0f;
-  float depth = lfo.depth;
 
-  // 1. Reset modulations always to ensure clean switch between targets
-  // and clean return when LFO is disabled.
-
-  // Reset Filter Cutoff
-  sidLeft.setFilterCutoff(baseFilterCutoffLeft);
-  sidRight.setFilterCutoff(baseFilterCutoffRight);
-
-  // Reset Pulse Width & Pitch
-  for (int v = 0; v < 6; ++v) {
-    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-    sid.setPulseWidth(v % 3, voiceSettings[v].pulseWidth);
-    // Reset frequency to target/glide Hz
-    double resetHz =
-        voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-    sid.setFrequency(v % 3, resetHz);
-  }
-
-  if (!lfo.enabled || depth <= 0.0f)
-    return;
-
-  // 2. Apply active modulation
-  switch (lfo.target) {
-  case LFOTarget::Filter: {
-    int modAmount = static_cast<int>(val * depth * 1024.0f);
+  // Filter cutoff modulation
+  if (lfo.depthFilter > 0.0f) {
+    int modAmount = static_cast<int>(val * lfo.depthFilter * 1024.0f);
     int leftCutoff = std::clamp(baseFilterCutoffLeft + modAmount, 0, 2047);
     int rightCutoff = std::clamp(baseFilterCutoffRight + modAmount, 0, 2047);
     sidLeft.setFilterCutoff(leftCutoff);
     sidRight.setFilterCutoff(rightCutoff);
-    break;
+  } else {
+    sidLeft.setFilterCutoff(baseFilterCutoffLeft);
+    sidRight.setFilterCutoff(baseFilterCutoffRight);
   }
-  case LFOTarget::PulseWidth: {
-    int pwMod = static_cast<int>(val * depth * 2048.0f);
+
+  // Pulse width modulation
+  if (lfo.depthPulseWidth > 0.0f) {
+    int pwMod = static_cast<int>(val * lfo.depthPulseWidth * 2048.0f);
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         int basePW = voiceSettings[v].pulseWidth;
@@ -679,10 +703,16 @@ void BreadbinProcessor::applyLFOModulation() {
         sid.setPulseWidth(v % 3, modPW);
       }
     }
-    break;
+  } else {
+    for (int v = 0; v < 6; ++v) {
+      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+      sid.setPulseWidth(v % 3, voiceSettings[v].pulseWidth);
+    }
   }
-  case LFOTarget::Pitch: {
-    float semitoneMod = val * depth * 2.0f; // ±2 semitones
+
+  // Pitch modulation (vibrato) - ±2 semitones max
+  if (lfo.depthPitch > 0.0f) {
+    float semitoneMod = val * lfo.depthPitch * 2.0f;
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         double baseHz =
@@ -692,8 +722,13 @@ void BreadbinProcessor::applyLFOModulation() {
         sid.setFrequency(v % 3, modHz);
       }
     }
-    break;
-  }
+  } else {
+    for (int v = 0; v < 6; ++v) {
+      double resetHz =
+          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+      sid.setFrequency(v % 3, resetHz);
+    }
   }
 }
 
