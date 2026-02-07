@@ -35,6 +35,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   applyGlobalPreset(1);
   selectVoice(0);
   setResizeLimits(650, 500, 1200, 900);
+  addAndMakeVisible(midiLearnOverlay);
+  midiLearnOverlay.setAlwaysOnTop(true);
+
   startTimerHz(30);
 }
 
@@ -58,6 +61,7 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
 
 void BreadbinEditor::timerCallback() {
   if (processor.isLearning()) {
+    midiLearnOverlay.repaint();
     repaint();
   }
 }
@@ -871,6 +875,7 @@ void BreadbinEditor::paint(juce::Graphics &g) {
 }
 
 void BreadbinEditor::resized() {
+  midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
   const int rowH = 28;
   const int pad = 4;

@@ -970,3 +970,58 @@ void BreadbinProcessor::clearMIDIMappingForParam(ControlParam param) {
     }
   }
 }
+
+juce::String BreadbinProcessor::getParamName(ControlParam param) {
+  switch (param) {
+  case ControlParam::MasterVolume:
+    return "Master Volume";
+  case ControlParam::Aging:
+    return "Chip Age";
+  case ControlParam::LeftCutoff:
+    return "Left SID Cutoff";
+  case ControlParam::LeftResonance:
+    return "Left SID Resonance";
+  case ControlParam::RightCutoff:
+    return "Right SID Cutoff";
+  case ControlParam::RightResonance:
+    return "Right SID Resonance";
+  case ControlParam::GlobalGlide:
+    return "Portamento";
+  case ControlParam::PitchBendRange:
+    return "PB Range";
+  case ControlParam::LFORate:
+    return "LFO Rate";
+  case ControlParam::LFODepthFilter:
+    return "LFO Filter Depth";
+  case ControlParam::LFODepthPW:
+    return "LFO PWM Depth";
+  case ControlParam::LFODepthPitch:
+    return "LFO Pitch Depth";
+  case ControlParam::VoiceWaveform:
+    return "Voice Waveform";
+  case ControlParam::VoicePW:
+    return "Voice Pulse Width";
+  case ControlParam::VoiceAttack:
+    return "Voice Attack";
+  case ControlParam::VoiceDecay:
+    return "Voice Decay";
+  case ControlParam::VoiceSustain:
+    return "Voice Sustain";
+  case ControlParam::VoiceRelease:
+    return "Voice Release";
+  case ControlParam::VoicePan:
+    return "Voice Pan";
+  case ControlParam::VoiceRingMod:
+    return "Voice Ring Mod";
+  case ControlParam::VoiceSync:
+    return "Voice Hard Sync";
+  case ControlParam::VoiceFilterEnable:
+    return "Voice Filter Enable";
+  case ControlParam::ArpRate:
+    return "Arp Rate";
+  case ControlParam::ExtInputLevel:
+    return "Ext Input Level";
+  default:
+    return "Unknown";
+  }
+}

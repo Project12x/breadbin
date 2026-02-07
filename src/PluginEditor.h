@@ -20,6 +20,55 @@ private:
 };
 
 // Custom Slider class for MIDI Learning
+// Overlay displayed during MIDI Learn
+class MidiLearnOverlay : public juce::Component {
+public:
+  MidiLearnOverlay(BreadbinProcessor &p) : processor(p) {
+    setInterceptsMouseClicks(false, false); // Don't block UI
+  }
+
+  void paint(juce::Graphics &g) override {
+    if (!processor.isLearning())
+      return;
+
+    auto bounds = getLocalBounds().reduced(20);
+    auto popupH = 60;
+    auto popupW = 300;
+    auto popupRect = juce::Rectangle<int>(bounds.getCentreX() - popupW / 2,
+                                          bounds.getY() + 20, popupW, popupH);
+
+    // Semi-transparent background
+    g.setColour(juce::Colours::black.withAlpha(0.85f));
+    g.fillRoundedRectangle(popupRect.toFloat(), 6.0f);
+
+    // Gold border
+    g.setColour(juce::Colours::gold);
+    g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
+
+    // Text
+    g.setColour(juce::Colours::white);
+    auto font = g.getCurrentFont();
+    font.setHeight(16.0f);
+    font.setBold(true);
+    g.setFont(font);
+
+    juce::String paramName =
+        processor.getParamName(processor.getLearningParam());
+    g.drawText("LEARNING: " + paramName,
+               popupRect.removeFromTop(35).reduced(10, 0),
+               juce::Justification::centred);
+
+    font.setHeight(12.0f);
+    font.setBold(false);
+    g.setFont(font);
+    g.drawText("Move any MIDI hardware control to map...",
+               popupRect.reduced(10, 0), juce::Justification::centred);
+  }
+
+private:
+  BreadbinProcessor &processor;
+};
+
 class MappableSlider : public juce::Slider {
 public:
   MappableSlider(BreadbinProcessor &p, BreadbinProcessor::ControlParam param)
@@ -224,6 +273,8 @@ private:
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;
+
+  MidiLearnOverlay midiLearnOverlay{processor};
 
   // Background image
   juce::Image backgroundImage;

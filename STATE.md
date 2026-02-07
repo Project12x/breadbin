@@ -1,10 +1,11 @@
 # Project State
 
-**Last Updated**: 2026-02-03
+**Last Updated**: 2026-02-07
 
 ## Current Status: Alpha
 
 ### Working Features
+
 - ✅ Dual SID emulation via reSIDfp
 - ✅ Three stereo modes (Split, Unison, Multitimbral)
 - ✅ Per-channel chip selection (6581/8580)
@@ -15,27 +16,31 @@
 - ✅ Virtual MIDI keyboard (standalone)
 - ✅ VST3 plugin builds and loads
 - ✅ Safety limiter active
+- ✅ MIDI Learn system (Global)
+- ✅ Master Volume & Sustain Pedal
+- ✅ State persistence (XML)
 
 ### Known Issues
-- Minor: Unused variable warnings in updateSynthFromControls
-- Linting errors related to JUCE includes (build succeeds)
+
+- Minor: Linting errors related to JUCE includes (build succeeds)
 
 ### Not Yet Implemented
-- Full parameter automation
-- State save/restore in DAW
-- Preset save to disk
-- Arpeggiator
-- LFO modulation
+
+- Full parameter automation (APVTS Migration in progress)
+- Arpeggiator (Integrated but needs UI refinement)
+- LFO modulation (Integrated with UI)
 
 ## Build Status
+
 - **Windows VST3**: ✅ Building
 - **Windows Standalone**: ✅ Building
 - **macOS**: 🔲 Not tested
 - **Linux**: 🔲 Not tested
 
 ## Directory Structure
-```
-primordial-shuttle/
+
+```text
+breadbin/
 ├── src/
 │   ├── PluginProcessor.cpp/h    # Audio processing, dual SID
 │   ├── PluginEditor.cpp/h       # UI editor
@@ -48,7 +53,9 @@ primordial-shuttle/
 ```
 
 ## Recent Changes
+
 - Added proper labels above all rotary controls
 - Simplified Time Machine to 1982/NOW labels
 - Added semi-opaque text boxes for values
 - Enlarged controls for better usability
+- Implemented MIDI Learn, Master Volume, and Sustain Pedal (v0.9.0)

@@ -5,21 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-02-07
+
+### Added
+
+- **MIDI Learn System**: Right-click context menu for all sliders with "MIDI Learn" and "Unlearn".
+- **Visual Feedback**: Gold "LEARN" badge on sliders and global centered popup indicating mapping target.
+- **Master Volume**: Global volume control (0.0 to 1.0) persisting in state.
+- **Sustain Pedal**: CC 64 support with note queue management.
+- **State Persistence**: All MIDI mappings automatically saved/loaded with plugin state.
+- **Diagnostic Logging**: Integrated spdlog-style debug logging for MIDI and pedal activity.
+
 ## [Unreleased]
 
 ### Added
+
 - Proper control labels (Attack, Decay, Sustain, Release, PW, Cutoff, Reso)
 - Semi-opaque text boxes for value display
 - Time Machine slider with 1982/NOW end labels
 - Synthwave background image integration
-
-### Changed
 - Enlarged rotary controls for better usability (55px width, 70px height)
 - Control layout now shows labels above sliders
 
 ## [0.2.0] - 2026-02-03
 
 ### Added
+
 - Dual SID engine support with three stereo modes:
   - **Stereo Split**: Left SID → Left channel, Right SID → Right channel
   - **Unison**: Both SIDs summed to stereo with detune
@@ -34,12 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Safety limiter to prevent harsh audio artifacts
 
 ### Fixed
+
 - Audio output from virtual keyboard
 - Waveform selection affecting sound
 
 ## [0.1.0] - 2026-02-03
 
 ### Added
+
 - Initial project scaffold
 - JUCE 8 + reSIDfp integration
 - Basic SIDEngine wrapper class

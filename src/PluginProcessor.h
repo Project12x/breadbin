@@ -57,6 +57,8 @@ public:
     ExtInputLevel
   };
 
+  static juce::String getParamName(ControlParam param);
+
   BreadbinProcessor();
   ~BreadbinProcessor() override;
 
