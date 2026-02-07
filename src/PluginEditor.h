@@ -134,10 +134,9 @@ private:
   juce::ComboBox lfoWaveformSelector;
   juce::Slider lfoRateSlider;
   juce::Label lfoRateLabel;
-  juce::Slider lfoDepthFilterSlider;
-  juce::Slider lfoDepthPWSlider;
-  juce::Slider lfoDepthPitchSlider;
-  juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
+  juce::ComboBox lfoTargetSelector;
+  juce::Slider lfoDepthSlider;
+  juce::Label lfoTargetLabel, lfoDepthLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;

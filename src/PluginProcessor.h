@@ -16,14 +16,14 @@ public:
   // Arpeggiator patterns
   enum class ArpPattern { Up, Down, UpDown, Random };
   enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold };
+  enum class LFOTarget { Filter, PulseWidth, Pitch };
 
   struct LFOState {
     bool enabled = false;
     LFOWaveform waveform = LFOWaveform::Triangle;
-    float rate = 2.0f;            // Hz (0.1 - 20.0)
-    float depthFilter = 0.0f;     // 0.0 - 1.0
-    float depthPulseWidth = 0.0f; // 0.0 - 1.0
-    float depthPitch = 0.0f;      // 0.0 - 1.0
+    LFOTarget target = LFOTarget::Filter;
+    float rate = 2.0f;  // Hz (0.1 - 20.0)
+    float depth = 0.0f; // 0.0 - 1.0
     // Runtime (not persisted)
     double phase = 0.0;
     float currentValue = 0.0f;
