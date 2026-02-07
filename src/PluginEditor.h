@@ -129,6 +129,16 @@ private:
   juce::ComboBox clockModeSelector;
   juce::Label clockModeLabel;
 
+  // ========== LFO ==========
+  juce::ToggleButton lfoEnableButton{"LFO"};
+  juce::ComboBox lfoWaveformSelector;
+  juce::Slider lfoRateSlider;
+  juce::Label lfoRateLabel;
+  juce::Slider lfoDepthFilterSlider;
+  juce::Slider lfoDepthPWSlider;
+  juce::Slider lfoDepthPitchSlider;
+  juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
+
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
   juce::MidiKeyboardComponent keyboard;

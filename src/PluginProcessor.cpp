@@ -79,6 +79,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
+  // Process LFO modulation
+  if (lfo.enabled) {
+    processLFO(numSamples);
+    applyLFOModulation();
+  }
+
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -390,6 +396,14 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   state.setProperty("extInputLevel", extInputLevel, nullptr);
   state.setProperty("clockMode", static_cast<int>(clockMode), nullptr);
 
+  // Save LFO settings
+  state.setProperty("lfoEnabled", lfo.enabled, nullptr);
+  state.setProperty("lfoWaveform", static_cast<int>(lfo.waveform), nullptr);
+  state.setProperty("lfoRate", lfo.rate, nullptr);
+  state.setProperty("lfoDepthFilter", lfo.depthFilter, nullptr);
+  state.setProperty("lfoDepthPW", lfo.depthPulseWidth, nullptr);
+  state.setProperty("lfoDepthPitch", lfo.depthPitch, nullptr);
+
   // Save per-voice settings
   for (int v = 0; v < 6; ++v) {
     juce::ValueTree voiceState("Voice" + juce::String(v));
@@ -427,6 +441,15 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
     extInputLevel = state.getProperty("extInputLevel", 1.0f);
     setClockMode(static_cast<SIDEngine::ClockMode>(
         static_cast<int>(state.getProperty("clockMode", 0))));
+
+    // Restore LFO settings
+    lfo.enabled = state.getProperty("lfoEnabled", false);
+    lfo.waveform = static_cast<LFOWaveform>(
+        static_cast<int>(state.getProperty("lfoWaveform", 0)));
+    lfo.rate = state.getProperty("lfoRate", 2.0f);
+    lfo.depthFilter = state.getProperty("lfoDepthFilter", 0.0f);
+    lfo.depthPulseWidth = state.getProperty("lfoDepthPW", 0.0f);
+    lfo.depthPitch = state.getProperty("lfoDepthPitch", 0.0f);
 
     // Restore per-voice settings
     for (int v = 0; v < 6; ++v) {
@@ -574,6 +597,78 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
     if (arpPattern == ArpPattern::Random && arpIndex == 0) {
       static std::mt19937 rng(std::random_device{}());
       std::shuffle(arpSequence.begin(), arpSequence.end(), rng);
+    }
+  }
+}
+
+void BreadbinProcessor::processLFO(int numSamples) {
+  // Advance phase
+  double phaseInc =
+      (static_cast<double>(lfo.rate) * numSamples) / hostSampleRate;
+  double oldPhase = lfo.phase;
+  lfo.phase += phaseInc;
+  lfo.phase -= std::floor(lfo.phase); // Wrap to 0-1
+
+  // Generate waveform value (-1.0 to +1.0)
+  float p = static_cast<float>(lfo.phase);
+  switch (lfo.waveform) {
+  case LFOWaveform::Triangle:
+    lfo.currentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
+    break;
+  case LFOWaveform::Sawtooth:
+    lfo.currentValue = 2.0f * p - 1.0f;
+    break;
+  case LFOWaveform::Square:
+    lfo.currentValue = (p < 0.5f) ? 1.0f : -1.0f;
+    break;
+  case LFOWaveform::SampleAndHold:
+    // Latch new random value on phase wrap
+    if (lfo.phase < oldPhase) {
+      static std::mt19937 rng(std::random_device{}());
+      std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+      lfo.shValue = dist(rng);
+    }
+    lfo.currentValue = lfo.shValue;
+    break;
+  }
+}
+
+void BreadbinProcessor::applyLFOModulation() {
+  float val = lfo.currentValue;
+
+  // Filter cutoff modulation
+  if (lfo.depthFilter > 0.0f) {
+    int modAmount = static_cast<int>(val * lfo.depthFilter * 1024.0f);
+    int leftCutoff = std::clamp(baseFilterCutoffLeft + modAmount, 0, 2047);
+    int rightCutoff = std::clamp(baseFilterCutoffRight + modAmount, 0, 2047);
+    sidLeft.setFilterCutoff(leftCutoff);
+    sidRight.setFilterCutoff(rightCutoff);
+  }
+
+  // Pulse width modulation
+  if (lfo.depthPulseWidth > 0.0f) {
+    int pwMod = static_cast<int>(val * lfo.depthPulseWidth * 2048.0f);
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active) {
+        int basePW = voiceSettings[v].pulseWidth;
+        int modPW = std::clamp(basePW + pwMod, 0, 4095);
+        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+        sid.setPulseWidth(v % 3, modPW);
+      }
+    }
+  }
+
+  // Pitch modulation (vibrato) - ±2 semitones max
+  if (lfo.depthPitch > 0.0f) {
+    float semitoneMod = val * lfo.depthPitch * 2.0f;
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active) {
+        double baseHz =
+            voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+        double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+        sid.setFrequency(v % 3, modHz);
+      }
     }
   }
 }

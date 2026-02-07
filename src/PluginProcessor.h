@@ -15,6 +15,20 @@ public:
 
   // Arpeggiator patterns
   enum class ArpPattern { Up, Down, UpDown, Random };
+  enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold };
+
+  struct LFOState {
+    bool enabled = false;
+    LFOWaveform waveform = LFOWaveform::Triangle;
+    float rate = 2.0f;            // Hz (0.1 - 20.0)
+    float depthFilter = 0.0f;     // 0.0 - 1.0
+    float depthPulseWidth = 0.0f; // 0.0 - 1.0
+    float depthPitch = 0.0f;      // 0.0 - 1.0
+    // Runtime (not persisted)
+    double phase = 0.0;
+    float currentValue = 0.0f;
+    float shValue = 0.0f; // Sample & Hold latched value
+  };
 
   BreadbinProcessor();
   ~BreadbinProcessor() override;
@@ -138,6 +152,10 @@ public:
     sidRight.setClockMode(mode);
   }
 
+  // LFO
+  LFOState &getLFO() { return lfo; }
+  const LFOState &getLFO() const { return lfo; }
+
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
@@ -203,6 +221,8 @@ private:
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
   void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
   void applyModWheelToFilter();     // Apply mod wheel to filter cutoff
+  void processLFO(int numSamples);  // Advance LFO phase
+  void applyLFOModulation();        // Apply LFO to destinations
 
   // Arpeggiator
   bool arpEnabled = false;
@@ -216,6 +236,9 @@ private:
   int lastArpNote = -1;
   void processArpeggiator(int numSamples);
   void rebuildArpSequence();
+
+  // LFO state
+  LFOState lfo;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };
