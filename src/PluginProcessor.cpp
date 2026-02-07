@@ -2,11 +2,15 @@
 #include "PluginEditor.h"
 
 BreadbinProcessor::BreadbinProcessor()
-    : AudioProcessor(BusesProperties().withOutput(
-          "Output", juce::AudioChannelSet::stereo(), true)) {
+    : juce::AudioProcessor(juce::AudioProcessor::BusesProperties().withOutput(
+          "Output", juce::AudioChannelSet::stereo(), true)),
+      apvts(*this, nullptr, "Parameters", createParameterLayout()) {
   // Initialize both SIDs with default models
   sidLeft.setChipModel(chipModelLeft);
   sidRight.setChipModel(chipModelRight);
+
+  // Link parameter pointers for fast access
+  initializeParameterPointers();
 
   // Initialize MIDI mappings
   midiMappings.fill(ControlParam::None);
@@ -39,6 +43,53 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Add messages from virtual keyboard (standalone mode)
   midiCollector.removeNextBlockOfMessages(midiMessages, buffer.getNumSamples());
+
+  // Sync global parameters from APVTS
+  masterVolume = masterVolPtr->load();
+  dualMode = static_cast<DualMode>(static_cast<int>(dualModePtr->load()));
+  setAgingFactor(agingPtr->load());
+  leftDetuneCents = leftDetunePtr->load();
+  rightDetuneCents = rightDetunePtr->load();
+  glideTimeMs = glidePtr->load();
+  extInputEnabled = extInputEnablePtr->load() > 0.5f;
+  extInputLevel = extInputLevelPtr->load();
+
+  // Sync LFO from APVTS
+  lfo.enabled = lfoEnablePtr->load() > 0.5f;
+  lfo.waveform = static_cast<LFOWaveform>(static_cast<int>(lfoWavePtr->load()));
+  lfo.rate = lfoRatePtr->load();
+  lfo.depthFilter = lfoDepthFiltPtr->load();
+  lfo.depthPulseWidth = lfoDepthPWPtr->load();
+  lfo.depthPitch = lfoDepthPitchPtr->load();
+
+  // Sync Arp from APVTS
+  arpEnabled = arpEnablePtr->load() > 0.5f;
+  arpPattern = static_cast<ArpPattern>(static_cast<int>(arpPatternPtr->load()));
+  arpRateHz = arpRatePtr->load();
+  arpOctaves = static_cast<int>(arpOctavesPtr->load());
+
+  // Check for discrete changes (handled by SIDEngine/Processor comparisons
+  // internally)
+  auto newLeftModel =
+      static_cast<SIDEngine::ChipModel>(static_cast<int>(chipLeftPtr->load()));
+  if (newLeftModel != chipModelLeft)
+    sidLeft.setChipModel(newLeftModel);
+
+  auto newRightModel =
+      static_cast<SIDEngine::ChipModel>(static_cast<int>(chipRightPtr->load()));
+  if (newRightModel != chipModelRight)
+    sidRight.setChipModel(newRightModel);
+
+  auto newClockMode =
+      static_cast<SIDEngine::ClockMode>(static_cast<int>(clockModePtr->load()));
+  if (newClockMode != clockMode)
+    setClockMode(newClockMode);
+
+  // Sync all voice settings (ideally we should only do this on change,
+  // but let's do it for now to ensure reactivity)
+  for (int v = 0; v < 6; ++v) {
+    applyVoiceSettings(v);
+  }
 
   // Handle MIDI
   for (const auto metadata : midiMessages) {
@@ -356,25 +407,60 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   if (voice < 0 || voice > 5)
     return;
 
+  auto &ptrs = voiceParamPtrs[voice];
+  auto &vs = voiceSettings[voice];
+
+  // Update cache from APVTS pointers
+  vs.enabled = ptrs.enable->load() > 0.5f;
+
+  // Waveform mapping (Triangle=0, Sawtooth=1, Pulse=2, Noise=3)
+  int waveIdx = static_cast<int>(ptrs.waveform->load());
+  switch (waveIdx) {
+  case 0:
+    vs.waveform = SIDEngine::Waveform::Triangle;
+    break;
+  case 1:
+    vs.waveform = SIDEngine::Waveform::Sawtooth;
+    break;
+  case 2:
+    vs.waveform = SIDEngine::Waveform::Pulse;
+    break;
+  case 3:
+    vs.waveform = SIDEngine::Waveform::Noise;
+    break;
+  default:
+    vs.waveform = SIDEngine::Waveform::Triangle;
+    break;
+  }
+
+  vs.pulseWidth = static_cast<int>(ptrs.pw->load());
+  vs.attack = static_cast<int>(ptrs.attack->load());
+  vs.decay = static_cast<int>(ptrs.decay->load());
+  vs.sustain = static_cast<int>(ptrs.sustain->load());
+  vs.release = static_cast<int>(ptrs.release->load());
+  vs.pan = ptrs.pan->load();
+  vs.ringMod = ptrs.ringMod->load() > 0.5f;
+  vs.sync = ptrs.sync->load() > 0.5f;
+  vs.filterEnabled = ptrs.filter->load() > 0.5f;
+
   SIDEngine &sid = (voice < 3) ? sidLeft : sidRight;
   int sidVoice = voice % 3;
-  const auto &settings = voiceSettings[voice];
 
-  sid.setWaveform(sidVoice, settings.waveform);
-  sid.setPulseWidth(sidVoice, settings.pulseWidth);
-  sid.setAttack(sidVoice, settings.attack);
-  sid.setDecay(sidVoice, settings.decay);
-  sid.setSustain(sidVoice, settings.sustain);
-  sid.setRelease(sidVoice, settings.release);
-  sid.setRingMod(sidVoice, settings.ringMod);
-  sid.setSync(sidVoice, settings.sync);
+  sid.setWaveform(sidVoice, vs.waveform);
+  sid.setPulseWidth(sidVoice, vs.pulseWidth);
+  sid.setAttack(sidVoice, vs.attack);
+  sid.setDecay(sidVoice, vs.decay);
+  sid.setSustain(sidVoice, vs.sustain);
+  sid.setRelease(sidVoice, vs.release);
+  sid.setRingMod(sidVoice, vs.ringMod);
+  sid.setSync(sidVoice, vs.sync);
 
   // Update per-voice filter routing on this SID
   bool isLeft = (voice < 3);
-  auto &v0 = voiceSettings[isLeft ? 0 : 3];
-  auto &v1 = voiceSettings[isLeft ? 1 : 4];
-  auto &v2 = voiceSettings[isLeft ? 2 : 5];
-  sid.setFilterVoices(v0.filterEnabled, v1.filterEnabled, v2.filterEnabled);
+  int startV = isLeft ? 0 : 3;
+  sid.setFilterVoices(voiceParamPtrs[startV + 0].filter->load() > 0.5f,
+                      voiceParamPtrs[startV + 1].filter->load() > 0.5f,
+                      voiceParamPtrs[startV + 2].filter->load() > 0.5f);
 }
 
 void BreadbinProcessor::updateAllVoiceFrequencies() {
@@ -479,45 +565,13 @@ juce::AudioProcessorEditor *BreadbinProcessor::createEditor() {
 }
 
 void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
-  juce::ValueTree state("BreadbinState");
-  state.setProperty("dualMode", static_cast<int>(dualMode), nullptr);
-  state.setProperty("chipModelLeft", static_cast<int>(chipModelLeft), nullptr);
-  state.setProperty("chipModelRight", static_cast<int>(chipModelRight),
-                    nullptr);
-  state.setProperty("agingFactor", agingFactor, nullptr);
-  state.setProperty("leftDetune", leftDetuneCents, nullptr);
-  state.setProperty("rightDetune", rightDetuneCents, nullptr);
-  state.setProperty("glideTime", glideTimeMs, nullptr);
-  state.setProperty("pitchBendRange", pitchBendRange, nullptr);
-  state.setProperty("masterVolume", masterVolume, nullptr);
-  state.setProperty("extInputEnabled", extInputEnabled, nullptr);
-  state.setProperty("extInputLevel", extInputLevel, nullptr);
-  state.setProperty("clockMode", static_cast<int>(clockMode), nullptr);
+  // Store non-APVTS data into apvts.state as properties/children
+  // (APVTS parameters are already stored in apvts.state automatically)
 
-  // Save LFO settings
-  state.setProperty("lfoEnabled", lfo.enabled, nullptr);
-  state.setProperty("lfoWaveform", static_cast<int>(lfo.waveform), nullptr);
-  state.setProperty("lfoRate", lfo.rate, nullptr);
-  state.setProperty("lfoDepthFilter", lfo.depthFilter, nullptr);
-  state.setProperty("lfoDepthPW", lfo.depthPulseWidth, nullptr);
-  state.setProperty("lfoDepthPitch", lfo.depthPitch, nullptr);
-
-  // Save per-voice settings
-  for (int v = 0; v < 6; ++v) {
-    juce::ValueTree voiceState("Voice" + juce::String(v));
-    const auto &vs = voiceSettings[v];
-    voiceState.setProperty("enabled", vs.enabled, nullptr);
-    voiceState.setProperty("waveform", static_cast<int>(vs.waveform), nullptr);
-    voiceState.setProperty("pulseWidth", vs.pulseWidth, nullptr);
-    voiceState.setProperty("attack", vs.attack, nullptr);
-    voiceState.setProperty("decay", vs.decay, nullptr);
-    voiceState.setProperty("sustain", vs.sustain, nullptr);
-    voiceState.setProperty("release", vs.release, nullptr);
-    voiceState.setProperty("pan", vs.pan, nullptr);
-    voiceState.setProperty("presetId", vs.presetId, nullptr);
-    voiceState.setProperty("filterEnabled", vs.filterEnabled, nullptr);
-    state.addChild(voiceState, -1, nullptr);
-  }
+  // Remove old MIDI mappings child if present (avoid duplicates)
+  auto existingMappings = apvts.state.getChildWithName("MidiMappings");
+  if (existingMappings.isValid())
+    apvts.state.removeChild(existingMappings, nullptr);
 
   // Save MIDI mappings
   juce::ValueTree mappings("MidiMappings");
@@ -529,76 +583,35 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
       mappings.addChild(m, -1, nullptr);
     }
   }
-  state.addChild(mappings, -1, nullptr);
-  state.setProperty("selectedVoice", selectedVoice, nullptr);
+  apvts.state.addChild(mappings, -1, nullptr);
+  apvts.state.setProperty("selectedVoice", selectedVoice, nullptr);
 
-  juce::MemoryOutputStream stream(destData, false);
-  state.writeToStream(stream);
+  auto apvtsState = apvts.copyState();
+  std::unique_ptr<juce::XmlElement> xml(apvtsState.createXml());
+  copyXmlToBinary(*xml, destData);
 }
 
 void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
-  auto state =
-      juce::ValueTree::readFromData(data, static_cast<size_t>(sizeInBytes));
-  if (state.isValid()) {
-    dualMode = static_cast<DualMode>(
-        static_cast<int>(state.getProperty("dualMode", 0)));
-    setLeftChipModel(static_cast<SIDEngine::ChipModel>(
-        static_cast<int>(state.getProperty("chipModelLeft", 0))));
-    setRightChipModel(static_cast<SIDEngine::ChipModel>(
-        static_cast<int>(state.getProperty("chipModelRight", 0))));
-    setAgingFactor(state.getProperty("agingFactor", 0.0f));
-    setLeftDetune(state.getProperty("leftDetune", 0.0f));
-    setRightDetune(state.getProperty("rightDetune", 0.0f));
-    setGlideTimeMs(state.getProperty("glideTime", 0.0f));
-    setPitchBendRange(state.getProperty("pitchBendRange", 2));
-    setMasterVolume(state.getProperty("masterVolume", 0.8f));
-    extInputEnabled = state.getProperty("extInputEnabled", false);
-    extInputLevel = state.getProperty("extInputLevel", 1.0f);
-    setClockMode(static_cast<SIDEngine::ClockMode>(
-        static_cast<int>(state.getProperty("clockMode", 0))));
+  std::unique_ptr<juce::XmlElement> xmlState(
+      getXmlFromBinary(data, sizeInBytes));
+  if (xmlState != nullptr) {
+    if (xmlState->hasTagName(apvts.state.getType())) {
+      apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
 
-    // Restore LFO settings
-    lfo.enabled = state.getProperty("lfoEnabled", false);
-    lfo.waveform = static_cast<LFOWaveform>(
-        static_cast<int>(state.getProperty("lfoWaveform", 0)));
-    lfo.rate = state.getProperty("lfoRate", 2.0f);
-    lfo.depthFilter = state.getProperty("lfoDepthFilter", 0.0f);
-    lfo.depthPulseWidth = state.getProperty("lfoDepthPW", 0.0f);
-    lfo.depthPitch = state.getProperty("lfoDepthPitch", 0.0f);
-
-    // Restore MIDI mappings
-    midiMappings.fill(ControlParam::None);
-    auto mappings = state.getChildWithName("MidiMappings");
-    if (mappings.isValid()) {
-      for (int i = 0; i < mappings.getNumChildren(); ++i) {
-        auto m = mappings.getChild(i);
-        int cc = m.getProperty("cc", -1);
-        int param = m.getProperty("param", 0);
-        if (cc >= 0 && cc < 128) {
-          midiMappings[cc] = static_cast<ControlParam>(param);
+      // Restore MIDI mappings and other non-APVTS state
+      midiMappings.fill(ControlParam::None);
+      auto mappings = apvts.state.getChildWithName("MidiMappings");
+      if (mappings.isValid()) {
+        for (int i = 0; i < mappings.getNumChildren(); ++i) {
+          auto m = mappings.getChild(i);
+          int cc = m.getProperty("cc", -1);
+          int param = m.getProperty("param", 0);
+          if (cc >= 0 && cc < 128) {
+            midiMappings[cc] = static_cast<ControlParam>(param);
+          }
         }
       }
-    }
-    selectedVoice = state.getProperty("selectedVoice", 0);
-
-    // Restore per-voice settings
-    for (int v = 0; v < 6; ++v) {
-      auto voiceState = state.getChildWithName("Voice" + juce::String(v));
-      if (voiceState.isValid()) {
-        auto &vs = voiceSettings[v];
-        vs.enabled = voiceState.getProperty("enabled", true);
-        vs.waveform = static_cast<SIDEngine::Waveform>(
-            static_cast<int>(voiceState.getProperty("waveform", 0x10)));
-        vs.pulseWidth = voiceState.getProperty("pulseWidth", 2048);
-        vs.attack = voiceState.getProperty("attack", 0);
-        vs.decay = voiceState.getProperty("decay", 0);
-        vs.sustain = voiceState.getProperty("sustain", 15);
-        vs.release = voiceState.getProperty("release", 0);
-        vs.pan = voiceState.getProperty("pan", 0.0f);
-        vs.presetId = voiceState.getProperty("presetId", 1);
-        vs.filterEnabled = voiceState.getProperty("filterEnabled", true);
-        applyVoiceSettings(v);
-      }
+      selectedVoice = apvts.state.getProperty("selectedVoice", 0);
     }
   }
 }
@@ -1021,7 +1034,151 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Arp Rate";
   case ControlParam::ExtInputLevel:
     return "Ext Input Level";
+  case ControlParam::LeftDetune:
+    return "Left SID Detune";
+  case ControlParam::RightDetune:
+    return "Right SID Detune";
   default:
     return "Unknown";
+  }
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout
+BreadbinProcessor::createParameterLayout() {
+  juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+  // Global
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"masterVol", 1}, "Master Volume", 0.0f, 1.0f, 0.8f));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"dualMode", 1}, "Dual SID Mode",
+      juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"chipLeft", 1}, "Left Chip Model",
+      juce::StringArray{"MOS6581", "MOS8580"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"chipRight", 1}, "Right Chip Model",
+      juce::StringArray{"MOS6581", "MOS8580"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"aging", 1}, "Chip Age", 0.0f, 1.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"leftDetune", 1}, "Left Detune", -50.0f, 50.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"rightDetune", 1}, "Right Detune", -50.0f, 50.0f,
+      0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"glide", 1}, "Glide Time", 0.0f, 2000.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"clockMode", 1}, "Clock Mode",
+      juce::StringArray{"PAL", "NTSC"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"extInputEnable", 1}, "Ext Input Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"extInputLevel", 1}, "Ext Input Level", 0.0f, 2.0f,
+      1.0f));
+
+  // LFO
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"lfoEnable", 1}, "LFO Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"lfoWave", 1}, "LFO Waveform",
+      juce::StringArray{"Sine", "Triangle", "Sawtooth", "Square", "S&H"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfoRate", 1}, "LFO Rate", 0.1f, 20.0f, 2.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfoDepthFilt", 1}, "LFO Filter Depth", 0.0f, 1.0f,
+      0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfoDepthPW", 1}, "LFO PW Depth", 0.0f, 1.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfoDepthPitch", 1}, "LFO Pitch Depth", 0.0f, 1.0f,
+      0.0f));
+
+  // Arpeggiator
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"arpEnable", 1}, "Arpeggiator", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"arpPattern", 1}, "Arp Pattern",
+      juce::StringArray{"Up", "Down", "UpDown", "Random"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"arpRate", 1}, "Arp Rate", 1.0f, 100.0f, 50.0f));
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"arpOctaves", 1}, "Arp Octaves", 1, 4, 1));
+
+  // Per-Voice (6 voices)
+  for (int v = 0; v < 6; ++v) {
+    juce::String prefix = "v" + juce::String(v) + "_";
+    juce::String label = "Voice " + juce::String(v + 1) + " ";
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{prefix + "enable", 1}, label + "Enable", true));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{prefix + "waveform", 1}, label + "Waveform",
+        juce::StringArray{"Triangle", "Sawtooth", "Pulse", "Noise"}, 2));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "pw", 1}, label + "Pulse Width", 0, 4095,
+        2048));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "attack", 1}, label + "Attack", 0, 15, 0));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "decay", 1}, label + "Decay", 0, 15, 0));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "sustain", 1}, label + "Sustain", 0, 15,
+        15));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "release", 1}, label + "Release", 0, 15, 0));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{prefix + "pan", 1}, label + "Pan", -1.0f, 1.0f,
+        0.0f));
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{prefix + "ringMod", 1}, label + "Ring Mod", false));
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{prefix + "sync", 1}, label + "Hard Sync", false));
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{prefix + "filter", 1}, label + "Filter Enable",
+        true));
+  }
+
+  return layout;
+}
+
+void BreadbinProcessor::initializeParameterPointers() {
+  masterVolPtr = apvts.getRawParameterValue("masterVol");
+  dualModePtr = apvts.getRawParameterValue("dualMode");
+  chipLeftPtr = apvts.getRawParameterValue("chipLeft");
+  chipRightPtr = apvts.getRawParameterValue("chipRight");
+  agingPtr = apvts.getRawParameterValue("aging");
+  leftDetunePtr = apvts.getRawParameterValue("leftDetune");
+  rightDetunePtr = apvts.getRawParameterValue("rightDetune");
+  glidePtr = apvts.getRawParameterValue("glide");
+  clockModePtr = apvts.getRawParameterValue("clockMode");
+  extInputEnablePtr = apvts.getRawParameterValue("extInputEnable");
+  extInputLevelPtr = apvts.getRawParameterValue("extInputLevel");
+
+  lfoEnablePtr = apvts.getRawParameterValue("lfoEnable");
+  lfoWavePtr = apvts.getRawParameterValue("lfoWave");
+  lfoRatePtr = apvts.getRawParameterValue("lfoRate");
+  lfoDepthFiltPtr = apvts.getRawParameterValue("lfoDepthFilt");
+  lfoDepthPWPtr = apvts.getRawParameterValue("lfoDepthPW");
+  lfoDepthPitchPtr = apvts.getRawParameterValue("lfoDepthPitch");
+
+  arpEnablePtr = apvts.getRawParameterValue("arpEnable");
+  arpPatternPtr = apvts.getRawParameterValue("arpPattern");
+  arpRatePtr = apvts.getRawParameterValue("arpRate");
+  arpOctavesPtr = apvts.getRawParameterValue("arpOctaves");
+
+  for (int v = 0; v < 6; ++v) {
+    juce::String prefix = "v" + juce::String(v) + "_";
+    auto &ptrs = voiceParamPtrs[v];
+    ptrs.enable = apvts.getRawParameterValue(prefix + "enable");
+    ptrs.waveform = apvts.getRawParameterValue(prefix + "waveform");
+    ptrs.pw = apvts.getRawParameterValue(prefix + "pw");
+    ptrs.attack = apvts.getRawParameterValue(prefix + "attack");
+    ptrs.decay = apvts.getRawParameterValue(prefix + "decay");
+    ptrs.sustain = apvts.getRawParameterValue(prefix + "sustain");
+    ptrs.release = apvts.getRawParameterValue(prefix + "release");
+    ptrs.pan = apvts.getRawParameterValue(prefix + "pan");
+    ptrs.ringMod = apvts.getRawParameterValue(prefix + "ringMod");
+    ptrs.sync = apvts.getRawParameterValue(prefix + "sync");
+    ptrs.filter = apvts.getRawParameterValue(prefix + "filter");
   }
 }

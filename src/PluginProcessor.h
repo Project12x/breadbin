@@ -54,7 +54,9 @@ public:
     VoiceSync,
     VoiceFilterEnable,
     ArpRate,
-    ExtInputLevel
+    ExtInputLevel,
+    LeftDetune,
+    RightDetune
   };
 
   static juce::String getParamName(ControlParam param);
@@ -242,10 +244,58 @@ private:
   juce::Array<int> rightNoteQueue; // Notes held on right SID
   int lastVelocity = 100;
 
-  // MIDI Mapping
   std::array<ControlParam, 128> midiMappings;
   ControlParam learningParam = ControlParam::None;
   int selectedVoice = 0;
+
+public:
+  // State management - public for editor attachment access
+  juce::AudioProcessorValueTreeState apvts;
+
+private:
+  juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+  // APVTS Parameter Pointers for fast access in audio thread
+  std::atomic<float> *masterVolPtr = nullptr;
+  std::atomic<float> *dualModePtr = nullptr;
+  std::atomic<float> *chipLeftPtr = nullptr;
+  std::atomic<float> *chipRightPtr = nullptr;
+  std::atomic<float> *agingPtr = nullptr;
+  std::atomic<float> *leftDetunePtr = nullptr;
+  std::atomic<float> *rightDetunePtr = nullptr;
+  std::atomic<float> *glidePtr = nullptr;
+  std::atomic<float> *clockModePtr = nullptr;
+  std::atomic<float> *extInputEnablePtr = nullptr;
+  std::atomic<float> *extInputLevelPtr = nullptr;
+
+  std::atomic<float> *lfoEnablePtr = nullptr;
+  std::atomic<float> *lfoWavePtr = nullptr;
+  std::atomic<float> *lfoRatePtr = nullptr;
+  std::atomic<float> *lfoDepthFiltPtr = nullptr;
+  std::atomic<float> *lfoDepthPWPtr = nullptr;
+  std::atomic<float> *lfoDepthPitchPtr = nullptr;
+
+  std::atomic<float> *arpEnablePtr = nullptr;
+  std::atomic<float> *arpPatternPtr = nullptr;
+  std::atomic<float> *arpRatePtr = nullptr;
+  std::atomic<float> *arpOctavesPtr = nullptr;
+
+  struct VoiceParamPtrs {
+    std::atomic<float> *enable = nullptr;
+    std::atomic<float> *waveform = nullptr;
+    std::atomic<float> *pw = nullptr;
+    std::atomic<float> *attack = nullptr;
+    std::atomic<float> *decay = nullptr;
+    std::atomic<float> *sustain = nullptr;
+    std::atomic<float> *release = nullptr;
+    std::atomic<float> *pan = nullptr;
+    std::atomic<float> *ringMod = nullptr;
+    std::atomic<float> *sync = nullptr;
+    std::atomic<float> *filter = nullptr;
+  };
+  std::array<VoiceParamPtrs, 6> voiceParamPtrs;
+
+  void initializeParameterPointers();
 
   void handleCC(int cc, int value);
   void applyMappedParameter(ControlParam param, int value);

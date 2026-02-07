@@ -1,8 +1,12 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <juce_gui_extra/juce_gui_extra.h>
+
+class MappableSlider; // Forward declaration
 
 // Custom LookAndFeel for professional ComboBox fonts
 class BreadbinLookAndFeel : public juce::LookAndFeel_V4 {
@@ -72,7 +76,7 @@ private:
 class MappableSlider : public juce::Slider {
 public:
   MappableSlider(BreadbinProcessor &p, BreadbinProcessor::ControlParam param)
-      : processor(p), controlParam(param) {}
+      : juce::Slider(), processor(p), controlParam(param) {}
 
   void mouseDown(const juce::MouseEvent &e) override {
     if (e.mods.isRightButtonDown()) {
@@ -251,6 +255,76 @@ private:
   // ========== CLOCK MODE (PAL/NTSC) ==========
   juce::ComboBox clockModeSelector;
   juce::Label clockModeLabel;
+
+  // ========== APVTS ATTACHMENTS ==========
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      masterVolAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      dualModeAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      chipLeftAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      chipRightAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      agingAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      leftDetuneAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      rightDetuneAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      glideAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      clockModeAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      extInputEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      extInputLevelAttach;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      lfoEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      lfoWaveAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfoRateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfoDepthFiltAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfoDepthPWAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfoDepthPitchAttach;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      arpEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      arpPatternAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      arpRateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      arpOctaveAttach;
+
+  // Dynamic Voice Attachments (re-attached when selectedVoice changes)
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      voiceWaveformAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voicePWAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voiceAttackAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voiceDecayAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voiceSustainAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voiceReleaseAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voicePanAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      voiceRingModAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      voiceSyncAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      voiceFilterAttach;
+
+  void refreshVoiceEditorAttachments();
 
   // Editor constants
   static constexpr int width = 1000;

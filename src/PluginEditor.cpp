@@ -2,7 +2,7 @@
 #include "BinaryData.h"
 
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
-    : AudioProcessorEditor(&p), processor(p),
+    : juce::AudioProcessorEditor(&p), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
 
   backgroundImage = juce::ImageFileFormat::loadFrom(
@@ -39,6 +39,75 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   midiLearnOverlay.setAlwaysOnTop(true);
 
   startTimerHz(30);
+
+  // Initialize Global Attachments
+  masterVolAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "masterVol", masterVolSlider);
+  dualModeAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "dualMode", dualModeSelector);
+  chipLeftAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "chipLeft", leftChipSelector);
+  chipRightAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "chipRight", rightChipSelector);
+  agingAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "aging", agingSlider);
+  leftDetuneAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "leftDetune", leftDetuneSlider);
+  rightDetuneAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "rightDetune", rightDetuneSlider);
+  glideAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "glide", glideTimeSlider);
+  clockModeAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "clockMode", clockModeSelector);
+  extInputEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "extInputEnable", extInputEnableButton);
+  extInputLevelAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "extInputLevel", extInputLevelSlider);
+
+  lfoEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfoEnable", lfoEnableButton);
+  lfoWaveAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "lfoWave", lfoWaveformSelector);
+  lfoRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoRate", lfoRateSlider);
+  lfoDepthFiltAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthFilt", lfoDepthFilterSlider);
+  lfoDepthPWAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthPW", lfoDepthPWSlider);
+  lfoDepthPitchAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthPitch", lfoDepthPitchSlider);
+
+  arpEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "arpEnable", arpEnableButton);
+  arpPatternAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "arpPattern", arpPatternSelector);
+  arpRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "arpRate", arpRateSlider);
+  arpOctaveAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "arpOctaves", arpOctaveSelector);
+
+  refreshVoiceEditorAttachments();
 }
 
 BreadbinEditor::~BreadbinEditor() {
@@ -1502,4 +1571,52 @@ juce::Path BreadbinEditor::makeDiskPath() {
 juce::Path BreadbinEditor::makeFolderPath() {
   return juce::Drawable::parseSVGPath(
       "M3 3h7l2 2h9v16H3V3zm16 16V7h-8l-2-2H5v14h14z");
+}
+
+void BreadbinEditor::refreshVoiceEditorAttachments() {
+  // Release existing attachments
+  voiceWaveformAttach.reset();
+  voicePWAttach.reset();
+  voiceAttackAttach.reset();
+  voiceDecayAttach.reset();
+  voiceSustainAttach.reset();
+  voiceReleaseAttach.reset();
+  voicePanAttach.reset();
+  voiceRingModAttach.reset();
+  voiceSyncAttach.reset();
+  voiceFilterAttach.reset();
+
+  // Re-attach to selected voice
+  juce::String prefix = "v" + juce::String(processor.getSelectedVoice()) + "_";
+
+  voiceWaveformAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, prefix + "waveform", waveformSelector);
+  voicePWAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "pw", pulseWidthSlider);
+  voiceAttackAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "attack", attackSlider);
+  voiceDecayAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "decay", decaySlider);
+  voiceSustainAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "sustain", sustainSlider);
+  voiceReleaseAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "release", releaseSlider);
+  voicePanAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "pan", panSlider);
+  voiceRingModAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, prefix + "ringMod", ringModButton);
+  voiceSyncAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, prefix + "sync", syncButton);
+  voiceFilterAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, prefix + "filter", voiceFilterButton);
 }
