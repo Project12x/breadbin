@@ -122,13 +122,59 @@ target_link_libraries(Breadbin
         juce::juce_recommended_warning_flags
 )
 
-# Standalone LFO/Oscillator test suite (no JUCE dependency)
-add_executable(BreadbinTests
+# --- Test suites ---
+
+# Standalone LFO math tests (no JUCE dependency, fast)
+add_executable(BreadbinLFOTests
     tests/LFOTests.cpp
 )
+target_compile_features(BreadbinLFOTests PRIVATE cxx_std_20)
 
-target_compile_features(BreadbinTests PRIVATE cxx_std_20)
+# Standalone mutation tests (no JUCE dependency, fast)
+add_executable(BreadbinMutationTests
+    tests/MutationTests.cpp
+)
+target_compile_features(BreadbinMutationTests PRIVATE cxx_std_20)
+
+# Integration tests (JUCE-linked, full signal path)
+add_executable(BreadbinIntegrationTests
+    tests/IntegrationTests.cpp
+    ${PLUGIN_SOURCES}
+    ${RESIDFP_SOURCES}
+)
+target_include_directories(BreadbinIntegrationTests PRIVATE
+    src/residfp
+    ${libsidplayfp_SOURCE_DIR}/src
+    ${libsidplayfp_SOURCE_DIR}/src/builders/residfp-builder
+    ${RESIDFP_DIR}
+    ${RESIDFP_DIR}/resample
+    src
+)
+target_link_libraries(BreadbinIntegrationTests PRIVATE
+    BreadbinAssets
+    juce::juce_audio_utils
+    juce::juce_audio_processors
+    juce::juce_audio_devices
+    juce::juce_gui_basics
+    juce::juce_dsp
+)
+target_compile_definitions(BreadbinIntegrationTests PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_PLUGINHOST_LV2=0
+    JUCE_PLUGINHOST_AU=0
+    HB_MUTEX_IMPL_STD_MUTEX=1
+    WIN32
+)
+target_compile_features(BreadbinIntegrationTests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(BreadbinIntegrationTests PRIVATE /FS)
+endif()
 
 enable_testing()
-add_test(NAME LFOTests COMMAND BreadbinTests)
+add_test(NAME LFOTests COMMAND BreadbinLFOTests)
+add_test(NAME MutationTests COMMAND BreadbinMutationTests)
+add_test(NAME IntegrationTests COMMAND BreadbinIntegrationTests)
 
