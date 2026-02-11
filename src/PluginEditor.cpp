@@ -336,13 +336,10 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(masterVolLabel);
 
   masterVolSlider.setRange(0.0, 1.0, 0.01);
-  masterVolSlider.setValue(processor.getMasterVolume());
   masterVolSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   masterVolSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
   masterVolSlider.setTooltip("Master output volume (affects both SID chips)");
-  masterVolSlider.onValueChange = [this]() {
-    processor.setMasterVolume(static_cast<float>(masterVolSlider.getValue()));
-  };
+  // No onValueChange needed — APVTS attachment + processBlock sync handles it
   addAndMakeVisible(masterVolSlider);
 
   // External Audio Input
@@ -393,25 +390,17 @@ void BreadbinEditor::setupControls() {
   // ===== LFO =====
   lfoEnableButton.setTooltip("Global LFO: Toggle all LFO modulations");
   lfoEnableButton.setButtonText("LFO");
-  lfoEnableButton.setToggleState(processor.getLFO().enabled,
-                                 juce::dontSendNotification);
-  lfoEnableButton.onClick = [this]() {
-    processor.getLFO().enabled = lfoEnableButton.getToggleState();
-  };
+  // No onClick needed — APVTS ButtonAttachment handles state sync
   addAndMakeVisible(lfoEnableButton);
 
   lfoWaveformSelector.addItem("Tri", 1);
   lfoWaveformSelector.addItem("Saw", 2);
   lfoWaveformSelector.addItem("Sq", 3);
   lfoWaveformSelector.addItem("S&H", 4);
-  lfoWaveformSelector.setSelectedId(
-      static_cast<int>(processor.getLFO().waveform) + 1);
+  // No setSelectedId or onChange needed — APVTS ComboBoxAttachment handles it.
+  // ComboBox IDs 1-4 map to APVTS indices 0-3 which match LFOWaveform enum.
   lfoWaveformSelector.setTooltip(
       "LFO Shape: Tri (Smooth), Saw (Ramp), Sq (Hard), S&H (Random)");
-  lfoWaveformSelector.onChange = [this]() {
-    processor.getLFO().waveform = static_cast<BreadbinProcessor::LFOWaveform>(
-        lfoWaveformSelector.getSelectedId() - 1);
-  };
   addAndMakeVisible(lfoWaveformSelector);
 
   lfoRateLabel.setText("Hz", juce::dontSendNotification);

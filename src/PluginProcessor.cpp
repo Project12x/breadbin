@@ -19,6 +19,9 @@ BreadbinProcessor::BreadbinProcessor()
 BreadbinProcessor::~BreadbinProcessor() = default;
 
 void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+  // Set base class rate so getSampleRate() works in headless/test mode
+  setRateAndBufferSizeDetails(sampleRate, samplesPerBlock);
+
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
   sidRight.prepare(sampleRate);
@@ -46,6 +49,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Sync global parameters from APVTS
   masterVolume = masterVolPtr->load();
+  setMasterVolume(masterVolume); // Sync SID volume register from APVTS
   dualMode = static_cast<DualMode>(static_cast<int>(dualModePtr->load()));
   setAgingFactor(agingPtr->load());
   leftDetuneCents = leftDetunePtr->load();
@@ -1080,9 +1084,12 @@ BreadbinProcessor::createParameterLayout() {
   // LFO
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"lfoEnable", 1}, "LFO Enable", false));
+  // Indices must match LFOWaveform enum: Triangle=0, Sawtooth=1, Square=2,
+  // S&H=3 Note: pre-v0.9.1 states had a ghost "Sine" at index 0; old index 0
+  // mapped to Triangle in DSP anyway, so this removal is backward-safe.
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"lfoWave", 1}, "LFO Waveform",
-      juce::StringArray{"Sine", "Triangle", "Sawtooth", "Square", "S&H"}, 0));
+      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfoRate", 1}, "LFO Rate", 0.1f, 20.0f, 2.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(

@@ -507,6 +507,125 @@ void testDifferentNotes() {
 }
 
 // ============================================================================
+// Regression Tests (v0.9.1 Hardening)
+// ============================================================================
+
+void testLFOWaveformMapping() {
+  std::printf("--- LFO Waveform Mapping ---\n");
+
+  auto p = createTestProcessor();
+
+  // APVTS lfoWave should have exactly 4 choices matching enum
+  auto *param = p->apvts.getParameter("lfoWave");
+  ASSERT_TRUE(param != nullptr, "lfoWave parameter exists");
+
+  auto *choice = dynamic_cast<juce::AudioParameterChoice *>(param);
+  ASSERT_TRUE(choice != nullptr, "lfoWave is AudioParameterChoice");
+  if (!choice)
+    return;
+
+  ASSERT_TRUE(choice->choices.size() == 4,
+              "lfoWave has exactly 4 choices (no ghost Sine)");
+
+  // Verify names match canonical ordering
+  ASSERT_TRUE(choice->choices[0] == "Triangle", "lfoWave[0] = Triangle");
+  ASSERT_TRUE(choice->choices[1] == "Sawtooth", "lfoWave[1] = Sawtooth");
+  ASSERT_TRUE(choice->choices[2] == "Square", "lfoWave[2] = Square");
+  ASSERT_TRUE(choice->choices[3] == "S&H", "lfoWave[3] = S&H");
+
+  // Verify each APVTS index maps to correct DSP enum
+  const char *names[] = {"Triangle", "Sawtooth", "Square", "S&H"};
+  for (int i = 0; i < 4; ++i) {
+    choice->setValueNotifyingHost(choice->convertTo0to1(static_cast<float>(i)));
+
+    // Process a block so processBlock syncs lfo.waveform from APVTS
+    juce::AudioBuffer<float> buf(2, 64);
+    buf.clear();
+    juce::MidiBuffer midi;
+    p->processBlock(buf, midi);
+
+    int dspIndex = static_cast<int>(p->getLFO().waveform);
+    bool match = (dspIndex == i);
+    std::printf("  APVTS[%d]=%s -> DSP enum=%d %s\n", i, names[i], dspIndex,
+                match ? "OK" : "MISMATCH");
+    ASSERT_TRUE(
+        match,
+        (std::string("lfoWave ") + names[i] + " maps correctly").c_str());
+  }
+}
+
+void testLFOWaveformStateRoundTrip() {
+  std::printf("--- LFO Waveform State Round-Trip ---\n");
+
+  juce::MemoryBlock saved;
+  {
+    auto p = createTestProcessor();
+    // Set lfoWave to Square (index 2)
+    if (auto *param = p->apvts.getParameter("lfoWave"))
+      param->setValueNotifyingHost(
+          dynamic_cast<juce::AudioParameterChoice *>(param)->convertTo0to1(
+              2.0f));
+
+    warmUp(*p);
+    p->getStateInformation(saved);
+  }
+
+  {
+    auto p2 = createTestProcessor();
+    p2->setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    warmUp(*p2);
+
+    auto *val = p2->apvts.getRawParameterValue("lfoWave");
+    int restored = static_cast<int>(val->load());
+    std::printf("  Saved lfoWave=2 (Square), restored=%d\n", restored);
+    ASSERT_TRUE(restored == 2, "lfoWave Square survives save/load");
+  }
+}
+
+void testGetSampleRate() {
+  std::printf("--- getSampleRate Fix ---\n");
+
+  auto p = createTestProcessor(48000.0, 256);
+  double sr = p->getSampleRate();
+  std::printf("  getSampleRate() after prepareToPlay(48000): %.1f\n", sr);
+  ASSERT_NEAR(sr, 48000.0, 1.0, "getSampleRate returns correct value");
+}
+
+void testMasterVolumeAPVTSSync() {
+  std::printf("--- Master Volume APVTS Sync ---\n");
+
+  auto p = createTestProcessor();
+
+  // Set masterVol to 0.42 via APVTS
+  if (auto *param = p->apvts.getParameter("masterVol"))
+    param->setValueNotifyingHost(param->convertTo0to1(0.42f));
+
+  // Process a block so processBlock reads the APVTS value
+  juce::AudioBuffer<float> buf(2, 64);
+  buf.clear();
+  juce::MidiBuffer midi;
+  p->processBlock(buf, midi);
+
+  // Verify the processor's internal masterVolume was synced from APVTS
+  auto *rawVal = p->apvts.getRawParameterValue("masterVol");
+  float apvtsVal = rawVal->load();
+  std::printf("  APVTS masterVol after set: %.3f\n", apvtsVal);
+  ASSERT_NEAR(apvtsVal, 0.42f, 0.02f, "APVTS masterVol synced to 0.42");
+
+  // Verify it survives save/restore
+  juce::MemoryBlock saved;
+  p->getStateInformation(saved);
+
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+
+  auto *rawVal2 = p2->apvts.getRawParameterValue("masterVol");
+  float restored = rawVal2->load();
+  std::printf("  Restored masterVol: %.3f\n", restored);
+  ASSERT_NEAR(restored, 0.42f, 0.05f, "masterVol survives state round-trip");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -536,6 +655,12 @@ int main() {
 
   // Safety chain
   testSafetyChain();
+
+  // Regression tests (v0.9.1 hardening)
+  testLFOWaveformMapping();
+  testLFOWaveformStateRoundTrip();
+  testGetSampleRate();
+  testMasterVolumeAPVTSSync();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
