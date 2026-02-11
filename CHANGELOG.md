@@ -23,9 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LFO waveform mapping**: Removed ghost "Sine" entry from APVTS `lfoWave` parameter.
   APVTS indices now map 1:1 to `LFOWaveform` enum {Triangle=0, Sawtooth=1, Square=2, S&H=3}.
   Old saved states are backward-safe (index 0 already mapped to Triangle in DSP).
-- **APVTS dual-path conflicts**: Removed redundant `onChange`/`onClick` callbacks for
-  `lfoWaveformSelector`, `lfoEnableButton`, and `masterVolSlider` that conflicted with
-  APVTS attachments.
+  State restore now round-trips correctly through APVTS attachments.
+- **APVTS dual-path conflicts**: Removed redundant `onChange`/`onClick` callbacks and
+  manual preset-load refresh for APVTS-attached LFO controls. All LFO/volume state
+  now flows exclusively through APVTS attachments.
 - **Master volume SID sync**: `processBlock` now calls `setMasterVolume()` from APVTS
   value each block, fixing headless/automation scenarios where SID volume register
   was never updated.

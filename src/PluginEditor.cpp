@@ -1473,19 +1473,8 @@ void BreadbinEditor::loadPresetFromFile() {
           extInputLevelSlider.setValue(processor.getExtInputLevel(),
                                        juce::dontSendNotification);
 
-          lfoEnableButton.setToggleState(processor.getLFO().enabled,
-                                         juce::dontSendNotification);
-          lfoWaveformSelector.setSelectedId(
-              static_cast<int>(processor.getLFO().waveform) + 1,
-              juce::dontSendNotification);
-          lfoRateSlider.setValue(processor.getLFO().rate,
-                                 juce::dontSendNotification);
-          lfoDepthFilterSlider.setValue(processor.getLFO().depthFilter,
-                                        juce::dontSendNotification);
-          lfoDepthPWSlider.setValue(processor.getLFO().depthPulseWidth,
-                                    juce::dontSendNotification);
-          lfoDepthPitchSlider.setValue(processor.getLFO().depthPitch,
-                                       juce::dontSendNotification);
+          // LFO controls (lfoEnable, lfoWaveform, lfoRate, depths) are
+          // APVTS-attached — setStateInformation auto-syncs them.
         }
       }
     }
