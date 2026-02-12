@@ -983,8 +983,11 @@ void BreadbinProcessor::applyModMatrix() {
     auto dst = static_cast<ModDest>(static_cast<int>(modSlotPtrs[i].dst->load()));
     float amt = modSlotPtrs[i].amt->load();
 
-    if (src == ModSource::None || dst == ModDest::None || amt == 0.0f)
+    if (src == ModSource::None || dst == ModDest::None || amt == 0.0f) {
+      modSlotDisplay[i].sourceValue.store(0.0f);
+      modSlotDisplay[i].contribution.store(0.0f);
       continue;
+    }
 
     // Get source value (-1.0 to 1.0)
     float sourceVal = 0.0f;
@@ -1009,6 +1012,10 @@ void BreadbinProcessor::applyModMatrix() {
     }
 
     float contribution = sourceVal * amt;
+
+    // Store per-slot display values for UI
+    modSlotDisplay[i].sourceValue.store(sourceVal);
+    modSlotDisplay[i].contribution.store(contribution);
 
     switch (dst) {
     case ModDest::FilterCutoff:
@@ -1071,6 +1078,8 @@ void BreadbinProcessor::applyModMatrix() {
     int rightRes = juce::jlimit(0, 15, baseFilterResRight + resOffset);
     sidLeft.setFilterResonance(leftRes);
     sidRight.setFilterResonance(rightRes);
+    lastAppliedResLeft.store(leftRes);
+    lastAppliedResRight.store(rightRes);
   }
 }
 
@@ -1201,6 +1210,10 @@ void BreadbinProcessor::applyLFOModulation() {
     SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
     sid.setPulseWidth(v % 3, modPW);
   }
+  // Store representative PW for UI meter (voice 0)
+  lastAppliedPW.store(std::clamp(
+      (wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth) + pwMod, 0,
+      4095));
 
   // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if active
   float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
@@ -1218,6 +1231,45 @@ void BreadbinProcessor::applyLFOModulation() {
     SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
     sid.setFrequency(v % 3, modHz);
   }
+  // Store pitch offset for UI meter
+  lastAppliedPitchOffsetSemitones.store(semitoneMod);
+}
+
+// Preset dirty-state detection
+void BreadbinProcessor::snapshotPresetState() {
+  presetParamSnapshot.clear();
+  for (auto *param : getParameters()) {
+    auto *ranged = dynamic_cast<juce::RangedAudioParameter *>(param);
+    if (ranged)
+      presetParamSnapshot[ranged->paramID] = ranged->getValue();
+  }
+  presetBaseFilterCutoffL = baseFilterCutoffLeft;
+  presetBaseFilterCutoffR = baseFilterCutoffRight;
+  presetBaseFilterResL = baseFilterResLeft;
+  presetBaseFilterResR = baseFilterResRight;
+}
+
+bool BreadbinProcessor::isPresetDirty() const {
+  if (presetParamSnapshot.empty())
+    return false;
+  for (auto *param : getParameters()) {
+    auto *ranged = dynamic_cast<const juce::RangedAudioParameter *>(param);
+    if (!ranged)
+      continue;
+    auto it = presetParamSnapshot.find(ranged->paramID);
+    if (it != presetParamSnapshot.end())
+      if (std::abs(ranged->getValue() - it->second) > 1e-6f)
+        return true;
+  }
+  if (baseFilterCutoffLeft != presetBaseFilterCutoffL)
+    return true;
+  if (baseFilterCutoffRight != presetBaseFilterCutoffR)
+    return true;
+  if (baseFilterResLeft != presetBaseFilterResL)
+    return true;
+  if (baseFilterResRight != presetBaseFilterResR)
+    return true;
+  return false;
 }
 
 // Plugin instantiation

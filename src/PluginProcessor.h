@@ -5,6 +5,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <map>
 #include <random>
 #include <vector>
 
@@ -241,6 +242,40 @@ public:
   // Wavetable
   const WavetableState &getWavetable() const { return wavetable; }
 
+  // Post-modulation getters for UI meters
+  int getLastAppliedCutoffLeft() const { return lastAppliedCutoffLeft; }
+  int getLastAppliedCutoffRight() const { return lastAppliedCutoffRight; }
+  int getLastAppliedPW() const { return lastAppliedPW.load(); }
+  float getLastAppliedPitchOffset() const {
+    return lastAppliedPitchOffsetSemitones.load();
+  }
+  int getLastAppliedResLeft() const { return lastAppliedResLeft.load(); }
+  int getLastAppliedResRight() const { return lastAppliedResRight.load(); }
+
+  // Base value getters (for meters to show base vs modded)
+  int getBaseFilterCutoff(bool isLeft) const {
+    return isLeft ? baseFilterCutoffLeft : baseFilterCutoffRight;
+  }
+  int getBaseFilterResonance(bool isLeft) const {
+    return isLeft ? baseFilterResLeft : baseFilterResRight;
+  }
+
+  // Mod matrix display getters
+  float getModSlotSourceValue(int slot) const {
+    return (slot >= 0 && slot < kModSlots)
+               ? modSlotDisplay[slot].sourceValue.load()
+               : 0.0f;
+  }
+  float getModSlotContribution(int slot) const {
+    return (slot >= 0 && slot < kModSlots)
+               ? modSlotDisplay[slot].contribution.load()
+               : 0.0f;
+  }
+
+  // Preset dirty-state detection
+  void snapshotPresetState();
+  bool isPresetDirty() const;
+
   // MIDI Learn
   void startLearning(ControlParam param) { learningParam = param; }
   void stopLearning() { learningParam = ControlParam::None; }
@@ -280,6 +315,24 @@ private:
   int baseFilterResRight = 0;
   int lastAppliedCutoffLeft = 1024;  // Post-modulation cutoff (set by applyFilterModulation)
   int lastAppliedCutoffRight = 1024;
+
+  // Post-modulation values for UI meters (audio thread writes, UI thread reads)
+  std::atomic<int> lastAppliedPW{2048};                     // representative (voice 0), 0-4095
+  std::atomic<float> lastAppliedPitchOffsetSemitones{0.0f}; // total semitone offset
+  std::atomic<int> lastAppliedResLeft{0};                    // 0-15
+  std::atomic<int> lastAppliedResRight{0};                   // 0-15
+
+  // Mod matrix per-slot display values
+  struct ModSlotDisplay {
+    std::atomic<float> sourceValue{0.0f};
+    std::atomic<float> contribution{0.0f};
+  };
+  std::array<ModSlotDisplay, kModSlots> modSlotDisplay;
+
+  // Preset dirty-state detection
+  std::map<juce::String, float> presetParamSnapshot;
+  int presetBaseFilterCutoffL = 1024, presetBaseFilterCutoffR = 1024;
+  int presetBaseFilterResL = 0, presetBaseFilterResR = 0;
 
   // External audio input
   bool extInputEnabled = false;

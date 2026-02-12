@@ -205,6 +205,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
           processor.apvts, "arpOctaves", arpOctaveSelector);
 
   refreshVoiceEditorAttachments();
+
+  // Snapshot initial preset state for dirty detection
+  processor.snapshotPresetState();
 }
 
 BreadbinEditor::~BreadbinEditor() {
@@ -230,6 +233,34 @@ void BreadbinEditor::timerCallback() {
     midiLearnOverlay.repaint();
     repaint();
   }
+
+  // Update modulation meters
+  cutoffMeterL.setValues(static_cast<float>(processor.getBaseFilterCutoff(true)),
+                         static_cast<float>(processor.getLastAppliedCutoffLeft()));
+  cutoffMeterL.repaint();
+
+  cutoffMeterR.setValues(static_cast<float>(processor.getBaseFilterCutoff(false)),
+                         static_cast<float>(processor.getLastAppliedCutoffRight()));
+  cutoffMeterR.repaint();
+
+  pwMeter.setValues(static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
+                    static_cast<float>(processor.getLastAppliedPW()));
+  pwMeter.repaint();
+
+  pitchMeter.setValues(0.0f, processor.getLastAppliedPitchOffset());
+  pitchMeter.repaint();
+
+  resMeterL.setValues(static_cast<float>(processor.getBaseFilterResonance(true)),
+                      static_cast<float>(processor.getLastAppliedResLeft()));
+  resMeterL.repaint();
+
+  resMeterR.setValues(static_cast<float>(processor.getBaseFilterResonance(false)),
+                      static_cast<float>(processor.getLastAppliedResRight()));
+  resMeterR.repaint();
+
+  // Preset dirty indicator
+  presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
+                           juce::dontSendNotification);
 }
 
 // ========== ModMatrixPanel Implementation ==========
@@ -273,6 +304,19 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
                           juce::Colours::transparentBlack);
     addAndMakeVisible(s.amtSlider);
 
+    // Source value and contribution display labels
+    s.sourceValueLabel.setColour(juce::Label::textColourId,
+                                 juce::Colours::cyan);
+    s.sourceValueLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+    s.sourceValueLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(s.sourceValueLabel);
+
+    s.contributionLabel.setColour(juce::Label::textColourId,
+                                  juce::Colours::orange);
+    s.contributionLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+    s.contributionLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(s.contributionLabel);
+
     // APVTS attachments
     s.srcAttach =
         std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -285,6 +329,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
             processor.apvts, prefix + "amt", s.amtSlider);
   }
 
+  startTimerHz(30);
   setSize(panelWidth, panelHeight);
 }
 
@@ -296,7 +341,10 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   g.setFont(12.0f);
   g.drawText("Source", 50, 2, 90, 16, juce::Justification::centred);
   g.drawText("Dest", 150, 2, 90, 16, juce::Justification::centred);
-  g.drawText("Amount", 250, 2, 160, 16, juce::Justification::centred);
+  g.drawText("Amount", 250, 2, 120, 16, juce::Justification::centred);
+  g.drawText("Src", 380, 2, 45, 16, juce::Justification::centred);
+  g.setColour(juce::Colours::orange);
+  g.drawText("Out", 430, 2, 45, 16, juce::Justification::centred);
 }
 
 void ModMatrixPanel::resized() {
@@ -309,7 +357,20 @@ void ModMatrixPanel::resized() {
     s.slotLabel.setBounds(4, y + 8, 44, 18);
     s.srcBox.setBounds(50, y + 6, 90, 22);
     s.dstBox.setBounds(150, y + 6, 90, 22);
-    s.amtSlider.setBounds(250, y + 6, 160, 22);
+    s.amtSlider.setBounds(250, y + 6, 120, 22);
+    s.sourceValueLabel.setBounds(380, y + 6, 45, 22);
+    s.contributionLabel.setBounds(430, y + 6, 45, 22);
+  }
+}
+
+void ModMatrixPanel::timerCallback() {
+  for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
+    float srcVal = processor.getModSlotSourceValue(i);
+    float contrib = processor.getModSlotContribution(i);
+    slots[i].sourceValueLabel.setText(juce::String(srcVal, 2),
+                                      juce::dontSendNotification);
+    slots[i].contributionLabel.setText(juce::String(contrib, 2),
+                                       juce::dontSendNotification);
   }
 }
 
@@ -368,8 +429,15 @@ void BreadbinEditor::setupControls() {
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
     applyGlobalPreset(globalPresetSelector.getSelectedId());
+    processor.snapshotPresetState();
   };
   addAndMakeVisible(globalPresetSelector);
+
+  // Preset dirty indicator
+  presetDirtyLabel.setColour(juce::Label::textColourId, juce::Colours::gold);
+  presetDirtyLabel.setFont(juce::Font(juce::FontOptions(16.0f)).boldened());
+  presetDirtyLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(presetDirtyLabel);
 
   // Voice Preset (for selected voice)
   presetLabel.setText("Voice:", juce::dontSendNotification);
@@ -385,8 +453,10 @@ void BreadbinEditor::setupControls() {
   presetSelector.setSelectedId(1);
   presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
-    if (presetSelector.getSelectedId() > 1)
+    if (presetSelector.getSelectedId() > 1) {
       applyPreset(presetSelector.getSelectedId());
+      processor.snapshotPresetState();
+    }
   };
   addAndMakeVisible(presetSelector);
 
@@ -906,6 +976,12 @@ void BreadbinEditor::setupLeftSID() {
   };
   addAndMakeVisible(leftResonanceSlider);
 
+  // Modulation meters for left SID
+  cutoffMeterL.setRange(0.0f, 2047.0f);
+  addAndMakeVisible(cutoffMeterL);
+  resMeterL.setRange(0.0f, 15.0f);
+  addAndMakeVisible(resMeterL);
+
   auto setupButton = [this](juce::ToggleButton &btn) {
     btn.setColour(juce::ToggleButton::textColourId, juce::Colours::lightgrey);
     btn.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
@@ -1034,6 +1110,12 @@ void BreadbinEditor::setupRightSID() {
   };
   addAndMakeVisible(rightResonanceSlider);
 
+  // Modulation meters for right SID
+  cutoffMeterR.setRange(0.0f, 2047.0f);
+  addAndMakeVisible(cutoffMeterR);
+  resMeterR.setRange(0.0f, 15.0f);
+  addAndMakeVisible(resMeterR);
+
   auto setupButton = [this](juce::ToggleButton &btn) {
     btn.setColour(juce::ToggleButton::textColourId, juce::Colours::lightgrey);
     btn.setColour(juce::ToggleButton::tickColourId, juce::Colours::orange);
@@ -1118,6 +1200,12 @@ void BreadbinEditor::setupVoiceEditor() {
       "Pulse Width (0-4095): Controls the square wave duty cycle");
   pulseWidthSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
   addAndMakeVisible(pulseWidthSlider);
+
+  // Modulation meters for voice editor
+  pwMeter.setRange(0.0f, 4095.0f);
+  addAndMakeVisible(pwMeter);
+  pitchMeter.setRange(-24.0f, 24.0f);
+  addAndMakeVisible(pitchMeter);
 
   auto setupADSR = [this](juce::Slider &slider, juce::Label &label,
                           const juce::String &text, const juce::String &tooltip,
@@ -1326,6 +1414,7 @@ void BreadbinEditor::resized() {
 
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
   globalPresetSelector.setBounds(topRow.removeFromLeft(100));
+  presetDirtyLabel.setBounds(topRow.removeFromLeft(14));
   topRow.removeFromLeft(pad);
   savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
   topRow.removeFromLeft(pad);
@@ -1366,9 +1455,11 @@ void BreadbinEditor::resized() {
   leftPanel.removeFromTop(pad);
   auto leftFilterRow = leftPanel.removeFromTop(50);
   leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(40));
-  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(45));
-  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(30));
-  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(45));
+  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(40));
+  cutoffMeterL.setBounds(leftFilterRow.removeFromLeft(6));
+  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(28));
+  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(40));
+  resMeterL.setBounds(leftFilterRow.removeFromLeft(6));
 
   auto leftModesRow = leftPanel.removeFromTop(22);
   leftFilterEnableButton.setBounds(leftModesRow.removeFromLeft(45));
@@ -1405,9 +1496,11 @@ void BreadbinEditor::resized() {
   // Filter (right-justified)
   rightPanel.removeFromTop(pad);
   auto rightFilterRow = rightPanel.removeFromTop(50);
-  rightResonanceSlider.setBounds(rightFilterRow.removeFromRight(45));
-  rightResonanceLabel.setBounds(rightFilterRow.removeFromRight(30));
-  rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(45));
+  resMeterR.setBounds(rightFilterRow.removeFromRight(6));
+  rightResonanceSlider.setBounds(rightFilterRow.removeFromRight(40));
+  rightResonanceLabel.setBounds(rightFilterRow.removeFromRight(28));
+  cutoffMeterR.setBounds(rightFilterRow.removeFromRight(6));
+  rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(40));
   rightCutoffLabel.setBounds(rightFilterRow.removeFromRight(40));
 
   auto rightModesRow = rightPanel.removeFromTop(22);
@@ -1451,8 +1544,11 @@ void BreadbinEditor::resized() {
       row1.removeFromLeft(90).withHeight(20).translated(0, 22));
   row1.removeFromLeft(pad);
   pwLabel.setBounds(row1.removeFromLeft(30));
-  pulseWidthSlider.setBounds(row1.removeFromLeft(90));
-  row1.removeFromLeft(pad * 2);
+  pulseWidthSlider.setBounds(row1.removeFromLeft(82));
+  pwMeter.setBounds(row1.removeFromLeft(6));
+  row1.removeFromLeft(pad);
+  pitchMeter.setBounds(row1.removeFromLeft(6));
+  row1.removeFromLeft(pad);
 
   // ADSR sliders
   const int adsrW = 35;
@@ -2082,6 +2178,8 @@ void BreadbinEditor::loadPresetFromFile() {
 
           // LFO controls (lfoEnable, lfoWaveform, lfoRate, depths) are
           // APVTS-attached — setStateInformation auto-syncs them.
+
+          processor.snapshotPresetState();
         }
       }
     }

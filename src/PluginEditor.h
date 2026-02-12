@@ -111,13 +111,56 @@ private:
   BreadbinProcessor::ControlParam controlParam;
 };
 
+// Lightweight modulation indicator (thin vertical bar next to a slider)
+class ModulationMeter : public juce::Component {
+public:
+  void setRange(float min, float max) {
+    rangeMin = min;
+    rangeMax = max;
+  }
+  void setValues(float base, float modulated) {
+    baseValue = base;
+    modulatedValue = modulated;
+  }
+  void paint(juce::Graphics &g) override {
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(40, 40, 45));
+    g.fillRoundedRectangle(bounds, 2.0f);
+    float range = rangeMax - rangeMin;
+    if (range <= 0.0f)
+      return;
+    float baseNorm = (baseValue - rangeMin) / range;
+    float modNorm = (modulatedValue - rangeMin) / range;
+    // Base position marker (thin grey line)
+    float baseY = bounds.getBottom() - baseNorm * bounds.getHeight();
+    g.setColour(juce::Colours::grey);
+    g.drawHorizontalLine(static_cast<int>(baseY), bounds.getX(),
+                         bounds.getRight());
+    // Modulated fill (cyan = upward, orange = downward)
+    float modY = bounds.getBottom() - modNorm * bounds.getHeight();
+    float top = std::min(baseY, modY);
+    float bottom = std::max(baseY, modY);
+    g.setColour(modNorm > baseNorm
+                    ? juce::Colours::cyan.withAlpha(0.6f)
+                    : juce::Colours::orange.withAlpha(0.6f));
+    g.fillRect(bounds.getX() + 1.0f, top, bounds.getWidth() - 2.0f,
+               bottom - top);
+  }
+
+private:
+  float rangeMin = 0.0f, rangeMax = 1.0f;
+  float baseValue = 0.0f, modulatedValue = 0.0f;
+};
+
 // Mod Matrix popup panel (shown in a DialogWindow)
-class ModMatrixPanel : public juce::Component {
+class ModMatrixPanel : public juce::Component, private juce::Timer {
 public:
   ModMatrixPanel(BreadbinProcessor &proc);
+  ~ModMatrixPanel() override { stopTimer(); }
   void resized() override;
   void paint(juce::Graphics &g) override;
-  static constexpr int panelWidth = 420;
+  void timerCallback() override;
+  static constexpr int panelWidth = 520;
   static constexpr int panelHeight = 180;
 
 private:
@@ -126,6 +169,8 @@ private:
     juce::ComboBox srcBox, dstBox;
     juce::Slider amtSlider;
     juce::Label slotLabel;
+    juce::Label sourceValueLabel;  // current source value
+    juce::Label contributionLabel; // effective contribution
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         srcAttach, dstAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
@@ -463,6 +508,15 @@ private:
   juce::TextButton modMatrixButton{"Mod Matrix"};
   juce::Component::SafePointer<juce::DialogWindow> modMatrixWindow;
   void showModMatrixPopup();
+
+  // ========== MODULATION METERS ==========
+  ModulationMeter cutoffMeterL, cutoffMeterR;
+  ModulationMeter pwMeter;
+  ModulationMeter resMeterL, resMeterR;
+  ModulationMeter pitchMeter;
+
+  // ========== PRESET DIRTY INDICATOR ==========
+  juce::Label presetDirtyLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
