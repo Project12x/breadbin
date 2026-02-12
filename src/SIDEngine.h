@@ -109,6 +109,7 @@ private:
   void updateVoiceRegisters(int voice);
   void updateFilterRegisters();
   uint16_t midiNoteToFrequency(int midiNote);
+  double getClockHz() const;
 
   // Non-copyable
   SIDEngine(const SIDEngine &) = delete;

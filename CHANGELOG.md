@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-02-11
+
+### Fixed
+
+- **NTSC frequency**: `midiNoteToFrequency`, `noteOn`, `setFrequency` now use
+  `getClockHz()` instead of hardcoded `SID_CLOCK_PAL`, giving correct pitch in NTSC mode.
+- **Chip model cache churn**: `processBlock` now updates `chipModelLeft`/`chipModelRight`
+  caches after applying new models, eliminating per-block re-initialization.
+- **RT-unsafe logging**: Removed two `Logger::writeToLog` calls from the audio thread
+  (sustain pedal and MIDI learn debug messages).
+
+### Added
+
+- **External input bus**: Added sidechain input bus (`isBusesLayoutSupported`) so external
+  audio routes through a real host input, not a feedback loop from the output buffer.
+- **Per-voice pan**: Voice pan values (averaged per SID) now apply equal-power pan law
+  to SID outputs. `pan=0` preserves original stereo split (backward compatible).
+
 ### Added
 
 - Proper control labels (Attack, Decay, Sustain, Release, PW, Cutoff, Reso)

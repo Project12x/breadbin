@@ -121,7 +121,7 @@ void SIDEngine::noteOn(int voice, int midiNote, int velocity,
   double hz = 440.0 * std::pow(2.0, (detuneNote - 69.0) / 12.0);
 
   // Convert to SID frequency register value
-  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  double fn = (hz * 16777216.0) / getClockHz();
   uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
 
   // Set frequency registers
@@ -147,7 +147,7 @@ void SIDEngine::setFrequency(int voice, double hz) {
     return;
 
   // Convert Hz to SID frequency register value
-  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  double fn = (hz * 16777216.0) / getClockHz();
   uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
 
   // Set frequency registers only - no gate change
@@ -310,7 +310,11 @@ uint16_t SIDEngine::midiNoteToFrequency(int midiNote) {
   double hz = 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
 
   // Convert to SID frequency register value
-  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  double fn = (hz * 16777216.0) / getClockHz();
 
   return static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+}
+
+double SIDEngine::getClockHz() const {
+  return (currentClockMode == ClockMode::NTSC) ? SID_CLOCK_NTSC : SID_CLOCK_PAL;
 }

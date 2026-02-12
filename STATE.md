@@ -24,7 +24,8 @@
 - Arpeggiator (integrated with UI)
 - 14-bit pitch bend
 - PAL/NTSC clock switching
-- External Audio Input
+- External Audio Input (sidechain bus)
+- Per-voice pan (equal-power, backward compatible)
 
 ### Known Issues
 

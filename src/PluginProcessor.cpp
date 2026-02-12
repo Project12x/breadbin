@@ -2,8 +2,10 @@
 #include "PluginEditor.h"
 
 BreadbinProcessor::BreadbinProcessor()
-    : juce::AudioProcessor(juce::AudioProcessor::BusesProperties().withOutput(
-          "Output", juce::AudioChannelSet::stereo(), true)),
+    : juce::AudioProcessor(
+          juce::AudioProcessor::BusesProperties()
+              .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)
+              .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout()) {
   // Initialize both SIDs with default models
   sidLeft.setChipModel(chipModelLeft);
@@ -17,6 +19,20 @@ BreadbinProcessor::BreadbinProcessor()
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
+
+bool BreadbinProcessor::isBusesLayoutSupported(
+    const BusesLayout &layouts) const {
+  // Output must be stereo
+  if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+    return false;
+
+  // Input (sidechain) is optional: disabled or stereo
+  auto inputSet = layouts.getMainInputChannelSet();
+  if (!inputSet.isDisabled() && inputSet != juce::AudioChannelSet::stereo())
+    return false;
+
+  return true;
+}
 
 void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // Set base class rate so getSampleRate() works in headless/test mode
@@ -76,13 +92,17 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // internally)
   auto newLeftModel =
       static_cast<SIDEngine::ChipModel>(static_cast<int>(chipLeftPtr->load()));
-  if (newLeftModel != chipModelLeft)
+  if (newLeftModel != chipModelLeft) {
     sidLeft.setChipModel(newLeftModel);
+    chipModelLeft = newLeftModel;
+  }
 
   auto newRightModel =
       static_cast<SIDEngine::ChipModel>(static_cast<int>(chipRightPtr->load()));
-  if (newRightModel != chipModelRight)
+  if (newRightModel != chipModelRight) {
     sidRight.setChipModel(newRightModel);
+    chipModelRight = newRightModel;
+  }
 
   auto newClockMode =
       static_cast<SIDEngine::ClockMode>(static_cast<int>(clockModePtr->load()));
@@ -147,14 +167,54 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
-  // Get input channels for external audio routing
+  // Get input channels from sidechain bus for external audio routing
   const float *inputLeft = nullptr;
   const float *inputRight = nullptr;
-  if (extInputEnabled && buffer.getNumChannels() > 0) {
-    inputLeft = buffer.getReadPointer(0);
-    inputRight =
-        buffer.getNumChannels() > 1 ? buffer.getReadPointer(1) : inputLeft;
+  if (extInputEnabled) {
+    auto inputBus = getBusBuffer(buffer, true, 0);
+    if (inputBus.getNumChannels() > 0) {
+      inputLeft = inputBus.getReadPointer(0);
+      inputRight = inputBus.getNumChannels() > 1 ? inputBus.getReadPointer(1)
+                                                 : inputLeft;
+    }
   }
+
+  // Compute per-SID pan from voice settings (average of active voice pans)
+  float leftSidPan = 0.0f;
+  float rightSidPan = 0.0f;
+  {
+    int leftCount = 0, rightCount = 0;
+    for (int v = 0; v < 3; ++v) {
+      if (voiceSettings[v].enabled) {
+        leftSidPan += voiceSettings[v].pan;
+        ++leftCount;
+      }
+      if (voiceSettings[v + 3].enabled) {
+        rightSidPan += voiceSettings[v + 3].pan;
+        ++rightCount;
+      }
+    }
+    if (leftCount > 0)
+      leftSidPan /= static_cast<float>(leftCount);
+    if (rightCount > 0)
+      rightSidPan /= static_cast<float>(rightCount);
+  }
+
+  // Per-SID pan: offset from natural position (left SID→left, right SID→right)
+  // pan=0 preserves original stereo split behavior (backward compatible)
+  // pan=-1 shifts toward left, pan=+1 shifts toward right
+  constexpr float piOver2 = 1.5707963267948966f; // pi/2
+  // Left SID natural position = full left (angle 0); shift toward center/right
+  float leftAngle =
+      juce::jlimit(0.0f, piOver2, leftSidPan * piOver2 * 0.5f + 0.0f);
+  float leftGainL = std::cos(leftAngle);
+  float leftGainR = std::sin(leftAngle);
+  // Right SID natural position = full right (angle pi/2); shift toward
+  // center/left
+  float rightAngle =
+      juce::jlimit(0.0f, piOver2, piOver2 + rightSidPan * piOver2 * -0.5f);
+  float rightGainL = std::cos(rightAngle);
+  float rightGainR = std::sin(rightAngle);
 
   // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
@@ -169,26 +229,23 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
 
+    // Apply per-voice pan (averaged per SID)
+    float outL = sampleL * leftGainL + sampleR * rightGainL;
+    float outR = sampleL * leftGainR + sampleR * rightGainR;
+
     switch (dualMode) {
     case DualMode::StereoSplit:
-      // Left SID -> Left, Right SID -> Right
-      leftChannel[i] = sampleL;
+    case DualMode::Multitimbral:
+      leftChannel[i] = outL;
       if (rightChannel)
-        rightChannel[i] = sampleR;
+        rightChannel[i] = outR;
       break;
 
     case DualMode::Unison:
-      // Mix both SIDs to both channels
-      leftChannel[i] = (sampleL + sampleR) * 0.5f;
+      // Mix both SIDs to both channels (pan still applies for spatial width)
+      leftChannel[i] = (outL + outR) * 0.5f;
       if (rightChannel)
         rightChannel[i] = leftChannel[i];
-      break;
-
-    case DualMode::Multitimbral:
-      // Same as stereo split, but MIDI routing differs
-      leftChannel[i] = sampleL;
-      if (rightChannel)
-        rightChannel[i] = sampleR;
       break;
     }
   }
@@ -306,11 +363,6 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       bool pedalDown = (value >= 64);
       if (sustainActive != pedalDown) {
         sustainActive = pedalDown;
-
-        // DEBUG: Log sustain activity
-        juce::Logger::writeToLog("Sustain: " + (sustainActive
-                                                    ? juce::String("ON")
-                                                    : juce::String("OFF")));
 
         if (!sustainActive) {
           // If arp is NOT enabled, we need to release notes that are only
@@ -851,11 +903,6 @@ void BreadbinProcessor::handleCC(int cc, int value) {
   if (learningParam != ControlParam::None) {
     midiMappings[cc] = learningParam;
     learningParam = ControlParam::None; // Stop learning once mapped
-
-    // DEBUG: Log new mapping
-    juce::Logger::writeToLog("MIDI Mapped: CC " + juce::String(cc) +
-                             " to Param " +
-                             juce::String(static_cast<int>(midiMappings[cc])));
     return;
   }
 
