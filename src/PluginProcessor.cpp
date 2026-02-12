@@ -100,6 +100,14 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   lfo.depthPulseWidth = lfoDepthPWPtr->load();
   lfo.depthPitch = lfoDepthPitchPtr->load();
 
+  // Sync LFO2 from APVTS
+  lfo2.enabled = lfo2EnablePtr->load() > 0.5f;
+  lfo2.waveform = static_cast<LFOWaveform>(static_cast<int>(lfo2WavePtr->load()));
+  lfo2.rate = lfo2RatePtr->load();
+  lfo2.depthFilter = lfo2DepthFiltPtr->load();
+  lfo2.depthPulseWidth = lfo2DepthPWPtr->load();
+  lfo2.depthPitch = lfo2DepthPitchPtr->load();
+
   // Sync Arp from APVTS
   arpEnabled = arpEnablePtr->load() > 0.5f;
   arpPattern = static_cast<ArpPattern>(static_cast<int>(arpPatternPtr->load()));
@@ -179,7 +187,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (lfo.enabled) {
     processLFO(numSamples);
   }
-  applyLFOModulation(); // Apply LFO to PW and pitch
+  if (lfo2.enabled) {
+    processLFO2(numSamples);
+  }
+  applyLFOModulation(); // Apply LFO1+LFO2 to PW and pitch
 
   // Process filter envelope
   if (filterEnvEnablePtr->load() > 0.5f) {
@@ -648,12 +659,20 @@ void BreadbinProcessor::applyFilterModulation() {
   modOffsetLeft += modWheelOffset;
   modOffsetRight += modWheelOffset;
 
-  // LFO filter depth
+  // LFO1 filter depth
   if (lfo.enabled && lfo.depthFilter > 0.0f) {
     int lfoOffset =
         static_cast<int>(lfo.currentValue * lfo.depthFilter * 1024.0f);
     modOffsetLeft += lfoOffset;
     modOffsetRight += lfoOffset;
+  }
+
+  // LFO2 filter depth
+  if (lfo2.enabled && lfo2.depthFilter > 0.0f) {
+    int lfo2Offset =
+        static_cast<int>(lfo2.currentValue * lfo2.depthFilter * 1024.0f);
+    modOffsetLeft += lfo2Offset;
+    modOffsetRight += lfo2Offset;
   }
 
   // Filter envelope
@@ -962,15 +981,48 @@ void BreadbinProcessor::processLFO(int numSamples) {
   }
 }
 
+void BreadbinProcessor::processLFO2(int numSamples) {
+  double phaseInc =
+      (static_cast<double>(lfo2.rate) * numSamples) / hostSampleRate;
+  double oldPhase = lfo2.phase;
+  lfo2.phase += phaseInc;
+  lfo2.phase -= std::floor(lfo2.phase);
+
+  float p = static_cast<float>(lfo2.phase);
+  switch (lfo2.waveform) {
+  case LFOWaveform::Triangle:
+    lfo2.currentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
+    break;
+  case LFOWaveform::Sawtooth:
+    lfo2.currentValue = 2.0f * p - 1.0f;
+    break;
+  case LFOWaveform::Square:
+    lfo2.currentValue = (p < 0.5f) ? 1.0f : -1.0f;
+    break;
+  case LFOWaveform::SampleAndHold:
+    if (lfo2.phase < oldPhase) {
+      static std::mt19937 rng2(std::random_device{}());
+      std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+      lfo2.shValue = dist(rng2);
+    }
+    lfo2.currentValue = lfo2.shValue;
+    break;
+  }
+}
+
 void BreadbinProcessor::applyLFOModulation() {
-  float val = lfo.enabled ? lfo.currentValue : 0.0f;
+  float val1 = lfo.enabled ? lfo.currentValue : 0.0f;
+  float val2 = lfo2.enabled ? lfo2.currentValue : 0.0f;
 
   // Filter cutoff modulation is now handled by applyFilterModulation()
-  // which stacks mod wheel + LFO + filter envelope contributions.
+  // which stacks mod wheel + LFO1 + LFO2 + filter envelope contributions.
 
-  // Pulse width modulation
-  if (lfo.depthPulseWidth > 0.0f) {
-    int pwMod = static_cast<int>(val * lfo.depthPulseWidth * 2048.0f);
+  // Pulse width modulation (sum LFO1 + LFO2)
+  float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
+  float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
+  if (pwDepth1 > 0.0f || pwDepth2 > 0.0f) {
+    int pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f)
+              + static_cast<int>(val2 * pwDepth2 * 2048.0f);
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         int basePW = voiceSettings[v].pulseWidth;
@@ -986,9 +1038,12 @@ void BreadbinProcessor::applyLFOModulation() {
     }
   }
 
-  // Pitch modulation (vibrato) - ±2 semitones max
-  if (lfo.depthPitch > 0.0f) {
-    float semitoneMod = val * lfo.depthPitch * 2.0f;
+  // Pitch modulation (vibrato) - sum LFO1 + LFO2, ±2 semitones each
+  float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
+  float pitchDepth2 = lfo2.enabled ? lfo2.depthPitch : 0.0f;
+  if (pitchDepth1 > 0.0f || pitchDepth2 > 0.0f) {
+    float semitoneMod = val1 * pitchDepth1 * 2.0f
+                      + val2 * pitchDepth2 * 2.0f;
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         double baseHz =
@@ -1271,6 +1326,23 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"lfoDepthPitch", 1}, "LFO Pitch Depth", 0.0f, 1.0f,
       0.0f));
 
+  // LFO2
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"lfo2Enable", 1}, "LFO2 Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"lfo2Wave", 1}, "LFO2 Waveform",
+      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfo2Rate", 1}, "LFO2 Rate", 0.1f, 20.0f, 3.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfo2DepthFilt", 1}, "LFO2 Filter Depth", 0.0f, 1.0f,
+      0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfo2DepthPW", 1}, "LFO2 PW Depth", 0.0f, 1.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"lfo2DepthPitch", 1}, "LFO2 Pitch Depth", 0.0f, 1.0f,
+      0.0f));
+
   // Filter Envelope
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"filterEnvEnable", 1}, "Filter Env Enable", false));
@@ -1381,6 +1453,13 @@ void BreadbinProcessor::initializeParameterPointers() {
   lfoDepthFiltPtr = apvts.getRawParameterValue("lfoDepthFilt");
   lfoDepthPWPtr = apvts.getRawParameterValue("lfoDepthPW");
   lfoDepthPitchPtr = apvts.getRawParameterValue("lfoDepthPitch");
+
+  lfo2EnablePtr = apvts.getRawParameterValue("lfo2Enable");
+  lfo2WavePtr = apvts.getRawParameterValue("lfo2Wave");
+  lfo2RatePtr = apvts.getRawParameterValue("lfo2Rate");
+  lfo2DepthFiltPtr = apvts.getRawParameterValue("lfo2DepthFilt");
+  lfo2DepthPWPtr = apvts.getRawParameterValue("lfo2DepthPW");
+  lfo2DepthPitchPtr = apvts.getRawParameterValue("lfo2DepthPitch");
 
   arpEnablePtr = apvts.getRawParameterValue("arpEnable");
   arpPatternPtr = apvts.getRawParameterValue("arpPattern");

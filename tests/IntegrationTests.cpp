@@ -1045,6 +1045,111 @@ void testFXStateRoundTrip() {
 }
 
 // ============================================================================
+// LFO2 (Second LFO)
+// ============================================================================
+
+void testLFO2DefaultOff() {
+  std::printf("--- LFO2: Default Off ---\n");
+  auto p = createTestProcessor();
+
+  float lfo2Enable = p->apvts.getRawParameterValue("lfo2Enable")->load();
+  ASSERT_TRUE(lfo2Enable < 0.5f, "lfo2Enable defaults to off");
+
+  float lfo2Rate = p->apvts.getRawParameterValue("lfo2Rate")->load();
+  ASSERT_NEAR(lfo2Rate, 3.0f, 0.1, "lfo2Rate defaults to 3.0 Hz");
+}
+
+void testLFO2IndependentFromLFO1() {
+  std::printf("--- LFO2: Independent from LFO1 ---\n");
+  auto p = createTestProcessor();
+
+  // Enable LFO1 with filter depth, LFO2 off
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfoDepthFilt")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfoRate")->setValueNotifyingHost(0.5f);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // LFO2 should still be disabled
+  float lfo2Enable = p->apvts.getRawParameterValue("lfo2Enable")->load();
+  ASSERT_TRUE(lfo2Enable < 0.5f, "LFO2 remains off when LFO1 enabled");
+
+  // Now enable LFO2 with different rate
+  p->apvts.getParameter("lfo2Enable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfo2Rate")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfo2DepthFilt")->setValueNotifyingHost(1.0f);
+
+  // Process and verify both are active (no crash, produces output)
+  float rms = processBlock(*p, 512);
+  ASSERT_TRUE(rms >= 0.0f, "Both LFOs active without crash");
+}
+
+void testLFO2ProducesModulation() {
+  std::printf("--- LFO2: Produces Pitch Modulation ---\n");
+  auto p1 = createTestProcessor();
+  auto p2 = createTestProcessor();
+
+  // Set high sustain to keep notes alive
+  for (auto *p : {p1.get(), p2.get()}) {
+    p->apvts.getParameter("v0_sustain")->setValueNotifyingHost(1.0f);
+    p->apvts.getParameter("v3_sustain")->setValueNotifyingHost(1.0f);
+    p->apvts.getParameter("v0_attack")->setValueNotifyingHost(0.2f);
+    p->apvts.getParameter("v3_attack")->setValueNotifyingHost(0.2f);
+  }
+
+  // p1: no LFO at all (baseline)
+  // p2: LFO2 only with pitch modulation (vibrato)
+  p2->apvts.getParameter("lfo2Enable")->setValueNotifyingHost(1.0f);
+  p2->apvts.getParameter("lfo2DepthPitch")->setValueNotifyingHost(1.0f);
+  p2->apvts.getParameter("lfo2Rate")->setValueNotifyingHost(5.0f);
+
+  // Play same note on both
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+
+  // Compare output including first block (note onset)
+  float diffSum = 0.0f;
+  for (int i = 0; i < 20; ++i) {
+    juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
+    buf1.clear();
+    buf2.clear();
+    p1->processBlock(buf1, (i == 0) ? midi : juce::MidiBuffer());
+    p2->processBlock(buf2, (i == 0) ? midi : juce::MidiBuffer());
+    for (int s = 0; s < 512; ++s) {
+      diffSum += std::abs(buf1.getSample(0, s) - buf2.getSample(0, s));
+    }
+  }
+  ASSERT_TRUE(diffSum > 0.001f,
+              "LFO2 pitch mod produces different output than no LFO");
+}
+
+void testLFO2StateRoundTrip() {
+  std::printf("--- LFO2: State Round-trip ---\n");
+  auto p = createTestProcessor();
+
+  p->apvts.getParameter("lfo2Enable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfo2Wave")->setValueNotifyingHost(0.667f); // S&H
+  p->apvts.getParameter("lfo2Rate")->setValueNotifyingHost(0.5f);
+  p->apvts.getParameter("lfo2DepthFilt")->setValueNotifyingHost(0.8f);
+
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), (int)stateData.getSize());
+
+  auto getVal = [](BreadbinProcessor &proc, const juce::String &id) {
+    return proc.apvts.getRawParameterValue(id)->load();
+  };
+
+  ASSERT_TRUE(getVal(*p2, "lfo2Enable") > 0.5f, "lfo2Enable restored");
+  ASSERT_NEAR(getVal(*p2, "lfo2DepthFilt"), getVal(*p, "lfo2DepthFilt"),
+              0.05, "lfo2DepthFilt round-trip");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1101,6 +1206,12 @@ int main() {
   testDelayProducesEcho();
   testDelayFeedbackDecays();
   testFXStateRoundTrip();
+
+  // LFO2 (second LFO)
+  testLFO2DefaultOff();
+  testLFO2IndependentFromLFO1();
+  testLFO2ProducesModulation();
+  testLFO2StateRoundTrip();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

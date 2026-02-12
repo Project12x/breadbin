@@ -151,6 +151,26 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "lfoDepthPitch", lfoDepthPitchSlider);
 
+  // LFO2 attachments
+  lfo2EnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfo2Enable", lfo2EnableButton);
+  lfo2WaveAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "lfo2Wave", lfo2WaveformSelector);
+  lfo2RateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2Rate", lfo2RateSlider);
+  lfo2DepthFiltAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthFilt", lfo2DepthFilterSlider);
+  lfo2DepthPWAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthPW", lfo2DepthPWSlider);
+  lfo2DepthPitchAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthPitch", lfo2DepthPitchSlider);
+
   arpEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "arpEnable", arpEnableButton);
@@ -615,6 +635,56 @@ void BreadbinEditor::setupControls() {
   lfoDepthPitchSlider.onValueChange = [this]() {
     processor.getLFO().depthPitch =
         static_cast<float>(lfoDepthPitchSlider.getValue());
+  };
+
+  // LFO2
+  lfo2EnableButton.setTooltip("LFO2: Second independent LFO");
+  lfo2EnableButton.setButtonText("LFO2");
+  addAndMakeVisible(lfo2EnableButton);
+
+  lfo2WaveformSelector.addItem("Tri", 1);
+  lfo2WaveformSelector.addItem("Saw", 2);
+  lfo2WaveformSelector.addItem("Sq", 3);
+  lfo2WaveformSelector.addItem("S&H", 4);
+  lfo2WaveformSelector.setTooltip(
+      "LFO2 Shape: Tri (Smooth), Saw (Ramp), Sq (Hard), S&H (Random)");
+  addAndMakeVisible(lfo2WaveformSelector);
+
+  lfo2RateLabel.setText("Hz", juce::dontSendNotification);
+  lfo2RateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  lfo2RateLabel.setFont(retroFont.withHeight(7.0f));
+  addAndMakeVisible(lfo2RateLabel);
+
+  lfo2RateSlider.setRange(0.1, 20.0, 0.1);
+  lfo2RateSlider.setValue(processor.getLFO2().rate);
+  lfo2RateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  lfo2RateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 12);
+  lfo2RateSlider.setColour(juce::Slider::textBoxTextColourId,
+                            juce::Colours::cyan);
+  lfo2RateSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                            juce::Colours::transparentBlack);
+  lfo2RateSlider.setTooltip("LFO2 Rate: 0.1Hz - 20Hz");
+  addAndMakeVisible(lfo2RateSlider);
+
+  setupDepthSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt",
+                   "LFO2 Filter Mod", processor.getLFO2().depthFilter);
+  lfo2DepthFilterSlider.onValueChange = [this]() {
+    processor.getLFO2().depthFilter =
+        static_cast<float>(lfo2DepthFilterSlider.getValue());
+  };
+
+  setupDepthSlider(lfo2DepthPWSlider, lfo2DepthPWLabel, "PW",
+                   "LFO2 PWM", processor.getLFO2().depthPulseWidth);
+  lfo2DepthPWSlider.onValueChange = [this]() {
+    processor.getLFO2().depthPulseWidth =
+        static_cast<float>(lfo2DepthPWSlider.getValue());
+  };
+
+  setupDepthSlider(lfo2DepthPitchSlider, lfo2DepthPitchLabel, "Vib",
+                   "LFO2 Vibrato", processor.getLFO2().depthPitch);
+  lfo2DepthPitchSlider.onValueChange = [this]() {
+    processor.getLFO2().depthPitch =
+        static_cast<float>(lfo2DepthPitchSlider.getValue());
   };
 
   // Keyboard
@@ -1411,6 +1481,40 @@ void BreadbinEditor::resized() {
   auto feAmtArea = filterEnvStack.removeFromLeft(50);
   filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 50, 12);
   filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 14, 50, 44);
+
+  bounds.removeFromBottom(4);
+
+  // 4b. LFO2 Row (Right-justified, below LFO1)
+  auto lfo2Row = bounds.removeFromBottom(60);
+  auto lfo2Stack = lfo2Row.removeFromRight(349);
+
+  lfo2EnableButton.setBounds(
+      lfo2Stack.removeFromLeft(40).withSize(40, 20).translated(0, 8));
+  lfo2Stack.removeFromLeft(10);
+  lfo2WaveformSelector.setBounds(
+      lfo2Stack.removeFromLeft(80).withSize(80, 20).translated(0, 8));
+  lfo2Stack.removeFromLeft(pad * 2);
+
+  auto rate2Area = lfo2Stack.removeFromLeft(60);
+  lfo2RateSlider.setBounds(rate2Area.withSize(60, 48).translated(0, 2));
+  lfo2RateLabel.setBounds(rate2Area.getX(), lfo2Row.getY() + 2, 30, 12);
+
+  lfo2Stack.removeFromLeft(pad * 2);
+
+  const int dW2 = 45;
+  auto f2Area = lfo2Stack.removeFromLeft(dW2);
+  lfo2DepthFilterLabel.setBounds(f2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
+  lfo2DepthFilterSlider.setBounds(f2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
+
+  lfo2Stack.removeFromLeft(pad);
+  auto p2Area = lfo2Stack.removeFromLeft(dW2);
+  lfo2DepthPWLabel.setBounds(p2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
+  lfo2DepthPWSlider.setBounds(p2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
+
+  lfo2Stack.removeFromLeft(pad);
+  auto v2Area = lfo2Stack.removeFromLeft(dW2);
+  lfo2DepthPitchLabel.setBounds(v2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
+  lfo2DepthPitchSlider.setBounds(v2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
 
   bounds.removeFromBottom(4);
 

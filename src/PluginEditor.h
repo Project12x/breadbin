@@ -299,6 +299,20 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       lfoDepthPitchAttach;
 
+  // LFO2 APVTS attachments
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      lfo2EnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      lfo2WaveAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfo2RateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfo2DepthFiltAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfo2DepthPWAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfo2DepthPitchAttach;
+
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       arpEnableAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
@@ -333,7 +347,7 @@ private:
 
   // Editor constants
   static constexpr int width = 1000;
-  static constexpr int height = 650;
+  static constexpr int height = 714;
 
   // ========== FX: CHORUS ==========
   juce::ToggleButton chorusEnableButton{"Chorus"};
@@ -393,6 +407,20 @@ private:
   MappableSlider lfoDepthPitchSlider{
       processor, BreadbinProcessor::ControlParam::LFODepthPitch};
   juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
+
+  // LFO2 UI components
+  juce::ToggleButton lfo2EnableButton{"LFO2"};
+  juce::ComboBox lfo2WaveformSelector;
+  MappableSlider lfo2RateSlider{processor,
+                                BreadbinProcessor::ControlParam::None};
+  juce::Label lfo2RateLabel;
+  MappableSlider lfo2DepthFilterSlider{
+      processor, BreadbinProcessor::ControlParam::None};
+  MappableSlider lfo2DepthPWSlider{processor,
+                                   BreadbinProcessor::ControlParam::None};
+  MappableSlider lfo2DepthPitchSlider{
+      processor, BreadbinProcessor::ControlParam::None};
+  juce::Label lfo2DepthFilterLabel, lfo2DepthPWLabel, lfo2DepthPitchLabel;
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;

@@ -203,6 +203,8 @@ public:
   // LFO
   LFOState &getLFO() { return lfo; }
   const LFOState &getLFO() const { return lfo; }
+  LFOState &getLFO2() { return lfo2; }
+  const LFOState &getLFO2() const { return lfo2; }
 
   // MIDI Learn
   void startLearning(ControlParam param) { learningParam = param; }
@@ -286,6 +288,14 @@ private:
   std::atomic<float> *lfoDepthPWPtr = nullptr;
   std::atomic<float> *lfoDepthPitchPtr = nullptr;
 
+  // LFO2 APVTS pointers
+  std::atomic<float> *lfo2EnablePtr = nullptr;
+  std::atomic<float> *lfo2WavePtr = nullptr;
+  std::atomic<float> *lfo2RatePtr = nullptr;
+  std::atomic<float> *lfo2DepthFiltPtr = nullptr;
+  std::atomic<float> *lfo2DepthPWPtr = nullptr;
+  std::atomic<float> *lfo2DepthPitchPtr = nullptr;
+
   std::atomic<float> *arpEnablePtr = nullptr;
   std::atomic<float> *arpPatternPtr = nullptr;
   std::atomic<float> *arpRatePtr = nullptr;
@@ -366,8 +376,9 @@ private:
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
   void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
-  void processLFO(int numSamples);  // Advance LFO phase
-  void applyLFOModulation();        // Apply LFO to PW and pitch destinations
+  void processLFO(int numSamples);   // Advance LFO1 phase
+  void processLFO2(int numSamples);  // Advance LFO2 phase
+  void applyLFOModulation();         // Apply LFO1+LFO2 to PW and pitch destinations
   void applyFilterModulation();     // Unified filter cutoff modulation (mod wheel + LFO + filter env)
   void processFilterEnvelope(int numSamples); // Advance filter envelope
 
@@ -386,6 +397,7 @@ private:
 
   // LFO state
   LFOState lfo;
+  LFOState lfo2;
 
   // Filter Envelope state
   FilterEnvelopeState filterEnv;
