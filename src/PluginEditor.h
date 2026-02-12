@@ -220,11 +220,9 @@ private:
                                BreadbinProcessor::ControlParam::VoiceSustain};
   MappableSlider releaseSlider{processor,
                                BreadbinProcessor::ControlParam::VoiceRelease};
-  MappableSlider panSlider{processor,
-                           BreadbinProcessor::ControlParam::VoicePan};
+  // panSlider removed (per-SID pan now)
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
-  juce::Label panLabel;
   juce::ToggleButton ringModButton{"Ring"};
   juce::ToggleButton syncButton{"Sync"};
   juce::ToggleButton voiceFilterButton{"Flt"};
@@ -315,8 +313,7 @@ private:
       voiceSustainAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       voiceReleaseAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-      voicePanAttach;
+  // voicePanAttach removed (per-SID pan now)
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       voiceRingModAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

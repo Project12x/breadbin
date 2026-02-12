@@ -755,17 +755,7 @@ void BreadbinEditor::setupVoiceEditor() {
   setupADSR(releaseSlider, releaseLabel, "Rel",
             "Release: Time to fade after key release (0-15)", 0);
 
-  panLabel.setText("Pan:", juce::dontSendNotification);
-  panLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  addAndMakeVisible(panLabel);
-
-  panSlider.setRange(-1.0, 1.0, 0.01);
-  panSlider.setValue(0.0);
-  panSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  panSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  panSlider.setTooltip("Pan: Left (-1) to Right (+1)");
-  panSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
-  addAndMakeVisible(panSlider);
+  // Per-voice pan removed (now per-SID via leftPan/rightPan APVTS)
 
   // Ring Modulation button
   ringModButton.setTooltip(
@@ -853,7 +843,7 @@ void BreadbinEditor::loadVoiceToUI(int voice) {
   decaySlider.setValue(settings.decay, juce::dontSendNotification);
   sustainSlider.setValue(settings.sustain, juce::dontSendNotification);
   releaseSlider.setValue(settings.release, juce::dontSendNotification);
-  panSlider.setValue(settings.pan, juce::dontSendNotification);
+  // per-voice pan removed (now per-SID)
   presetSelector.setSelectedId(settings.presetId, juce::dontSendNotification);
 
   // Ring mod and sync
@@ -890,7 +880,7 @@ void BreadbinEditor::saveUIToVoice(int voice) {
   settings.decay = static_cast<int>(decaySlider.getValue());
   settings.sustain = static_cast<int>(sustainSlider.getValue());
   settings.release = static_cast<int>(releaseSlider.getValue());
-  settings.pan = static_cast<float>(panSlider.getValue());
+  // per-voice pan removed (now per-SID)
 
   // Ring mod and sync
   settings.ringMod = ringModButton.getToggleState();
@@ -1084,12 +1074,9 @@ void BreadbinEditor::resized() {
 
   // LFO moved to global stack below
 
-  // Row 2: Pan, Glide, Ring Mod, Sync
+  // Row 2: Glide, Ring Mod, Sync (per-voice pan removed)
   editorArea.removeFromTop(pad);
   auto row2 = editorArea.removeFromTop(28);
-  panLabel.setBounds(row2.removeFromLeft(30));
-  panSlider.setBounds(row2.removeFromLeft(120));
-  row2.removeFromLeft(pad * 3);
   glideTimeLabel.setBounds(row2.removeFromLeft(35));
   glideTimeSlider.setBounds(row2.removeFromLeft(120));
   row2.removeFromLeft(pad * 3);
@@ -1559,7 +1546,7 @@ void BreadbinEditor::refreshVoiceEditorAttachments() {
   voiceDecayAttach.reset();
   voiceSustainAttach.reset();
   voiceReleaseAttach.reset();
-  voicePanAttach.reset();
+  // voicePanAttach removed (per-SID pan now)
   voiceRingModAttach.reset();
   voiceSyncAttach.reset();
   voiceFilterAttach.reset();
@@ -1585,9 +1572,7 @@ void BreadbinEditor::refreshVoiceEditorAttachments() {
   voiceReleaseAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, prefix + "release", releaseSlider);
-  voicePanAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, prefix + "pan", panSlider);
+  // voicePanAttach removed (per-SID pan now)
   voiceRingModAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, prefix + "ringMod", ringModButton);

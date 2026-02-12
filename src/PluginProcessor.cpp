@@ -206,25 +206,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
 
-    // Apply per-voice pan (averaged per SID)
+    // Apply per-SID pan (equal-power pan law)
     float outL = sampleL * leftGainL + sampleR * rightGainL;
     float outR = sampleL * leftGainR + sampleR * rightGainR;
 
-    switch (dualMode) {
-    case DualMode::StereoSplit:
-    case DualMode::Multitimbral:
-      leftChannel[i] = outL;
-      if (rightChannel)
-        rightChannel[i] = outR;
-      break;
-
-    case DualMode::Unison:
-      // Mix both SIDs to both channels (pan still applies for spatial width)
-      leftChannel[i] = (outL + outR) * 0.5f;
-      if (rightChannel)
-        rightChannel[i] = leftChannel[i];
-      break;
-    }
+    // All modes use the same stereo output path.
+    // In Unison, both SIDs render the same notes independently,
+    // so per-SID pan still provides stereo width.
+    leftChannel[i] = outL;
+    if (rightChannel)
+      rightChannel[i] = outR;
   }
 
   // Apply safety chain (DC blocker, ultrasonic filter, limiter)
@@ -962,7 +953,8 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
     applyVoiceSettings(selectedVoice);
     break;
   case ControlParam::VoicePan:
-    voiceSettings[selectedVoice].pan = (normalized * 2.0f) - 1.0f;
+    // Per-voice pan is no longer used; per-SID pan (leftPan/rightPan APVTS)
+    // controls stereo positioning. MIDI mapping kept for compatibility.
     break;
   case ControlParam::VoiceRingMod:
     voiceSettings[selectedVoice].ringMod = (value >= 64);
