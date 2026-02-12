@@ -25,7 +25,7 @@
 - 14-bit pitch bend
 - PAL/NTSC clock switching
 - External Audio Input (sidechain bus)
-- Per-voice pan (equal-power, backward compatible)
+- Per-SID pan (equal-power, UI sliders in each SID panel)
 
 ### Known Issues
 
@@ -44,7 +44,7 @@
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations | 5.6% survival |
-| BreadbinIntegrationTests | 47+ | Pass |
+| BreadbinIntegrationTests | 72 | Pass |
 
 ## Directory Structure
 
