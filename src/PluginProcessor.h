@@ -217,6 +217,9 @@ public:
   float getMasterVolume() const { return masterVolume; }
   void setMasterVolume(float vol);
 
+  // True after setStateInformation has been called (saved state exists)
+  bool wasStateRestored() const { return stateRestored; }
+
   // Preset helpers for granular saving/loading
   juce::ValueTree getVoiceState(int voiceIndex) const;
   void setVoiceState(int voiceIndex, const juce::ValueTree &state);
@@ -234,6 +237,9 @@ public:
   const LFOState &getLFO() const { return lfo; }
   LFOState &getLFO2() { return lfo2; }
   const LFOState &getLFO2() const { return lfo2; }
+
+  // Wavetable
+  const WavetableState &getWavetable() const { return wavetable; }
 
   // MIDI Learn
   void startLearning(ControlParam param) { learningParam = param; }
@@ -261,6 +267,8 @@ private:
   float rightDetuneCents = 0.0f;
   float glideTimeMs = 0.0f;
   SIDEngine::ClockMode clockMode = SIDEngine::ClockMode::PAL;
+
+  bool stateRestored = false;
 
   // Pitch bend and mod wheel
   float pitchBendValue = 0.0f;     // -1.0 to +1.0 (normalized)

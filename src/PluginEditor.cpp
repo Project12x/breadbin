@@ -31,10 +31,16 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupRightSID();
   setupVoiceEditor();
 
-  // Apply Init preset to initialize all voices
-  applyGlobalPreset(1);
-  selectVoice(0);
-  setResizeLimits(650, 500, 1200, 900);
+  // On first-ever launch, apply Dual Lead. On restart, sync from saved APVTS state.
+  if (!processor.wasStateRestored()) {
+    applyGlobalPreset(1);
+  } else {
+    for (int v = 0; v < 6; ++v)
+      processor.applyVoiceSettings(v);
+  }
+  selectVoice(processor.getSelectedVoice());
+  setSize(1000, 800);
+  setResizeLimits(900, 750, 1200, 1000);
   addAndMakeVisible(midiLearnOverlay);
   midiLearnOverlay.setAlwaysOnTop(true);
 
@@ -353,12 +359,11 @@ void BreadbinEditor::setupControls() {
                               juce::Colours::lightgrey);
   addAndMakeVisible(globalPresetLabel);
 
-  globalPresetSelector.addItem("Init", 1);
-  globalPresetSelector.addItem("Dual Lead", 2);
-  globalPresetSelector.addItem("Pad Stack", 3);
-  globalPresetSelector.addItem("Arpeggiated", 4);
-  globalPresetSelector.addItem("Fat Unison", 5);
-  globalPresetSelector.addItem("Retro Synth", 6);
+  globalPresetSelector.addItem("Dual Lead", 1);
+  globalPresetSelector.addItem("Pad Stack", 2);
+  globalPresetSelector.addItem("Arpeggiated", 3);
+  globalPresetSelector.addItem("Fat Unison", 4);
+  globalPresetSelector.addItem("Retro Synth", 5);
   globalPresetSelector.setSelectedId(1);
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
@@ -376,6 +381,7 @@ void BreadbinEditor::setupControls() {
   presetSelector.addItem("Fat Bass (Ocean)", 3);
   presetSelector.addItem("PWM Pad (Hubbard)", 4);
   presetSelector.addItem("Noise Snare", 5);
+  presetSelector.addItem("Retro Triangle", 6);
   presetSelector.setSelectedId(1);
   presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
@@ -437,11 +443,6 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(agingSlider);
 
   // ========== ARPEGGIATOR ==========
-  arpEnableButton.setToggleState(processor.isArpEnabled(),
-                                 juce::dontSendNotification);
-  arpEnableButton.onClick = [this]() {
-    processor.setArpEnabled(arpEnableButton.getToggleState());
-  };
   arpEnableButton.setTooltip("Enable the arpeggiator");
   addAndMakeVisible(arpEnableButton);
 
@@ -537,9 +538,6 @@ void BreadbinEditor::setupControls() {
   // External Audio Input
   extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
                                       juce::dontSendNotification);
-  extInputEnableButton.onClick = [this]() {
-    processor.setExtInputEnabled(extInputEnableButton.getToggleState());
-  };
   extInputEnableButton.setTooltip("Route external audio through SID filters");
   addAndMakeVisible(extInputEnableButton);
 
@@ -1721,16 +1719,32 @@ void BreadbinEditor::resized() {
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
-  auto configureVoice = [this, presetId](int voice, SIDEngine::Waveform wave,
-                                         int pw, int a, int d, int s, int r) {
-    auto &settings = processor.getVoiceSettings(voice);
-    settings.presetId = presetId;
-    settings.waveform = wave;
-    settings.pulseWidth = pw;
-    settings.attack = a;
-    settings.decay = d;
-    settings.sustain = s;
-    settings.release = r;
+  // Convert SIDEngine::Waveform to APVTS choice index
+  auto waveToIndex = [](SIDEngine::Waveform w) -> float {
+    switch (w) {
+    case SIDEngine::Waveform::Triangle: return 0.0f;
+    case SIDEngine::Waveform::Sawtooth: return 1.0f;
+    case SIDEngine::Waveform::Pulse:    return 2.0f;
+    case SIDEngine::Waveform::Noise:    return 3.0f;
+    default: return 0.0f;
+    }
+  };
+
+  auto configureVoice = [this, presetId, &waveToIndex](
+                             int voice, SIDEngine::Waveform wave, int pw,
+                             int a, int d, int s, int r) {
+    juce::String prefix = "v" + juce::String(voice) + "_";
+    auto setParam = [&](const juce::String &id, float val) {
+      auto *p = processor.apvts.getParameter(id);
+      p->setValueNotifyingHost(p->convertTo0to1(val));
+    };
+    setParam(prefix + "waveform", waveToIndex(wave));
+    setParam(prefix + "pw", static_cast<float>(pw));
+    setParam(prefix + "attack", static_cast<float>(a));
+    setParam(prefix + "decay", static_cast<float>(d));
+    setParam(prefix + "sustain", static_cast<float>(s));
+    setParam(prefix + "release", static_cast<float>(r));
+    processor.getVoiceSettings(voice).presetId = presetId;
     processor.applyVoiceSettings(voice);
   };
 
@@ -1751,155 +1765,230 @@ void BreadbinEditor::applyPreset(int presetId) {
   case 5: // Noise Snare - Noise with fast decay
     configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 8, 0, 4);
     break;
+  case 6: // Retro Triangle - Soft triangle with slow attack
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
+    break;
   }
 
   loadVoiceToUI(selectedVoice);
 }
 
 void BreadbinEditor::applyGlobalPreset(int presetId) {
-  // Helper to configure a voice
-  auto configVoice = [this](int v, SIDEngine::Waveform wave, int pw, int a,
-                            int d, int s, int r) {
-    auto &vs = processor.getVoiceSettings(v);
-    vs.waveform = wave;
-    vs.pulseWidth = pw;
-    vs.attack = a;
-    vs.decay = d;
-    vs.sustain = s;
-    vs.release = r;
-    vs.enabled = true;
+  // APVTS helper: set any parameter by ID and denormalized value
+  auto setParam = [this](const juce::String &id, float val) {
+    auto *p = processor.apvts.getParameter(id);
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(val));
+  };
+
+  // Convert SIDEngine::Waveform to APVTS choice index
+  auto waveToIndex = [](SIDEngine::Waveform w) -> float {
+    switch (w) {
+    case SIDEngine::Waveform::Triangle: return 0.0f;
+    case SIDEngine::Waveform::Sawtooth: return 1.0f;
+    case SIDEngine::Waveform::Pulse:    return 2.0f;
+    case SIDEngine::Waveform::Noise:    return 3.0f;
+    default: return 0.0f;
+    }
+  };
+
+  // ---- FULL STATE RESET ----
+  // Every global preset defines the complete plugin state.
+  // Reset all params to factory defaults first, then each preset overrides.
+
+  // Per-voice defaults
+  for (int v = 0; v < 6; ++v) {
+    juce::String vp = "v" + juce::String(v) + "_";
+    setParam(vp + "enable", 1.0f);
+    setParam(vp + "waveform", 2.0f);   // Pulse
+    setParam(vp + "pw", 2048.0f);
+    setParam(vp + "attack", 0.0f);
+    setParam(vp + "decay", 0.0f);
+    setParam(vp + "sustain", 15.0f);
+    setParam(vp + "release", 0.0f);
+    setParam(vp + "ringMod", 0.0f);
+    setParam(vp + "sync", 0.0f);
+    setParam(vp + "filter", 1.0f);
+    processor.getVoiceSettings(v).presetId = 1; // "-- Select --"
+  }
+
+  // Dual mode: StereoSplit (0)
+  setParam("dualMode", 0.0f);
+
+  // Detune: centered
+  setParam("leftDetune", 0.0f);
+  setParam("rightDetune", 0.0f);
+
+  // Glide: off
+  setParam("glide", 0.0f);
+
+  // Clock: PAL
+  setParam("clockMode", 0.0f);
+
+  // Pan: hard left/right
+  setParam("leftPan", -1.0f);
+  setParam("rightPan", 1.0f);
+
+  // Filter cutoff/resonance (non-APVTS, set on SID directly)
+  processor.getLeftSID().setFilterCutoff(1024);
+  processor.getLeftSID().setFilterResonance(0);
+  processor.getRightSID().setFilterCutoff(1024);
+  processor.getRightSID().setFilterResonance(0);
+  processor.setBaseFilterCutoff(true, 1024);
+  processor.setBaseFilterCutoff(false, 1024);
+  processor.setBaseFilterResonance(true, 0);
+  processor.setBaseFilterResonance(false, 0);
+  leftCutoffSlider.setValue(1024.0, juce::dontSendNotification);
+  leftResonanceSlider.setValue(0.0, juce::dontSendNotification);
+  rightCutoffSlider.setValue(1024.0, juce::dontSendNotification);
+  rightResonanceSlider.setValue(0.0, juce::dontSendNotification);
+
+  // Arpeggiator: off, defaults
+  setParam("arpEnable", 0.0f);
+  setParam("arpPattern", 0.0f);   // Up
+  setParam("arpRate", 50.0f);
+  setParam("arpOctaves", 1.0f);
+
+  // LFO1: off, defaults
+  setParam("lfoEnable", 0.0f);
+  setParam("lfoWave", 0.0f);      // Triangle
+  setParam("lfoRate", 1.0f);
+  setParam("lfoDepthFilt", 0.0f);
+  setParam("lfoDepthPW", 0.0f);
+  setParam("lfoDepthPitch", 0.0f);
+
+  // LFO2: off, defaults
+  setParam("lfo2Enable", 0.0f);
+  setParam("lfo2Wave", 0.0f);     // Triangle
+  setParam("lfo2Rate", 3.0f);
+  setParam("lfo2DepthFilt", 0.0f);
+  setParam("lfo2DepthPW", 0.0f);
+  setParam("lfo2DepthPitch", 0.0f);
+
+  // Filter Envelope: off, defaults
+  setParam("filterEnvEnable", 0.0f);
+  setParam("filterEnvAttack", 0.01f);
+  setParam("filterEnvDecay", 0.3f);
+  setParam("filterEnvSustain", 0.5f);
+  setParam("filterEnvRelease", 0.5f);
+  setParam("filterEnvAmount", 0.5f);
+
+  // Chorus: off, defaults
+  setParam("chorusEnable", 0.0f);
+  setParam("chorusRate", 1.5f);
+  setParam("chorusDepth", 0.3f);
+  setParam("chorusMix", 0.5f);
+
+  // Delay: off, defaults
+  setParam("delayEnable", 0.0f);
+  setParam("delayTimeL", 375.0f);
+  setParam("delayTimeR", 500.0f);
+  setParam("delayFeedback", 0.3f);
+  setParam("delayMix", 0.3f);
+
+  // Wavetable: off, defaults
+  setParam("wtEnable", 0.0f);
+  setParam("wtNumSteps", 4.0f);
+  setParam("wtRate", 50.0f);
+  setParam("wtLoop", 1.0f);
+  for (int i = 0; i < 16; ++i) {
+    auto wp = "wt_s" + juce::String(i) + "_";
+    setParam(wp + "wave", 2.0f);   // Pulse
+    setParam(wp + "pitch", 0.0f);
+    setParam(wp + "pw", 2048.0f);
+  }
+
+  // Mod Matrix: all slots cleared
+  for (int i = 0; i < 4; ++i) {
+    auto mp = "mod" + juce::String(i) + "_";
+    setParam(mp + "src", 0.0f);   // None
+    setParam(mp + "dst", 0.0f);   // None
+    setParam(mp + "amt", 0.0f);
+  }
+
+  // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user preference)
+
+  // ---- VOICE CONFIGURATION HELPER ----
+  // Sets voice waveform/ADSR via APVTS, assigns voice preset ID, syncs engine
+  auto configVoice = [this, &setParam, &waveToIndex](
+                         int v, SIDEngine::Waveform wave, int pw,
+                         int a, int d, int s, int r, int vpId = 1) {
+    juce::String vp = "v" + juce::String(v) + "_";
+    setParam(vp + "enable", 1.0f);
+    setParam(vp + "waveform", waveToIndex(wave));
+    setParam(vp + "pw", static_cast<float>(pw));
+    setParam(vp + "attack", static_cast<float>(a));
+    setParam(vp + "decay", static_cast<float>(d));
+    setParam(vp + "sustain", static_cast<float>(s));
+    setParam(vp + "release", static_cast<float>(r));
+    processor.getVoiceSettings(v).presetId = vpId;
     processor.applyVoiceSettings(v);
   };
 
-  // Reset both SIDs to default filter state
-  auto resetFilters = [this]() {
-    processor.getLeftSID().setFilterCutoff(1024);
-    processor.getLeftSID().setFilterResonance(0);
-    processor.getRightSID().setFilterCutoff(1024);
-    processor.getRightSID().setFilterResonance(0);
-    leftCutoffSlider.setValue(1024.0);
-    leftResonanceSlider.setValue(0.0);
-    rightCutoffSlider.setValue(1024.0);
-    rightResonanceSlider.setValue(0.0);
+  // Helper: set filter cutoff/resonance on both SIDs + base values + sliders
+  auto setFilters = [this](int cutoff, int resonance) {
+    processor.getLeftSID().setFilterCutoff(cutoff);
+    processor.getLeftSID().setFilterResonance(resonance);
+    processor.getRightSID().setFilterCutoff(cutoff);
+    processor.getRightSID().setFilterResonance(resonance);
+    processor.setBaseFilterCutoff(true, cutoff);
+    processor.setBaseFilterCutoff(false, cutoff);
+    processor.setBaseFilterResonance(true, resonance);
+    processor.setBaseFilterResonance(false, resonance);
+    leftCutoffSlider.setValue(static_cast<double>(cutoff), juce::dontSendNotification);
+    leftResonanceSlider.setValue(static_cast<double>(resonance), juce::dontSendNotification);
+    rightCutoffSlider.setValue(static_cast<double>(cutoff), juce::dontSendNotification);
+    rightResonanceSlider.setValue(static_cast<double>(resonance), juce::dontSendNotification);
   };
 
-  // Reset detune
-  auto resetDetune = [this]() {
-    processor.setLeftDetune(0.0f);
-    processor.setRightDetune(0.0f);
-    leftDetuneSlider.setValue(0.0);
-    rightDetuneSlider.setValue(0.0);
-  };
+  // ---- PER-PRESET OVERRIDES ----
+  // Only set what differs from the defaults above.
 
   switch (presetId) {
-  case 1: // Init - Basic pulse on all voices
-    for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 0);
-    }
-    processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
-    dualModeSelector.setSelectedId(1, juce::dontSendNotification);
-    processor.setArpEnabled(false);
-    arpEnableButton.setToggleState(false, juce::dontSendNotification);
-    resetFilters();
-    resetDetune();
+  case 1: // Dual Lead - Fat Bass saw + Classic Lead pulse, detuned
+    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
+    configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    configVoice(2, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    configVoice(3, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
+    configVoice(4, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    configVoice(5, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    setParam("leftDetune", -5.0f);
+    setParam("rightDetune", 5.0f);
+    setFilters(1800, 4);
     break;
 
-  case 2: // Dual Lead - Classic SID lead sound
-    // Left SID voices - slightly detuned saw
-    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4);
-    configVoice(1, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5);
-    configVoice(2, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5);
-    // Right SID voices - complement
-    configVoice(3, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4);
-    configVoice(4, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5);
-    configVoice(5, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5);
-    processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
-    dualModeSelector.setSelectedId(1, juce::dontSendNotification);
-    processor.setLeftDetune(-5.0f);
-    processor.setRightDetune(5.0f);
-    leftDetuneSlider.setValue(-5.0);
-    rightDetuneSlider.setValue(5.0);
-    // Bright filter for lead
-    processor.getLeftSID().setFilterCutoff(1800);
-    processor.getLeftSID().setFilterResonance(4);
-    processor.getRightSID().setFilterCutoff(1800);
-    processor.getRightSID().setFilterResonance(4);
-    leftCutoffSlider.setValue(1800.0);
-    leftResonanceSlider.setValue(4.0);
-    rightCutoffSlider.setValue(1800.0);
-    rightResonanceSlider.setValue(4.0);
+  case 2: // Pad Stack - PWM Pad on all voices, chorus on
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12, 8, 4);
+    setParam("leftDetune", -8.0f);
+    setParam("rightDetune", 8.0f);
+    setFilters(800, 6);
     break;
 
-  case 3: // Pad Stack - Slow attack pad
-    for (int v = 0; v < 6; ++v) {
-      int pw = 1024 + (v % 3) * 300; // Varied pulse widths
-      configVoice(v, SIDEngine::Waveform::Pulse, pw, 10, 4, 12, 10);
-    }
-    processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
-    dualModeSelector.setSelectedId(1, juce::dontSendNotification);
-    processor.setLeftDetune(-8.0f);
-    processor.setRightDetune(8.0f);
-    leftDetuneSlider.setValue(-8.0);
-    rightDetuneSlider.setValue(8.0);
-    // Mellow filter for pad
-    processor.getLeftSID().setFilterCutoff(800);
-    processor.getLeftSID().setFilterResonance(6);
-    processor.getRightSID().setFilterCutoff(800);
-    processor.getRightSID().setFilterResonance(6);
-    leftCutoffSlider.setValue(800.0);
-    leftResonanceSlider.setValue(6.0);
-    rightCutoffSlider.setValue(800.0);
-    rightResonanceSlider.setValue(6.0);
+  case 3: // Arpeggiated - Classic Lead with fast arp
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    setParam("arpEnable", 1.0f);
+    setParam("arpRate", 8.0f);
+    setParam("arpOctaves", 2.0f);
     break;
 
-  case 4: // Arpeggiated - Fast arp with bright sound
-    for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 3);
-    }
-    processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
-    dualModeSelector.setSelectedId(1, juce::dontSendNotification);
-    processor.setArpEnabled(true);
-    processor.setArpRate(8.0f);
-    processor.setArpOctaves(2);
-    arpEnableButton.setToggleState(true, juce::dontSendNotification);
-    arpRateSlider.setValue(8.0);
-    arpOctaveSelector.setSelectedId(2, juce::dontSendNotification);
-    resetFilters();
-    resetDetune();
+  case 4: // Fat Unison - Fat Bass on all voices with heavy detune
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
+    setParam("dualMode", 1.0f); // Unison
+    setParam("leftDetune", -12.0f);
+    setParam("rightDetune", 12.0f);
+    setFilters(1200, 3);
     break;
 
-  case 5: // Fat Unison - Thick unison sound
-    for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 14, 5);
-    }
-    processor.setDualMode(BreadbinProcessor::DualMode::Unison);
-    dualModeSelector.setSelectedId(2, juce::dontSendNotification);
-    processor.setLeftDetune(-12.0f);
-    processor.setRightDetune(12.0f);
-    leftDetuneSlider.setValue(-12.0);
-    rightDetuneSlider.setValue(12.0);
-    // Rich filter for unison
-    processor.getLeftSID().setFilterCutoff(1200);
-    processor.getLeftSID().setFilterResonance(3);
-    processor.getRightSID().setFilterCutoff(1200);
-    processor.getRightSID().setFilterResonance(3);
-    leftCutoffSlider.setValue(1200.0);
-    leftResonanceSlider.setValue(3.0);
-    rightCutoffSlider.setValue(1200.0);
-    rightResonanceSlider.setValue(3.0);
-    break;
-
-  case 6: // Retro Synth - Mixed waveforms for classic vibe
-    configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
-    configVoice(1, SIDEngine::Waveform::Pulse, 1536, 0, 6, 12, 4);
-    configVoice(2, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5);
-    configVoice(3, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
-    configVoice(4, SIDEngine::Waveform::Pulse, 2560, 0, 6, 12, 4);
-    configVoice(5, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5);
-    processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
-    dualModeSelector.setSelectedId(1, juce::dontSendNotification);
-    resetFilters();
-    resetDetune();
+  case 5: // Retro Synth - Mixed voice presets for classic vibe
+    configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 6);
+    configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    configVoice(2, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
+    configVoice(3, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 6);
+    configVoice(4, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
+    configVoice(5, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
     break;
   }
 

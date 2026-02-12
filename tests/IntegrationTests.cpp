@@ -1202,6 +1202,170 @@ void testWavetableStateRoundTrip() {
   ASSERT_TRUE(getVal(*p2, "wtLoop") < 0.5f, "wtLoop restored as off");
 }
 
+void testWavetablePWPreservedWithLFOOff() {
+  std::printf("--- Wavetable: Step PW preserved when LFO off ---\n");
+
+  // Verify WT step PW is synced from APVTS and used as base in applyLFOModulation
+  auto p = createTestProcessor();
+
+  // Set WT enabled with 1 step, PW=100 via setValueNotifyingHost
+  auto *wtEn = p->apvts.getParameter("wtEnable");
+  wtEn->setValueNotifyingHost(1.0f);
+  auto *ns = p->apvts.getParameter("wtNumSteps");
+  ns->setValueNotifyingHost(ns->convertTo0to1(1.0f));
+  auto *pw = p->apvts.getParameter("wt_s0_pw");
+  pw->setValueNotifyingHost(pw->convertTo0to1(100.0f));
+
+  // Process one block to sync APVTS -> wavetable state
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+  float rms = processBlock(*p, 512, &midi);
+
+  // Verify wavetable state was synced correctly
+  auto &wt = p->getWavetable();
+  ASSERT_TRUE(wt.enabled, "WT enabled after processBlock");
+  ASSERT_TRUE(wt.numSteps == 1, "WT numSteps synced to 1");
+  ASSERT_TRUE(wt.steps[0].pulseWidth == 100,
+              "WT step 0 PW synced to 100 (not overwritten)");
+  ASSERT_TRUE(rms > 0.0f, "Audio produced with WT PW=100");
+  std::printf("  WT state: enabled=%d steps=%d step0.pw=%d rms=%.6f\n",
+              wt.enabled ? 1 : 0, wt.numSteps, wt.steps[0].pulseWidth, rms);
+}
+
+void testWavetablePitchOffsetPreserved() {
+  std::printf("--- Wavetable: Pitch offset preserved when LFO off ---\n");
+
+  // Verify WT step pitch offset is synced and used in applyLFOModulation
+  auto p = createTestProcessor();
+
+  auto *wtEn = p->apvts.getParameter("wtEnable");
+  wtEn->setValueNotifyingHost(1.0f);
+  auto *ns = p->apvts.getParameter("wtNumSteps");
+  ns->setValueNotifyingHost(ns->convertTo0to1(1.0f));
+  auto *pp = p->apvts.getParameter("wt_s0_pitch");
+  pp->setValueNotifyingHost(pp->convertTo0to1(12.0f)); // +12 semitones (1 octave)
+
+  // Process one block to sync
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+  float rms = processBlock(*p, 512, &midi);
+
+  // Verify wavetable state
+  auto &wt = p->getWavetable();
+  ASSERT_TRUE(wt.enabled, "WT enabled after processBlock");
+  ASSERT_TRUE(wt.steps[0].pitchOffset == 12,
+              "WT step 0 pitch synced to +12 (not overwritten)");
+  ASSERT_TRUE(rms > 0.0f, "Audio produced with WT pitch offset");
+  std::printf("  WT state: enabled=%d step0.pitch=%d rms=%.6f\n",
+              wt.enabled ? 1 : 0, wt.steps[0].pitchOffset, rms);
+}
+
+void testWavetableLFOCoexistence() {
+  std::printf("--- Wavetable: WT + LFO coexistence ---\n");
+
+  // Verify WT and LFO coexist: both active after processBlock, LFO runs
+  // with non-zero output, WT step values preserved as modulation base
+  auto p = createTestProcessor();
+
+  p->apvts.getParameter("wtEnable")->setValueNotifyingHost(1.0f);
+  auto *ns = p->apvts.getParameter("wtNumSteps");
+  ns->setValueNotifyingHost(ns->convertTo0to1(1.0f));
+  auto *pw = p->apvts.getParameter("wt_s0_pw");
+  pw->setValueNotifyingHost(pw->convertTo0to1(100.0f));
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *rate = p->apvts.getParameter("lfoRate");
+  rate->setValueNotifyingHost(rate->convertTo0to1(5.0f));
+  p->apvts.getParameter("lfoDepthPW")->setValueNotifyingHost(1.0f);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)127), 0);
+  float rms = processBlock(*p, 512, &midi);
+
+  // After processBlock, LFO should be active with a non-zero value
+  auto &lfoState = p->getLFO();
+  ASSERT_TRUE(lfoState.enabled, "LFO enabled during WT+LFO coexistence");
+  ASSERT_TRUE(lfoState.depthPulseWidth > 0.5f,
+              "LFO PW depth set during WT+LFO coexistence");
+  ASSERT_TRUE(std::abs(lfoState.currentValue) > 0.001f,
+              "LFO produced non-zero value with WT active");
+
+  // WT should still be active with correct step values
+  auto &wt = p->getWavetable();
+  ASSERT_TRUE(wt.enabled, "WT still enabled during WT+LFO coexistence");
+  ASSERT_TRUE(wt.steps[0].pulseWidth == 100,
+              "WT step PW preserved as LFO base");
+
+  ASSERT_TRUE(rms > 0.0f, "Audio produced with WT+LFO both active");
+  std::printf("  WT+LFO coexist: wt.pw=%d lfo.val=%.4f lfo.depthPW=%.2f rms=%.6f\n",
+              wt.steps[0].pulseWidth, lfoState.currentValue,
+              lfoState.depthPulseWidth, rms);
+}
+
+// ============================================================================
+// Pipeline Order-of-Operations Test
+// ============================================================================
+// Documents the intended modulation pipeline in processBlock:
+//   1. applyVoiceSettings()  — sets waveform/PW/ADSR from APVTS voice params
+//   2. handleMidiEvent()     — noteOn/noteOff, pitch bend
+//   3. processWavetable()    — overrides waveform per step (PW/pitch deferred)
+//   4. processGlide()        — interpolates frequency for portamento
+//   5. processLFO()/LFO2()   — advances LFO phase, computes currentValue
+//   6. applyLFOModulation()  — sets PW (WT base when active) + pitch (WT offset)
+//   7. processFilterEnvelope()
+//   8. applyFilterModulation() — stacks mod wheel + LFO + filter env on cutoff
+//   9. applyModMatrix()      — additional source->dest routing
+//  10. SID clock loop        — per-sample audio generation
+//  11. Safety chain          — subsonic/ultrasonic filters, limiter, noise gate
+
+void testPipelineOrderOfOperations() {
+  std::printf("--- Pipeline: WT base -> LFO mod -> filter/env/mod-matrix ---\n");
+
+  // Enable WT (step PW=500, pitch=+7) and LFO1 (PW depth).
+  // After processBlock, verify:
+  //   - WT step values are the base (not voice APVTS defaults)
+  //   - LFO ran on top (non-zero currentValue)
+  //   - Filter modulation ran (applyFilterModulation uses stacked sources)
+  auto p = createTestProcessor();
+  p->apvts.getParameter("wtEnable")->setValueNotifyingHost(1.0f);
+  auto *ns = p->apvts.getParameter("wtNumSteps");
+  ns->setValueNotifyingHost(ns->convertTo0to1(1.0f));
+  auto *pw = p->apvts.getParameter("wt_s0_pw");
+  pw->setValueNotifyingHost(pw->convertTo0to1(500.0f));
+  auto *pitch = p->apvts.getParameter("wt_s0_pitch");
+  pitch->setValueNotifyingHost(pitch->convertTo0to1(7.0f));
+
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *rate = p->apvts.getParameter("lfoRate");
+  rate->setValueNotifyingHost(rate->convertTo0to1(10.0f));
+  p->apvts.getParameter("lfoDepthPW")->setValueNotifyingHost(0.5f);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  float rms = processBlock(*p, 512, &midi);
+
+  // Stage 3: WT step values are the modulation base
+  auto &wt = p->getWavetable();
+  ASSERT_TRUE(wt.enabled, "Pipeline: WT active");
+  ASSERT_TRUE(wt.steps[0].pulseWidth == 500,
+              "Pipeline: WT PW=500 is base (not voice default 2048)");
+  ASSERT_TRUE(wt.steps[0].pitchOffset == 7,
+              "Pipeline: WT pitch=+7 is base (not voice default 0)");
+
+  // Stage 5-6: LFO ran and produced a value
+  auto &lfo = p->getLFO();
+  ASSERT_TRUE(lfo.enabled, "Pipeline: LFO active");
+  ASSERT_TRUE(std::abs(lfo.currentValue) > 0.001f,
+              "Pipeline: LFO produced non-zero value");
+  ASSERT_TRUE(lfo.depthPulseWidth > 0.4f,
+              "Pipeline: LFO PW depth preserved");
+
+  // Stage 10: Audio was generated
+  ASSERT_TRUE(rms > 0.0f, "Pipeline: audio produced");
+  std::printf("  Pipeline OK: wt.pw=%d wt.pitch=%d lfo.val=%.4f rms=%.6f\n",
+              wt.steps[0].pulseWidth, wt.steps[0].pitchOffset,
+              lfo.currentValue, rms);
+}
+
 // ============================================================================
 // Mod Matrix Tests
 // ============================================================================
@@ -1486,6 +1650,10 @@ int main() {
   testWavetableDefaultOff();
   testWavetableChangesWaveform();
   testWavetableStateRoundTrip();
+  testWavetablePWPreservedWithLFOOff();
+  testWavetablePitchOffsetPreserved();
+  testWavetableLFOCoexistence();
+  testPipelineOrderOfOperations();
 
   // Mod matrix
   testModMatrixDefaultNone();

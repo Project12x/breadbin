@@ -835,6 +835,7 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         }
       }
       selectedVoice = apvts.state.getProperty("selectedVoice", 0);
+      stateRestored = true;
     }
   }
 }
@@ -1092,50 +1093,26 @@ void BreadbinProcessor::processWavetable(int numSamples) {
     wavetable.currentStep = nextStep;
   }
 
-  // Apply current step to all active voices
+  // Apply current step's waveform to all active voices.
+  // PW and pitch are applied later in applyLFOModulation() which
+  // uses wavetable step values as the base when WT is active.
   auto &step = wavetable.steps[wavetable.currentStep];
 
   // Map waveform index to SIDEngine::Waveform
   SIDEngine::Waveform wf;
   switch (step.waveform) {
-  case 0:
-    wf = SIDEngine::Waveform::Triangle;
-    break;
-  case 1:
-    wf = SIDEngine::Waveform::Sawtooth;
-    break;
-  case 2:
-    wf = SIDEngine::Waveform::Pulse;
-    break;
-  case 3:
-    wf = SIDEngine::Waveform::Noise;
-    break;
-  default:
-    wf = SIDEngine::Waveform::Pulse;
-    break;
+  case 0:  wf = SIDEngine::Waveform::Triangle; break;
+  case 1:  wf = SIDEngine::Waveform::Sawtooth; break;
+  case 2:  wf = SIDEngine::Waveform::Pulse;    break;
+  case 3:  wf = SIDEngine::Waveform::Noise;    break;
+  default: wf = SIDEngine::Waveform::Pulse;    break;
   }
 
   for (int v = 0; v < 6; ++v) {
     if (!voices[v].active)
       continue;
-
     SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-    int sidVoice = v % 3;
-
-    // Set waveform
-    sid.setWaveform(sidVoice, wf);
-
-    // Set pulse width
-    sid.setPulseWidth(sidVoice, step.pulseWidth);
-
-    // Apply pitch offset
-    if (step.pitchOffset != 0) {
-      double baseHz =
-          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-      double modHz =
-          baseHz * std::pow(2.0, step.pitchOffset / 12.0);
-      sid.setFrequency(sidVoice, modHz);
-    }
+    sid.setWaveform(v % 3, wf);
   }
 }
 
@@ -1207,49 +1184,39 @@ void BreadbinProcessor::applyLFOModulation() {
   // Filter cutoff modulation is now handled by applyFilterModulation()
   // which stacks mod wheel + LFO1 + LFO2 + filter envelope contributions.
 
-  // Pulse width modulation (sum LFO1 + LFO2)
+  // When wavetable is active, use its step values as base instead of voice settings
+  bool wtActive = wavetable.enabled;
+  auto &wtStep = wavetable.steps[wavetable.currentStep];
+
+  // Pulse width modulation (sum LFO1 + LFO2, stacked on wavetable PW if active)
   float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
   float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
-  if (pwDepth1 > 0.0f || pwDepth2 > 0.0f) {
-    int pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f)
-              + static_cast<int>(val2 * pwDepth2 * 2048.0f);
-    for (int v = 0; v < 6; ++v) {
-      if (voices[v].active) {
-        int basePW = voiceSettings[v].pulseWidth;
-        int modPW = std::clamp(basePW + pwMod, 0, 4095);
-        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-        sid.setPulseWidth(v % 3, modPW);
-      }
-    }
-  } else {
-    for (int v = 0; v < 6; ++v) {
-      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-      sid.setPulseWidth(v % 3, voiceSettings[v].pulseWidth);
-    }
+  int pwMod = 0;
+  if (pwDepth1 > 0.0f || pwDepth2 > 0.0f)
+    pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f)
+          + static_cast<int>(val2 * pwDepth2 * 2048.0f);
+  for (int v = 0; v < 6; ++v) {
+    int basePW = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
+    int modPW = std::clamp(basePW + pwMod, 0, 4095);
+    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+    sid.setPulseWidth(v % 3, modPW);
   }
 
-  // Pitch modulation (vibrato) - sum LFO1 + LFO2, ±2 semitones each
+  // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if active
   float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
   float pitchDepth2 = lfo2.enabled ? lfo2.depthPitch : 0.0f;
-  if (pitchDepth1 > 0.0f || pitchDepth2 > 0.0f) {
-    float semitoneMod = val1 * pitchDepth1 * 2.0f
-                      + val2 * pitchDepth2 * 2.0f;
-    for (int v = 0; v < 6; ++v) {
-      if (voices[v].active) {
-        double baseHz =
-            voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-        double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
-        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-        sid.setFrequency(v % 3, modHz);
-      }
-    }
-  } else {
-    for (int v = 0; v < 6; ++v) {
-      double resetHz =
-          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-      sid.setFrequency(v % 3, resetHz);
-    }
+  float semitoneMod = 0.0f;
+  if (pitchDepth1 > 0.0f || pitchDepth2 > 0.0f)
+    semitoneMod = val1 * pitchDepth1 * 2.0f + val2 * pitchDepth2 * 2.0f;
+  // Add wavetable pitch offset
+  if (wtActive)
+    semitoneMod += static_cast<float>(wtStep.pitchOffset);
+  for (int v = 0; v < 6; ++v) {
+    double baseHz =
+        voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+    double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+    sid.setFrequency(v % 3, modHz);
   }
 }
 
