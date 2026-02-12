@@ -48,7 +48,18 @@
 - [x] Master Volume & Sustain Pedal
 - [x] Preset system (per-voice and global presets with selector UI)
 
-## Phase 6: Production Readiness
+## Phase 6: Competitive Feature Sprint ✅
+
+- [x] Filter Envelope (ADSR, bipolar amount, stacks with mod wheel + LFO)
+- [x] Built-in FX: Chorus (JUCE DSP) + Stereo Delay (independent L/R times)
+- [x] Second LFO (LFO2, identical structure, independent controls)
+- [x] Wavetable step sequencer (16 steps, per-step waveform/PW/pitch, WT base -> LFO mod stacking)
+- [x] 4-slot Mod Matrix (6 sources x 5 destinations, bipolar amount)
+- [x] Global presets: full 130+ parameter reset before per-preset overrides
+- [x] Fix: mod wheel + LFO filter modulation stacking (was overwrite)
+- [x] Fix: wavetable PW/pitch now used as LFO base (was overwritten by voice defaults)
+
+## Phase 7: Production Readiness
 
 ### Quick Wins
 
@@ -58,7 +69,6 @@
 ### Composition Tools
 
 - [ ] Chord Memory (store 4 chord shapes, trigger from single key)
-- [ ] Wavetable support (custom wavetable loading for SID)
 
 ### Release Engineering
 
@@ -83,3 +93,5 @@
 | 2026-02-11 | RT-unsafe logging | Removed `Logger::writeToLog` from audio thread | v0.9.2 |
 | 2026-02-11 | External input bus | Real input bus via `isBusesLayoutSupported` | v0.9.2 |
 | 2026-02-11 | Per-SID pan (engine) | `leftPan`/`rightPan` APVTS with equal-power pan law | v0.9.2 |
+| 2026-02-11 | Competitive feature sprint | Filter env, chorus+delay, LFO2, wavetable, mod matrix, preset reset | Phase 6 |
+| 2026-02-11 | WT PW/pitch overwrite fix | `applyLFOModulation` uses WT step as base; pipeline order-of-ops test | `c630455` |

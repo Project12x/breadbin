@@ -26,6 +26,12 @@
 - PAL/NTSC clock switching
 - External Audio Input (sidechain bus)
 - Per-SID pan (equal-power, UI sliders in each SID panel)
+- Filter Envelope (ADSR with bipolar amount)
+- Built-in FX: Chorus + Stereo Delay
+- Second LFO (LFO2, independent from LFO1)
+- Wavetable step sequencer (16 steps, per-step waveform/PW/pitch)
+- 4-slot Mod Matrix (LFO1/LFO2/FilterEnv/ModWheel/Velocity -> Filter/PW/Pitch/Resonance)
+- Global presets with full parameter reset
 
 ### Known Issues
 
@@ -44,7 +50,7 @@
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations | 5.6% survival |
-| BreadbinIntegrationTests | 72 | Pass |
+| BreadbinIntegrationTests | 146 | Pass |
 
 ## Directory Structure
 
