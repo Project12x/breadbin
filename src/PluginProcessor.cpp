@@ -162,7 +162,20 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (lfo.enabled) {
     processLFO(numSamples);
   }
-  applyLFOModulation(); // Always apply to handle resets when disabled
+  applyLFOModulation(); // Apply LFO to PW and pitch
+
+  // Process filter envelope
+  if (filterEnvEnablePtr->load() > 0.5f) {
+    processFilterEnvelope(numSamples);
+  } else if (filterEnv.currentValue > 0.0f) {
+    // Reset envelope when disabled
+    filterEnv.currentValue = 0.0f;
+    filterEnv.stage = FilterEnvelopeState::Stage::Idle;
+    filterEnv.gateWasOn = false;
+  }
+
+  // Unified filter modulation (stacks mod wheel + LFO + filter envelope)
+  applyFilterModulation();
 
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
@@ -326,7 +339,7 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
 
     if (cc == 1) { // Mod wheel
       modWheelValue = value / 127.0f;
-      applyModWheelToFilter();
+      // Filter modulation applied per-block via applyFilterModulation()
     } else if (cc == 64) { // Sustain pedal
       bool pedalDown = (value >= 64);
       if (sustainActive != pedalDown) {
@@ -503,14 +516,97 @@ void BreadbinProcessor::updateAllVoiceFrequencies() {
   }
 }
 
-void BreadbinProcessor::applyModWheelToFilter() {
-  // Mod wheel adds 0-1000 to filter cutoff (opening the filter)
-  int modOffset = static_cast<int>(modWheelValue * 1000.0f);
+void BreadbinProcessor::processFilterEnvelope(int numSamples) {
+  // Determine gate: any voice active?
+  bool gateOn = false;
+  for (int v = 0; v < 6; ++v) {
+    if (voices[v].active) {
+      gateOn = true;
+      break;
+    }
+  }
 
-  // Apply to both SIDs (clamped to valid range 0-2047)
-  int leftCutoff = juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffset);
-  int rightCutoff = juce::jlimit(0, 2047, baseFilterCutoffRight + modOffset);
+  // Gate transitions
+  if (gateOn && !filterEnv.gateWasOn) {
+    filterEnv.stage = FilterEnvelopeState::Stage::Attack;
+  } else if (!gateOn && filterEnv.gateWasOn) {
+    filterEnv.stage = FilterEnvelopeState::Stage::Release;
+  }
+  filterEnv.gateWasOn = gateOn;
 
+  float dt = static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
+  float attack = filterEnvAttackPtr->load();
+  float decay = filterEnvDecayPtr->load();
+  float sustain = filterEnvSustainPtr->load();
+  float release = filterEnvReleasePtr->load();
+
+  switch (filterEnv.stage) {
+  case FilterEnvelopeState::Stage::Attack:
+    filterEnv.currentValue += dt / attack;
+    if (filterEnv.currentValue >= 1.0f) {
+      filterEnv.currentValue = 1.0f;
+      filterEnv.stage = FilterEnvelopeState::Stage::Decay;
+    }
+    break;
+  case FilterEnvelopeState::Stage::Decay: {
+    float decayRate = dt / decay;
+    filterEnv.currentValue -= decayRate * (filterEnv.currentValue - sustain);
+    if (filterEnv.currentValue <= sustain + 0.001f) {
+      filterEnv.currentValue = sustain;
+      filterEnv.stage = FilterEnvelopeState::Stage::Sustain;
+    }
+    break;
+  }
+  case FilterEnvelopeState::Stage::Sustain:
+    filterEnv.currentValue = sustain;
+    break;
+  case FilterEnvelopeState::Stage::Release: {
+    float releaseRate = dt / release;
+    filterEnv.currentValue -= releaseRate * filterEnv.currentValue;
+    if (filterEnv.currentValue <= 0.001f) {
+      filterEnv.currentValue = 0.0f;
+      filterEnv.stage = FilterEnvelopeState::Stage::Idle;
+    }
+    break;
+  }
+  case FilterEnvelopeState::Stage::Idle:
+    filterEnv.currentValue = 0.0f;
+    break;
+  }
+}
+
+void BreadbinProcessor::applyFilterModulation() {
+  // Unified filter cutoff modulation: base + mod wheel + LFO + filter envelope
+  int modOffsetLeft = 0;
+  int modOffsetRight = 0;
+
+  // Mod wheel: adds 0-1000 to filter cutoff
+  int modWheelOffset = static_cast<int>(modWheelValue * 1000.0f);
+  modOffsetLeft += modWheelOffset;
+  modOffsetRight += modWheelOffset;
+
+  // LFO filter depth
+  if (lfo.enabled && lfo.depthFilter > 0.0f) {
+    int lfoOffset =
+        static_cast<int>(lfo.currentValue * lfo.depthFilter * 1024.0f);
+    modOffsetLeft += lfoOffset;
+    modOffsetRight += lfoOffset;
+  }
+
+  // Filter envelope
+  if (filterEnvEnablePtr->load() > 0.5f) {
+    float envAmount = filterEnvAmountPtr->load();
+    int envOffset =
+        static_cast<int>(filterEnv.currentValue * envAmount * 2047.0f);
+    modOffsetLeft += envOffset;
+    modOffsetRight += envOffset;
+  }
+
+  // Apply combined modulation
+  int leftCutoff =
+      juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffsetLeft);
+  int rightCutoff =
+      juce::jlimit(0, 2047, baseFilterCutoffRight + modOffsetRight);
   sidLeft.setFilterCutoff(leftCutoff);
   sidRight.setFilterCutoff(rightCutoff);
 }
@@ -806,17 +902,8 @@ void BreadbinProcessor::processLFO(int numSamples) {
 void BreadbinProcessor::applyLFOModulation() {
   float val = lfo.enabled ? lfo.currentValue : 0.0f;
 
-  // Filter cutoff modulation
-  if (lfo.depthFilter > 0.0f) {
-    int modAmount = static_cast<int>(val * lfo.depthFilter * 1024.0f);
-    int leftCutoff = std::clamp(baseFilterCutoffLeft + modAmount, 0, 2047);
-    int rightCutoff = std::clamp(baseFilterCutoffRight + modAmount, 0, 2047);
-    sidLeft.setFilterCutoff(leftCutoff);
-    sidRight.setFilterCutoff(rightCutoff);
-  } else {
-    sidLeft.setFilterCutoff(baseFilterCutoffLeft);
-    sidRight.setFilterCutoff(baseFilterCutoffRight);
-  }
+  // Filter cutoff modulation is now handled by applyFilterModulation()
+  // which stacks mod wheel + LFO + filter envelope contributions.
 
   // Pulse width modulation
   if (lfo.depthPulseWidth > 0.0f) {
@@ -1121,6 +1208,25 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"lfoDepthPitch", 1}, "LFO Pitch Depth", 0.0f, 1.0f,
       0.0f));
 
+  // Filter Envelope
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"filterEnvEnable", 1}, "Filter Env Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"filterEnvAttack", 1}, "Filter Env Attack", 0.001f,
+      10.0f, 0.01f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"filterEnvDecay", 1}, "Filter Env Decay", 0.001f,
+      10.0f, 0.3f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"filterEnvSustain", 1}, "Filter Env Sustain", 0.0f,
+      1.0f, 0.5f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"filterEnvRelease", 1}, "Filter Env Release", 0.001f,
+      10.0f, 0.5f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"filterEnvAmount", 1}, "Filter Env Amount", -1.0f,
+      1.0f, 0.5f));
+
   // Arpeggiator
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"arpEnable", 1}, "Arpeggiator", false));
@@ -1192,6 +1298,14 @@ void BreadbinProcessor::initializeParameterPointers() {
   arpPatternPtr = apvts.getRawParameterValue("arpPattern");
   arpRatePtr = apvts.getRawParameterValue("arpRate");
   arpOctavesPtr = apvts.getRawParameterValue("arpOctaves");
+
+  // Filter Envelope
+  filterEnvEnablePtr = apvts.getRawParameterValue("filterEnvEnable");
+  filterEnvAttackPtr = apvts.getRawParameterValue("filterEnvAttack");
+  filterEnvDecayPtr = apvts.getRawParameterValue("filterEnvDecay");
+  filterEnvSustainPtr = apvts.getRawParameterValue("filterEnvSustain");
+  filterEnvReleasePtr = apvts.getRawParameterValue("filterEnvRelease");
+  filterEnvAmountPtr = apvts.getRawParameterValue("filterEnvAmount");
 
   for (int v = 0; v < 6; ++v) {
     juce::String prefix = "v" + juce::String(v) + "_";

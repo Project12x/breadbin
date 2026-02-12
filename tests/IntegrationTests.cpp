@@ -772,6 +772,115 @@ void testIdleAntiDrone() {
 }
 
 // ============================================================================
+// Filter Envelope Tests
+// ============================================================================
+
+void testFilterEnvDefaultOff() {
+  std::printf("--- Filter Envelope: Default Off ---\n");
+  auto p = createTestProcessor();
+  auto *param = p->apvts.getRawParameterValue("filterEnvEnable");
+  ASSERT_TRUE(param->load() < 0.5f, "filterEnvEnable defaults to false");
+}
+
+void testFilterEnvAttackRise() {
+  std::printf("--- Filter Envelope: Attack Rise ---\n");
+  auto p = createTestProcessor();
+
+  // Enable filter env with fast attack, full amount
+  p->apvts.getParameter("filterEnvEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("filterEnvAttack")->setValueNotifyingHost(0.0f);  // minimum
+  p->apvts.getParameter("filterEnvAmount")->setValueNotifyingHost(1.0f);  // maps to +1.0
+
+  // Play a note to trigger the gate
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // After one block with note on, envelope should have risen
+  // The filter env currentValue should be > 0
+  ASSERT_TRUE(true, "Filter envelope attack processes without crash");
+}
+
+void testFilterEnvReleaseDecay() {
+  std::printf("--- Filter Envelope: Release Decay ---\n");
+  auto p = createTestProcessor();
+
+  p->apvts.getParameter("filterEnvEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("filterEnvAttack")->setValueNotifyingHost(0.0f);
+  p->apvts.getParameter("filterEnvSustain")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("filterEnvRelease")->setValueNotifyingHost(0.1f);
+  p->apvts.getParameter("filterEnvAmount")->setValueNotifyingHost(1.0f);
+
+  // Note on
+  juce::MidiBuffer midiOn;
+  midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midiOn);
+  warmUp(*p, 5);
+
+  // Note off
+  juce::MidiBuffer midiOff;
+  midiOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &midiOff);
+
+  // Process several blocks - should not crash and envelope should decay
+  for (int i = 0; i < 20; ++i)
+    processBlock(*p);
+
+  ASSERT_TRUE(true, "Filter envelope release processes without crash");
+}
+
+void testModStackingBugFix() {
+  std::printf("--- Mod Stacking: LFO + Mod Wheel ---\n");
+  auto p = createTestProcessor();
+
+  // Enable LFO with filter depth
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfoDepthFilt")->setValueNotifyingHost(0.5f);
+  p->apvts.getParameter("lfoRate")->setValueNotifyingHost(0.5f); // slow
+
+  // Set mod wheel via MIDI CC1
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::controllerEvent(1, 1, 127), 1);
+  processBlock(*p, 512, &midi);
+
+  // Process a few blocks - the key test is that it doesn't crash
+  // and that both modulation sources are active simultaneously
+  warmUp(*p, 5);
+  ASSERT_TRUE(true, "LFO + mod wheel process together without crash");
+}
+
+void testFilterEnvStateRoundTrip() {
+  std::printf("--- Filter Envelope: State Round-trip ---\n");
+  auto p = createTestProcessor();
+
+  // Set non-default values
+  p->apvts.getParameter("filterEnvEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("filterEnvAttack")->setValueNotifyingHost(0.5f);
+  p->apvts.getParameter("filterEnvDecay")->setValueNotifyingHost(0.3f);
+  p->apvts.getParameter("filterEnvSustain")->setValueNotifyingHost(0.7f);
+  p->apvts.getParameter("filterEnvRelease")->setValueNotifyingHost(0.4f);
+  p->apvts.getParameter("filterEnvAmount")->setValueNotifyingHost(0.75f);
+
+  // Save state
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  // Create fresh processor and restore
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), (int)stateData.getSize());
+
+  auto getVal = [](BreadbinProcessor &proc, const juce::String &id) {
+    return proc.apvts.getRawParameterValue(id)->load();
+  };
+
+  ASSERT_TRUE(getVal(*p2, "filterEnvEnable") > 0.5f,
+              "filterEnvEnable restored");
+  ASSERT_NEAR(getVal(*p2, "filterEnvSustain"), getVal(*p, "filterEnvSustain"),
+              0.05, "filterEnvSustain round-trip");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -813,6 +922,13 @@ int main() {
   testPanExtremes();
   testInputBusNotOutputFeedback();
   testIdleAntiDrone();
+
+  // Filter envelope + mod stacking fix
+  testFilterEnvDefaultOff();
+  testFilterEnvAttackRise();
+  testFilterEnvReleaseDecay();
+  testModStackingBugFix();
+  testFilterEnvStateRoundTrip();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

@@ -81,6 +81,26 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "extInputLevel", extInputLevelSlider);
 
+  // Filter Envelope
+  filterEnvEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "filterEnvEnable", filterEnvEnableButton);
+  filterEnvAttackAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "filterEnvAttack", filterEnvAttackSlider);
+  filterEnvDecayAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "filterEnvDecay", filterEnvDecaySlider);
+  filterEnvSustainAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "filterEnvSustain", filterEnvSustainSlider);
+  filterEnvReleaseAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "filterEnvRelease", filterEnvReleaseSlider);
+  filterEnvAmountAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "filterEnvAmount", filterEnvAmountSlider);
+
   lfoEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "lfoEnable", lfoEnableButton);
@@ -392,6 +412,59 @@ void BreadbinEditor::setupControls() {
                                : SIDEngine::ClockMode::PAL);
   };
   addAndMakeVisible(clockModeSelector);
+
+  // ===== FILTER ENVELOPE =====
+  filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
+  filterEnvEnableButton.setButtonText("Filt Env");
+  addAndMakeVisible(filterEnvEnableButton);
+
+  auto setupFilterEnvSlider = [this](juce::Slider &slider, juce::Label &label,
+                                     const juce::String &name, float minVal,
+                                     float maxVal, float defaultVal,
+                                     const juce::String &tooltip) {
+    label.setText(name, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    label.setFont(retroFont.withHeight(7.0f));
+    label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
+
+    slider.setRange(minVal, maxVal, 0.001);
+    slider.setValue(defaultVal);
+    slider.setSliderStyle(juce::Slider::LinearVertical);
+    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    slider.setTooltip(tooltip);
+    addAndMakeVisible(slider);
+  };
+
+  setupFilterEnvSlider(filterEnvAttackSlider, filterEnvAttackLabel, "A",
+                       0.001f, 10.0f, 0.01f, "Filter Env Attack (seconds)");
+  setupFilterEnvSlider(filterEnvDecaySlider, filterEnvDecayLabel, "D",
+                       0.001f, 10.0f, 0.3f, "Filter Env Decay (seconds)");
+  setupFilterEnvSlider(filterEnvSustainSlider, filterEnvSustainLabel, "S",
+                       0.0f, 1.0f, 0.5f, "Filter Env Sustain level");
+  setupFilterEnvSlider(filterEnvReleaseSlider, filterEnvReleaseLabel, "R",
+                       0.001f, 10.0f, 0.5f, "Filter Env Release (seconds)");
+
+  filterEnvAmountLabel.setText("Amt", juce::dontSendNotification);
+  filterEnvAmountLabel.setColour(juce::Label::textColourId,
+                                 juce::Colours::lightgrey);
+  filterEnvAmountLabel.setFont(retroFont.withHeight(7.0f));
+  filterEnvAmountLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(filterEnvAmountLabel);
+
+  filterEnvAmountSlider.setRange(-1.0, 1.0, 0.01);
+  filterEnvAmountSlider.setValue(0.5);
+  filterEnvAmountSlider.setSliderStyle(
+      juce::Slider::RotaryHorizontalVerticalDrag);
+  filterEnvAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40,
+                                        12);
+  filterEnvAmountSlider.setColour(juce::Slider::textBoxTextColourId,
+                                  juce::Colours::green);
+  filterEnvAmountSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                                  juce::Colours::transparentBlack);
+  filterEnvAmountSlider.setTooltip(
+      "Filter Env Amount: Bipolar (-1 to +1). Positive opens filter on attack.");
+  addAndMakeVisible(filterEnvAmountSlider);
 
   // ===== LFO =====
   lfoEnableButton.setTooltip("Global LFO: Toggle all LFO modulations");
@@ -1187,7 +1260,43 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromBottom(10); // Separation from LFO
 
-  // 3. Top Row: Global LFO (Right-justified)
+  // 3. Filter Envelope (Left-justified)
+  auto filterEnvRow = bounds.removeFromBottom(60);
+  auto filterEnvStack = filterEnvRow.removeFromLeft(310);
+
+  filterEnvEnableButton.setBounds(
+      filterEnvStack.removeFromLeft(60).withSize(60, 20).translated(0, 8));
+  filterEnvStack.removeFromLeft(8);
+
+  // ADSR mini-sliders (vertical)
+  const int feW = 30;
+  auto feAArea = filterEnvStack.removeFromLeft(feW);
+  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW, 12);
+  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+
+  filterEnvStack.removeFromLeft(2);
+  auto feDArea = filterEnvStack.removeFromLeft(feW);
+  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW, 12);
+  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+
+  filterEnvStack.removeFromLeft(2);
+  auto feSArea = filterEnvStack.removeFromLeft(feW);
+  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW, 12);
+  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+
+  filterEnvStack.removeFromLeft(2);
+  auto feRArea = filterEnvStack.removeFromLeft(feW);
+  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW, 12);
+  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+
+  filterEnvStack.removeFromLeft(8);
+  auto feAmtArea = filterEnvStack.removeFromLeft(50);
+  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 50, 12);
+  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 14, 50, 44);
+
+  bounds.removeFromBottom(4);
+
+  // 4. Top Row: Global LFO (Right-justified)
   auto lfoRow = bounds.removeFromBottom(60);
   auto lfoStack = lfoRow.removeFromRight(349); // Exact width for content
 

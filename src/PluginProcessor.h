@@ -29,6 +29,14 @@ public:
     float shValue = 0.0f; // Sample & Hold latched value
   };
 
+  // Filter envelope state (software ADSR for filter cutoff modulation)
+  struct FilterEnvelopeState {
+    enum class Stage { Idle, Attack, Decay, Sustain, Release };
+    Stage stage = Stage::Idle;
+    bool gateWasOn = false;
+    float currentValue = 0.0f; // 0.0-1.0 envelope output
+  };
+
   enum class ControlParam {
     None = 0,
     MasterVolume,
@@ -283,6 +291,14 @@ private:
   std::atomic<float> *arpRatePtr = nullptr;
   std::atomic<float> *arpOctavesPtr = nullptr;
 
+  // Filter Envelope APVTS pointers
+  std::atomic<float> *filterEnvEnablePtr = nullptr;
+  std::atomic<float> *filterEnvAttackPtr = nullptr;
+  std::atomic<float> *filterEnvDecayPtr = nullptr;
+  std::atomic<float> *filterEnvSustainPtr = nullptr;
+  std::atomic<float> *filterEnvReleasePtr = nullptr;
+  std::atomic<float> *filterEnvAmountPtr = nullptr;
+
   struct VoiceParamPtrs {
     std::atomic<float> *enable = nullptr;
     std::atomic<float> *waveform = nullptr;
@@ -332,9 +348,10 @@ private:
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
   void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
-  void applyModWheelToFilter();     // Apply mod wheel to filter cutoff
   void processLFO(int numSamples);  // Advance LFO phase
-  void applyLFOModulation();        // Apply LFO to destinations
+  void applyLFOModulation();        // Apply LFO to PW and pitch destinations
+  void applyFilterModulation();     // Unified filter cutoff modulation (mod wheel + LFO + filter env)
+  void processFilterEnvelope(int numSamples); // Advance filter envelope
 
   // Arpeggiator
   bool arpEnabled = false;
@@ -351,6 +368,9 @@ private:
 
   // LFO state
   LFOState lfo;
+
+  // Filter Envelope state
+  FilterEnvelopeState filterEnv;
 
   // Master Control & MIDI
   float masterVolume = 0.8f;

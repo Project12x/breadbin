@@ -333,7 +333,31 @@ private:
 
   // Editor constants
   static constexpr int width = 1000;
-  static constexpr int height = 550;
+  static constexpr int height = 650;
+
+  // ========== FILTER ENVELOPE ==========
+  juce::ToggleButton filterEnvEnableButton{"Filt Env"};
+  juce::Slider filterEnvAttackSlider;
+  juce::Slider filterEnvDecaySlider;
+  juce::Slider filterEnvSustainSlider;
+  juce::Slider filterEnvReleaseSlider;
+  juce::Slider filterEnvAmountSlider;
+  juce::Label filterEnvAttackLabel, filterEnvDecayLabel;
+  juce::Label filterEnvSustainLabel, filterEnvReleaseLabel;
+  juce::Label filterEnvAmountLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      filterEnvEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      filterEnvAttackAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      filterEnvDecayAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      filterEnvSustainAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      filterEnvReleaseAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      filterEnvAmountAttach;
 
   // ========== LFO ==========
   juce::ToggleButton lfoEnableButton{"LFO"};
