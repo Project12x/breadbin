@@ -53,6 +53,11 @@ public:
     std::array<WavetableStep, 16> steps;
   };
 
+  // Mod Matrix
+  enum class ModSource { None = 0, LFO1, LFO2, FilterEnv, ModWheel, Velocity };
+  enum class ModDest { None = 0, FilterCutoff, PulseWidth, Pitch, Resonance };
+  static constexpr int kModSlots = 4;
+
   enum class ControlParam {
     None = 0,
     MasterVolume,
@@ -192,6 +197,14 @@ public:
   // Mod Wheel (CC1) -> Filter cutoff modulation
   float getModWheelValue() const { return modWheelValue; }
 
+  // Base filter values (updated by editor sliders, used by modulation system)
+  void setBaseFilterCutoff(bool isLeft, int value) {
+    if (isLeft) baseFilterCutoffLeft = value; else baseFilterCutoffRight = value;
+  }
+  void setBaseFilterResonance(bool isLeft, int value) {
+    if (isLeft) baseFilterResLeft = value; else baseFilterResRight = value;
+  }
+
   // External audio input (routes through SID filter)
   bool isExtInputEnabled() const { return extInputEnabled; }
   void setExtInputEnabled(bool enabled) { extInputEnabled = enabled; }
@@ -255,6 +268,10 @@ private:
   float modWheelValue = 0.0f;      // 0.0 to 1.0
   int baseFilterCutoffLeft = 1024; // Store base cutoff for mod wheel
   int baseFilterCutoffRight = 1024;
+  int baseFilterResLeft = 0;  // Store base resonance for mod matrix
+  int baseFilterResRight = 0;
+  int lastAppliedCutoffLeft = 1024;  // Post-modulation cutoff (set by applyFilterModulation)
+  int lastAppliedCutoffRight = 1024;
 
   // External audio input
   bool extInputEnabled = false;
@@ -367,6 +384,15 @@ private:
     std::atomic<float> *pw = nullptr;
   };
   std::array<WTStepPtrs, 16> wtStepPtrs;
+
+  // Mod Matrix APVTS pointers
+  struct ModSlotPtrs {
+    std::atomic<float> *src = nullptr;
+    std::atomic<float> *dst = nullptr;
+    std::atomic<float> *amt = nullptr;
+  };
+  std::array<ModSlotPtrs, kModSlots> modSlotPtrs;
+  void applyModMatrix(); // Apply mod matrix routing after all mod sources computed
 
   // FX CHAIN
   juce::dsp::Chorus<float> chorus;

@@ -111,6 +111,29 @@ private:
   BreadbinProcessor::ControlParam controlParam;
 };
 
+// Mod Matrix popup panel (shown in a DialogWindow)
+class ModMatrixPanel : public juce::Component {
+public:
+  ModMatrixPanel(BreadbinProcessor &proc);
+  void resized() override;
+  void paint(juce::Graphics &g) override;
+  static constexpr int panelWidth = 420;
+  static constexpr int panelHeight = 180;
+
+private:
+  BreadbinProcessor &processor;
+  struct SlotRow {
+    juce::ComboBox srcBox, dstBox;
+    juce::Slider amtSlider;
+    juce::Label slotLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        srcAttach, dstAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+        amtAttach;
+  };
+  std::array<SlotRow, BreadbinProcessor::kModSlots> slots;
+};
+
 class BreadbinEditor : public juce::AudioProcessorEditor,
                        private juce::MidiKeyboardState::Listener,
                        private juce::Timer {
@@ -435,6 +458,11 @@ private:
   MappableSlider lfo2DepthPitchSlider{
       processor, BreadbinProcessor::ControlParam::None};
   juce::Label lfo2DepthFilterLabel, lfo2DepthPWLabel, lfo2DepthPitchLabel;
+
+  // ========== MOD MATRIX ==========
+  juce::TextButton modMatrixButton{"Mod Matrix"};
+  juce::Component::SafePointer<juce::DialogWindow> modMatrixWindow;
+  void showModMatrixPopup();
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;

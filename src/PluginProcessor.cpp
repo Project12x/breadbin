@@ -221,6 +221,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Unified filter modulation (stacks mod wheel + LFO + filter envelope)
   applyFilterModulation();
 
+  // Mod matrix (additional routing from any source to any dest)
+  applyModMatrix();
+
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -705,6 +708,8 @@ void BreadbinProcessor::applyFilterModulation() {
       juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffsetLeft);
   int rightCutoff =
       juce::jlimit(0, 2047, baseFilterCutoffRight + modOffsetRight);
+  lastAppliedCutoffLeft = leftCutoff;
+  lastAppliedCutoffRight = rightCutoff;
   sidLeft.setFilterCutoff(leftCutoff);
   sidRight.setFilterCutoff(rightCutoff);
 }
@@ -965,6 +970,109 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
   }
 }
 
+void BreadbinProcessor::applyModMatrix() {
+  // Accumulate per-destination modulation
+  float filterMod = 0.0f;
+  float pwMod = 0.0f;
+  float pitchMod = 0.0f;
+  float resMod = 0.0f;
+
+  for (int i = 0; i < kModSlots; ++i) {
+    auto src = static_cast<ModSource>(static_cast<int>(modSlotPtrs[i].src->load()));
+    auto dst = static_cast<ModDest>(static_cast<int>(modSlotPtrs[i].dst->load()));
+    float amt = modSlotPtrs[i].amt->load();
+
+    if (src == ModSource::None || dst == ModDest::None || amt == 0.0f)
+      continue;
+
+    // Get source value (-1.0 to 1.0)
+    float sourceVal = 0.0f;
+    switch (src) {
+    case ModSource::LFO1:
+      sourceVal = lfo.enabled ? lfo.currentValue : 0.0f;
+      break;
+    case ModSource::LFO2:
+      sourceVal = lfo2.enabled ? lfo2.currentValue : 0.0f;
+      break;
+    case ModSource::FilterEnv:
+      sourceVal = filterEnv.currentValue; // 0.0 to 1.0
+      break;
+    case ModSource::ModWheel:
+      sourceVal = modWheelValue; // 0.0 to 1.0
+      break;
+    case ModSource::Velocity:
+      sourceVal = lastVelocity / 127.0f; // 0.0 to 1.0
+      break;
+    default:
+      break;
+    }
+
+    float contribution = sourceVal * amt;
+
+    switch (dst) {
+    case ModDest::FilterCutoff:
+      filterMod += contribution;
+      break;
+    case ModDest::PulseWidth:
+      pwMod += contribution;
+      break;
+    case ModDest::Pitch:
+      pitchMod += contribution;
+      break;
+    case ModDest::Resonance:
+      resMod += contribution;
+      break;
+    default:
+      break;
+    }
+  }
+
+  // Apply filter cutoff mod (additive, on top of applyFilterModulation result)
+  if (filterMod != 0.0f) {
+    int offset = static_cast<int>(filterMod * 1024.0f);
+    int leftCutoff = juce::jlimit(0, 2047, lastAppliedCutoffLeft + offset);
+    int rightCutoff = juce::jlimit(0, 2047, lastAppliedCutoffRight + offset);
+    sidLeft.setFilterCutoff(leftCutoff);
+    sidRight.setFilterCutoff(rightCutoff);
+  }
+
+  // Apply pulse width mod
+  if (pwMod != 0.0f) {
+    int pwOffset = static_cast<int>(pwMod * 2048.0f);
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active) {
+        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+        int basePW = voiceSettings[v].pulseWidth;
+        int modPW = std::clamp(basePW + pwOffset, 0, 4095);
+        sid.setPulseWidth(v % 3, modPW);
+      }
+    }
+  }
+
+  // Apply pitch mod (semitones)
+  if (pitchMod != 0.0f) {
+    float semitoneMod = pitchMod * 2.0f; // ±2 semitones at full depth
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active) {
+        double baseHz =
+            voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+        double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+        sid.setFrequency(v % 3, modHz);
+      }
+    }
+  }
+
+  // Apply resonance mod (additive, on top of base resonance)
+  if (resMod != 0.0f) {
+    int resOffset = static_cast<int>(resMod * 15.0f);
+    int leftRes = juce::jlimit(0, 15, baseFilterResLeft + resOffset);
+    int rightRes = juce::jlimit(0, 15, baseFilterResRight + resOffset);
+    sidLeft.setFilterResonance(leftRes);
+    sidRight.setFilterResonance(rightRes);
+  }
+}
+
 void BreadbinProcessor::processWavetable(int numSamples) {
   // Block-rate timer: advance by block duration
   double samplesPerStep = hostSampleRate / static_cast<double>(wavetable.rateHz);
@@ -1179,16 +1287,20 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
     setAgingFactor(normalized);
     break;
   case ControlParam::LeftCutoff:
-    sidLeft.setFilterCutoff(static_cast<int>(normalized * 2047.0f));
+    baseFilterCutoffLeft = static_cast<int>(normalized * 2047.0f);
+    sidLeft.setFilterCutoff(baseFilterCutoffLeft);
     break;
   case ControlParam::LeftResonance:
-    sidLeft.setFilterResonance(static_cast<int>(normalized * 15.0f));
+    baseFilterResLeft = static_cast<int>(normalized * 15.0f);
+    sidLeft.setFilterResonance(baseFilterResLeft);
     break;
   case ControlParam::RightCutoff:
-    sidRight.setFilterCutoff(static_cast<int>(normalized * 2047.0f));
+    baseFilterCutoffRight = static_cast<int>(normalized * 2047.0f);
+    sidRight.setFilterCutoff(baseFilterCutoffRight);
     break;
   case ControlParam::RightResonance:
-    sidRight.setFilterResonance(static_cast<int>(normalized * 15.0f));
+    baseFilterResRight = static_cast<int>(normalized * 15.0f);
+    sidRight.setFilterResonance(baseFilterResRight);
     break;
   case ControlParam::GlobalGlide:
     setGlideTimeMs(normalized * 2000.0f);
@@ -1468,6 +1580,24 @@ BreadbinProcessor::createParameterLayout() {
         "WT Step " + juce::String(i) + " PW", 0, 4095, 2048));
   }
 
+  // Mod Matrix (4 slots)
+  for (int i = 0; i < kModSlots; ++i) {
+    auto prefix = "mod" + juce::String(i) + "_";
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{prefix + "src", 1},
+        "Mod " + juce::String(i) + " Source",
+        juce::StringArray{"None", "LFO1", "LFO2", "FiltEnv", "ModWheel",
+                          "Velocity"},
+        0));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{prefix + "dst", 1},
+        "Mod " + juce::String(i) + " Dest",
+        juce::StringArray{"None", "Filter", "PW", "Pitch", "Resonance"}, 0));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{prefix + "amt", 1},
+        "Mod " + juce::String(i) + " Amount", -1.0f, 1.0f, 0.0f));
+  }
+
   // FX: Chorus
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"chorusEnable", 1}, "Chorus Enable", false));
@@ -1590,6 +1720,14 @@ void BreadbinProcessor::initializeParameterPointers() {
     wtStepPtrs[i].wave = apvts.getRawParameterValue(prefix + "wave");
     wtStepPtrs[i].pitch = apvts.getRawParameterValue(prefix + "pitch");
     wtStepPtrs[i].pw = apvts.getRawParameterValue(prefix + "pw");
+  }
+
+  // Mod Matrix
+  for (int i = 0; i < kModSlots; ++i) {
+    auto prefix = "mod" + juce::String(i) + "_";
+    modSlotPtrs[i].src = apvts.getRawParameterValue(prefix + "src");
+    modSlotPtrs[i].dst = apvts.getRawParameterValue(prefix + "dst");
+    modSlotPtrs[i].amt = apvts.getRawParameterValue(prefix + "amt");
   }
 
   // FX

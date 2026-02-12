@@ -226,6 +226,107 @@ void BreadbinEditor::timerCallback() {
   }
 }
 
+// ========== ModMatrixPanel Implementation ==========
+
+ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
+  for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
+    auto &s = slots[i];
+    auto prefix = "mod" + juce::String(i) + "_";
+
+    // Slot label
+    s.slotLabel.setText("Slot " + juce::String(i + 1),
+                        juce::dontSendNotification);
+    s.slotLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    addAndMakeVisible(s.slotLabel);
+
+    // Source combo
+    s.srcBox.addItem("None", 1);
+    s.srcBox.addItem("LFO1", 2);
+    s.srcBox.addItem("LFO2", 3);
+    s.srcBox.addItem("FiltEnv", 4);
+    s.srcBox.addItem("ModWheel", 5);
+    s.srcBox.addItem("Velocity", 6);
+    addAndMakeVisible(s.srcBox);
+
+    // Dest combo
+    s.dstBox.addItem("None", 1);
+    s.dstBox.addItem("Filter", 2);
+    s.dstBox.addItem("PW", 3);
+    s.dstBox.addItem("Pitch", 4);
+    s.dstBox.addItem("Resonance", 5);
+    addAndMakeVisible(s.dstBox);
+
+    // Amount slider
+    s.amtSlider.setRange(-1.0, 1.0, 0.01);
+    s.amtSlider.setValue(0.0);
+    s.amtSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    s.amtSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+    s.amtSlider.setColour(juce::Slider::textBoxTextColourId,
+                          juce::Colours::cyan);
+    s.amtSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                          juce::Colours::transparentBlack);
+    addAndMakeVisible(s.amtSlider);
+
+    // APVTS attachments
+    s.srcAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+            processor.apvts, prefix + "src", s.srcBox);
+    s.dstAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+            processor.apvts, prefix + "dst", s.dstBox);
+    s.amtAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.apvts, prefix + "amt", s.amtSlider);
+  }
+
+  setSize(panelWidth, panelHeight);
+}
+
+void ModMatrixPanel::paint(juce::Graphics &g) {
+  g.fillAll(juce::Colour(30, 30, 35));
+
+  // Column headers
+  g.setColour(juce::Colours::cyan);
+  g.setFont(12.0f);
+  g.drawText("Source", 50, 2, 90, 16, juce::Justification::centred);
+  g.drawText("Dest", 150, 2, 90, 16, juce::Justification::centred);
+  g.drawText("Amount", 250, 2, 160, 16, juce::Justification::centred);
+}
+
+void ModMatrixPanel::resized() {
+  const int rowH = 35;
+  const int topOffset = 20; // Below header labels
+  for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
+    auto &s = slots[i];
+    int y = topOffset + i * rowH;
+
+    s.slotLabel.setBounds(4, y + 8, 44, 18);
+    s.srcBox.setBounds(50, y + 6, 90, 22);
+    s.dstBox.setBounds(150, y + 6, 90, 22);
+    s.amtSlider.setBounds(250, y + 6, 160, 22);
+  }
+}
+
+void BreadbinEditor::showModMatrixPopup() {
+  if (modMatrixWindow != nullptr) {
+    modMatrixWindow->toFront(true);
+    return;
+  }
+
+  auto *panel = new ModMatrixPanel(processor);
+
+  juce::DialogWindow::LaunchOptions opts;
+  opts.content.setOwned(panel);
+  opts.dialogTitle = "Mod Matrix";
+  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
+  opts.escapeKeyTriggersCloseButton = true;
+  opts.useNativeTitleBar = true;
+  opts.resizable = false;
+  opts.componentToCentreAround = this;
+
+  modMatrixWindow = opts.launchAsync();
+}
+
 void BreadbinEditor::setupControls() {
   // Title label removed - logo is in lower left corner
 
@@ -534,6 +635,17 @@ void BreadbinEditor::setupControls() {
   setupFXSlider(wtRateSlider, wtRateLabel, "Rate", 1.0f, 200.0f, 50.0f,
                 1.0f, "Step rate in Hz");
 
+  // ===== MOD MATRIX BUTTON =====
+  modMatrixButton.setTooltip("Mod Matrix: 4-slot modulation routing");
+  modMatrixButton.setColour(juce::TextButton::buttonColourId,
+                            juce::Colour(60, 60, 70));
+  modMatrixButton.setColour(juce::TextButton::textColourOnId,
+                            juce::Colours::cyan);
+  modMatrixButton.setColour(juce::TextButton::textColourOffId,
+                            juce::Colours::cyan);
+  modMatrixButton.onClick = [this]() { showModMatrixPopup(); };
+  addAndMakeVisible(modMatrixButton);
+
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
   filterEnvEnableButton.setButtonText("Filt Env");
@@ -772,8 +884,9 @@ void BreadbinEditor::setupLeftSID() {
   leftCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   leftCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   leftCutoffSlider.onValueChange = [this]() {
-    processor.getLeftSID().setFilterCutoff(
-        static_cast<int>(leftCutoffSlider.getValue()));
+    int val = static_cast<int>(leftCutoffSlider.getValue());
+    processor.setBaseFilterCutoff(true, val);
+    processor.getLeftSID().setFilterCutoff(val);
   };
   addAndMakeVisible(leftCutoffSlider);
 
@@ -789,8 +902,9 @@ void BreadbinEditor::setupLeftSID() {
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   leftResonanceSlider.setTooltip("Filter Resonance (0-15)");
   leftResonanceSlider.onValueChange = [this]() {
-    processor.getLeftSID().setFilterResonance(
-        static_cast<int>(leftResonanceSlider.getValue()));
+    int val = static_cast<int>(leftResonanceSlider.getValue());
+    processor.setBaseFilterResonance(true, val);
+    processor.getLeftSID().setFilterResonance(val);
   };
   addAndMakeVisible(leftResonanceSlider);
 
@@ -898,8 +1012,9 @@ void BreadbinEditor::setupRightSID() {
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   rightCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   rightCutoffSlider.onValueChange = [this]() {
-    processor.getRightSID().setFilterCutoff(
-        static_cast<int>(rightCutoffSlider.getValue()));
+    int val = static_cast<int>(rightCutoffSlider.getValue());
+    processor.setBaseFilterCutoff(false, val);
+    processor.getRightSID().setFilterCutoff(val);
   };
   addAndMakeVisible(rightCutoffSlider);
 
@@ -915,8 +1030,9 @@ void BreadbinEditor::setupRightSID() {
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   rightResonanceSlider.setTooltip("Filter Resonance (0-15)");
   rightResonanceSlider.onValueChange = [this]() {
-    processor.getRightSID().setFilterResonance(
-        static_cast<int>(rightResonanceSlider.getValue()));
+    int val = static_cast<int>(rightResonanceSlider.getValue());
+    processor.setBaseFilterResonance(false, val);
+    processor.getRightSID().setFilterResonance(val);
   };
   addAndMakeVisible(rightResonanceSlider);
 
@@ -1492,6 +1608,10 @@ void BreadbinEditor::resized() {
   wtStack.removeFromLeft(6);
   wtLoopButton.setBounds(
       wtStack.removeFromLeft(50).withSize(50, 20).translated(0, 2));
+
+  // Mod Matrix button (right side of wavetable row)
+  modMatrixButton.setBounds(
+      wtRow.removeFromRight(80).withSize(80, 20).translated(0, 2));
 
   bounds.removeFromBottom(4);
 

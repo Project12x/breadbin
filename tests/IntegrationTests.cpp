@@ -1203,6 +1203,134 @@ void testWavetableStateRoundTrip() {
 }
 
 // ============================================================================
+// Mod Matrix Tests
+// ============================================================================
+
+void testModMatrixDefaultNone() {
+  std::printf("--- ModMatrix: Default None ---\n");
+  auto p = createTestProcessor();
+
+  // Verify all 4 slots default to None/None/0
+  auto getVal = [](BreadbinProcessor &proc, const juce::String &id) {
+    return proc.apvts.getRawParameterValue(id)->load();
+  };
+
+  for (int i = 0; i < 4; ++i) {
+    auto prefix = "mod" + juce::String(i) + "_";
+    ASSERT_NEAR(getVal(*p, prefix + "src"), 0.0f, 0.01f,
+                ("Slot " + juce::String(i) + " src defaults to None").toRawUTF8());
+    ASSERT_NEAR(getVal(*p, prefix + "dst"), 0.0f, 0.01f,
+                ("Slot " + juce::String(i) + " dst defaults to None").toRawUTF8());
+    ASSERT_NEAR(getVal(*p, prefix + "amt"), 0.0f, 0.01f,
+                ("Slot " + juce::String(i) + " amt defaults to 0").toRawUTF8());
+  }
+}
+
+void testModMatrixLFOToFilterRoute() {
+  std::printf("--- ModMatrix: LFO1 -> Filter route ---\n");
+  auto p1 = createTestProcessor();
+  auto p2 = createTestProcessor();
+
+  // Enable LFO1 on both, zero direct filter depth
+  for (auto *p : {p1.get(), p2.get()}) {
+    p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+    p->apvts.getParameter("lfoRate")->setValueNotifyingHost(0.5f);
+    p->apvts.getParameter("lfoDepthFilt")->setValueNotifyingHost(0.0f);
+  }
+
+  // Route slot 0 on p2 only: LFO1 -> FilterCutoff, full amount
+  auto *srcParam = p2->apvts.getParameter("mod0_src");
+  auto *dstParam = p2->apvts.getParameter("mod0_dst");
+  srcParam->setValueNotifyingHost(srcParam->convertTo0to1(1.0f)); // LFO1
+  dstParam->setValueNotifyingHost(dstParam->convertTo0to1(1.0f)); // FilterCutoff
+  p2->apvts.getParameter("mod0_amt")->setValueNotifyingHost(1.0f); // Full
+
+  // Play same note on both
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p1, 512, &midi);
+  processBlock(*p2, 512, &midi);
+
+  // Process several blocks and accumulate sample differences
+  juce::MidiBuffer empty;
+  float diffSum = 0.0f;
+  for (int i = 0; i < 10; ++i) {
+    juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
+    buf1.clear();
+    buf2.clear();
+    p1->processBlock(buf1, empty);
+    p2->processBlock(buf2, empty);
+    for (int s = 0; s < 512; ++s) {
+      diffSum += std::abs(buf1.getSample(0, s) - buf2.getSample(0, s));
+    }
+  }
+  ASSERT_TRUE(diffSum > 0.001f,
+              "ModMatrix LFO->Filter route changes output vs baseline");
+}
+
+void testModMatrixBipolarAmount() {
+  std::printf("--- ModMatrix: Bipolar amount ---\n");
+  auto p = createTestProcessor();
+
+  // Verify negative amount parameter is accepted
+  auto *amtParam = p->apvts.getParameter("mod0_amt");
+  amtParam->setValueNotifyingHost(0.0f); // maps to -1.0
+  float stored = p->apvts.getRawParameterValue("mod0_amt")->load();
+  ASSERT_TRUE(stored < 0.0f, "Negative mod amount stored correctly");
+
+  amtParam->setValueNotifyingHost(1.0f); // maps to +1.0
+  stored = p->apvts.getRawParameterValue("mod0_amt")->load();
+  ASSERT_TRUE(stored > 0.0f, "Positive mod amount stored correctly");
+
+  amtParam->setValueNotifyingHost(0.5f); // maps to 0.0
+  stored = p->apvts.getRawParameterValue("mod0_amt")->load();
+  ASSERT_NEAR(stored, 0.0f, 0.05f, "Center mod amount is near zero");
+}
+
+void testModMatrixStateRoundTrip() {
+  std::printf("--- ModMatrix: State Round-trip ---\n");
+  auto p = createTestProcessor();
+
+  // Configure slot 0 and slot 2
+  auto *src0 = p->apvts.getParameter("mod0_src");
+  auto *dst0 = p->apvts.getParameter("mod0_dst");
+  src0->setValueNotifyingHost(src0->convertTo0to1(2.0f)); // LFO2
+  dst0->setValueNotifyingHost(dst0->convertTo0to1(2.0f)); // PW
+  p->apvts.getParameter("mod0_amt")->setValueNotifyingHost(0.75f);
+
+  auto *src2 = p->apvts.getParameter("mod2_src");
+  auto *dst2 = p->apvts.getParameter("mod2_dst");
+  src2->setValueNotifyingHost(src2->convertTo0to1(4.0f)); // ModWheel
+  dst2->setValueNotifyingHost(dst2->convertTo0to1(3.0f)); // Pitch
+  p->apvts.getParameter("mod2_amt")->setValueNotifyingHost(0.25f);
+
+  // Save state
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  // Restore into new processor
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), (int)stateData.getSize());
+
+  auto getVal = [](BreadbinProcessor &proc, const juce::String &id) {
+    return proc.apvts.getRawParameterValue(id)->load();
+  };
+
+  // Verify slot 0 restored
+  ASSERT_NEAR(getVal(*p2, "mod0_src"), 2.0f, 0.1f, "Slot 0 src restored (LFO2)");
+  ASSERT_NEAR(getVal(*p2, "mod0_dst"), 2.0f, 0.1f, "Slot 0 dst restored (PW)");
+  float amt0 = getVal(*p2, "mod0_amt");
+  ASSERT_TRUE(amt0 > 0.3f && amt0 < 0.7f, "Slot 0 amt restored near 0.5");
+
+  // Verify slot 2 restored
+  ASSERT_NEAR(getVal(*p2, "mod2_src"), 4.0f, 0.1f, "Slot 2 src restored (ModWheel)");
+  ASSERT_NEAR(getVal(*p2, "mod2_dst"), 3.0f, 0.1f, "Slot 2 dst restored (Pitch)");
+
+  // Verify untouched slot 1 still default
+  ASSERT_NEAR(getVal(*p2, "mod1_src"), 0.0f, 0.1f, "Slot 1 src still None");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1270,6 +1398,12 @@ int main() {
   testWavetableDefaultOff();
   testWavetableChangesWaveform();
   testWavetableStateRoundTrip();
+
+  // Mod matrix
+  testModMatrixDefaultNone();
+  testModMatrixLFOToFilterRoute();
+  testModMatrixBipolarAmount();
+  testModMatrixStateRoundTrip();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
