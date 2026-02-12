@@ -1344,36 +1344,78 @@ void testModMatrixStateRoundTrip() {
 
 void testModMatrixResonanceReturnsToBase() {
   std::printf("--- ModMatrix: Resonance returns to base when amount zeroed ---\n");
-  auto p = createTestProcessor();
 
-  // Set base resonance to 8 via the processor setter
-  p->setBaseFilterResonance(true, 8);
-  p->setBaseFilterResonance(false, 8);
-  p->getLeftSID().setFilterResonance(8);
-  p->getRightSID().setFilterResonance(8);
+  // Two identical processors: pulse wave, LP filter, base resonance = 8
+  auto setupProc = []() {
+    auto p = createTestProcessor();
+    p->apvts.getParameter("v0_waveform")
+        ->setValueNotifyingHost(
+            p->apvts.getParameter("v0_waveform")->convertTo0to1(2.0f)); // Pulse
+    p->getLeftSID().setFilterMode(true, false, false);
+    p->getLeftSID().setFilterVoices(true, true, true);
+    p->getRightSID().setFilterMode(true, false, false);
+    p->getRightSID().setFilterVoices(true, true, true);
+    p->setBaseFilterResonance(true, 8);
+    p->setBaseFilterResonance(false, 8);
+    p->getLeftSID().setFilterResonance(8);
+    p->getRightSID().setFilterResonance(8);
+    return p;
+  };
 
-  // Route slot 0: ModWheel -> Resonance, amount = 1.0
-  auto *srcParam = p->apvts.getParameter("mod0_src");
-  auto *dstParam = p->apvts.getParameter("mod0_dst");
-  srcParam->setValueNotifyingHost(srcParam->convertTo0to1(4.0f)); // ModWheel
+  auto pMod = setupProc();      // Will get resonance mod then zeroed
+  auto pBaseline = setupProc();  // Never modulated — stays at base resonance
+
+  // Route slot 0 on pMod: Velocity -> Resonance, full amount
+  auto *srcParam = pMod->apvts.getParameter("mod0_src");
+  auto *dstParam = pMod->apvts.getParameter("mod0_dst");
+  srcParam->setValueNotifyingHost(srcParam->convertTo0to1(5.0f)); // Velocity
   dstParam->setValueNotifyingHost(dstParam->convertTo0to1(4.0f)); // Resonance
-  p->apvts.getParameter("mod0_amt")->setValueNotifyingHost(1.0f); // Full
+  pMod->apvts.getParameter("mod0_amt")->setValueNotifyingHost(1.0f); // Full
 
-  // Play a note so processBlock runs the full path
+  // Play note on both
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
-  processBlock(*p, 512, &midi);
+  processBlock(*pMod, 512, &midi);
+  processBlock(*pBaseline, 512, &midi);
 
-  // Now zero out the amount (simulating user disabling the route)
-  p->apvts.getParameter("mod0_amt")->setValueNotifyingHost(0.5f); // 0.5 maps to 0.0
+  // With modulation active, resonance is boosted — outputs should differ
+  juce::MidiBuffer empty;
+  float diffWhileActive = 0.0f;
+  for (int i = 0; i < 5; ++i) {
+    juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
+    buf1.clear();
+    buf2.clear();
+    pMod->processBlock(buf1, empty);
+    pBaseline->processBlock(buf2, empty);
+    for (int s = 0; s < 512; ++s)
+      diffWhileActive += std::abs(buf1.getSample(0, s) - buf2.getSample(0, s));
+  }
+  ASSERT_TRUE(diffWhileActive > 0.001f,
+              "Resonance mod active: output differs from baseline");
 
-  // Process a block — resonance should return to base (8), not stay modulated
-  processBlock(*p);
+  // Now zero the amount — resonance should return to base
+  pMod->apvts.getParameter("mod0_amt")->setValueNotifyingHost(0.5f); // 0.5 maps to 0.0
 
-  // We can't read SID resonance directly, but we verify the code path runs
-  // by checking that processing completes without error and produces audio
-  float rms = processBlock(*p);
-  ASSERT_TRUE(rms >= 0.0f, "Processing completes after resonance mod zeroed");
+  // Process a few settling blocks
+  for (int i = 0; i < 3; ++i) {
+    processBlock(*pMod);
+    processBlock(*pBaseline);
+  }
+
+  // Compare: with amount zeroed, both should now match (both at base res=8)
+  float diffAfterZeroed = 0.0f;
+  for (int i = 0; i < 5; ++i) {
+    juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
+    buf1.clear();
+    buf2.clear();
+    pMod->processBlock(buf1, empty);
+    pBaseline->processBlock(buf2, empty);
+    for (int s = 0; s < 512; ++s)
+      diffAfterZeroed += std::abs(buf1.getSample(0, s) - buf2.getSample(0, s));
+  }
+  // After zeroing, the diff should be much smaller than while active
+  ASSERT_TRUE(diffAfterZeroed < diffWhileActive * 0.1f,
+              "Resonance returns to base: output matches baseline after amount zeroed");
 }
 
 // ============================================================================
