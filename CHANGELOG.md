@@ -20,10 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **External input bus**: Added sidechain input bus (`isBusesLayoutSupported`) so external
-  audio routes through a real host input, not a feedback loop from the output buffer.
-- **Per-voice pan**: Voice pan values (averaged per SID) now apply equal-power pan law
-  to SID outputs. `pan=0` preserves original stereo split (backward compatible).
+- **External input bus**: Added real input bus named "External Input" (`isBusesLayoutSupported`) so
+  external audio routes through a proper host input, not a feedback loop from the output buffer.
+- **Per-SID pan**: `leftPan` and `rightPan` APVTS params with standard semantics
+  (-1=left, 0=center, +1=right). Left SID defaults -1, right SID defaults +1.
+  Equal-power pan law (cos/sin).
 
 ### Added
 

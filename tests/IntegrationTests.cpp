@@ -626,6 +626,152 @@ void testMasterVolumeAPVTSSync() {
 }
 
 // ============================================================================
+// Pan Semantics Tests (v0.9.2)
+// ============================================================================
+
+void testPanDefaultPreservesLegacy() {
+  std::printf("--- Pan Default Preserves Legacy ---\n");
+  auto p = createTestProcessor();
+
+  // Verify leftPan defaults to -1 (hard left), rightPan to +1 (hard right)
+  auto *leftPanVal = p->apvts.getRawParameterValue("leftPan");
+  auto *rightPanVal = p->apvts.getRawParameterValue("rightPan");
+  ASSERT_TRUE(leftPanVal != nullptr, "leftPan param exists");
+  ASSERT_TRUE(rightPanVal != nullptr, "rightPan param exists");
+  ASSERT_NEAR(leftPanVal->load(), -1.0f, 0.001f,
+              "leftPan defaults to -1 (hard left)");
+  ASSERT_NEAR(rightPanVal->load(), 1.0f, 0.001f,
+              "rightPan defaults to +1 (hard right)");
+
+  // Enable voice 0, trigger note, process
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  juce::AudioBuffer<float> buf(2, 512);
+  buf.clear();
+  p->processBlock(buf, midi);
+
+  float peakL = buf.getMagnitude(0, 0, 512);
+  float peakR = buf.getMagnitude(1, 0, 512);
+
+  // At defaults: left SID hard left, right SID hard right
+  // Both SIDs produce signal, each goes to its own channel
+  ASSERT_TRUE(peakL > 0.01f, "default pan: left channel has signal");
+  ASSERT_TRUE(peakR > 0.01f, "default pan: right channel has signal");
+  std::printf("  peakL=%.6f peakR=%.6f\n", peakL, peakR);
+}
+
+void testPanExtremes() {
+  std::printf("--- Pan Extremes ---\n");
+
+  // Test left SID panned to center (pan=0)
+  {
+    auto p = createTestProcessor();
+    auto *leftPanVal = p->apvts.getRawParameterValue("leftPan");
+    leftPanVal->store(0.0f); // Left SID to center
+    // Right SID stays at +1 (hard right)
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+    juce::AudioBuffer<float> buf(2, 512);
+    buf.clear();
+    p->processBlock(buf, midi);
+
+    float peakL = buf.getMagnitude(0, 0, 512);
+    float peakR = buf.getMagnitude(1, 0, 512);
+    std::printf("  Left SID pan=0 (center): peakL=%.6f peakR=%.6f\n", peakL,
+                peakR);
+    // Left SID centered means right channel gets signal from both SIDs
+    ASSERT_TRUE(peakR > 0.01f,
+                "Left SID center: right channel has signal from both SIDs");
+  }
+
+  // Test right SID panned fully left (pan=-1)
+  {
+    auto p = createTestProcessor();
+    auto *rightPanVal = p->apvts.getRawParameterValue("rightPan");
+    rightPanVal->store(-1.0f); // Right SID to hard left
+    // Left SID stays at -1 (hard left)
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+    juce::AudioBuffer<float> buf(2, 512);
+    buf.clear();
+    p->processBlock(buf, midi);
+
+    float peakL = buf.getMagnitude(0, 0, 512);
+    float peakR = buf.getMagnitude(1, 0, 512);
+    std::printf("  Both SIDs hard left: peakL=%.6f peakR=%.6f\n", peakL, peakR);
+    // Both SIDs panned hard left, right channel should be near-silent
+    ASSERT_TRUE(peakL > peakR, "Both hard left: left louder than right");
+  }
+}
+
+void testInputBusNotOutputFeedback() {
+  std::printf("--- Input Bus Not Output Feedback ---\n");
+  auto p = createTestProcessor();
+
+  // Enable ext input
+  auto *extEn = p->apvts.getRawParameterValue("extInputEnable");
+  extEn->store(1.0f);
+  auto *extLvl = p->apvts.getRawParameterValue("extInputLevel");
+  extLvl->store(1.0f);
+
+  // Process with no input bus connected (headless mode: input bus disabled)
+  juce::AudioBuffer<float> buf(2, 512);
+  buf.clear();
+  juce::MidiBuffer midi;
+
+  // Process multiple blocks - if output feeds back to input, signal would grow
+  for (int i = 0; i < 5; ++i) {
+    p->processBlock(buf, midi);
+  }
+
+  float rms = buf.getRMSLevel(0, 0, 512);
+  std::printf(
+      "  After 5 blocks with ext input enabled (no input bus): rms=%.6f\n",
+      rms);
+  // With no input bus connected, external input should be null/zero - no
+  // feedback loop
+  ASSERT_TRUE(
+      rms < 0.01f,
+      "No output-feedback loop when ext input enabled without input bus");
+}
+
+void testIdleAntiDrone() {
+  std::printf("--- Idle Anti-Drone ---\n");
+  auto p = createTestProcessor();
+
+  // Disable all voices so SID is truly idle
+  auto *v0en = p->apvts.getRawParameterValue("v0_enable");
+  if (v0en)
+    v0en->store(0.0f);
+
+  // No notes playing, just process silence
+  juce::AudioBuffer<float> buf(2, 512);
+  juce::MidiBuffer midi;
+
+  // Warm up to let noise gate settle
+  for (int i = 0; i < 5; ++i) {
+    buf.clear();
+    p->processBlock(buf, midi);
+  }
+
+  // Measure after settling
+  float maxRms = 0.0f;
+  for (int i = 0; i < 10; ++i) {
+    buf.clear();
+    p->processBlock(buf, midi);
+    float rms = buf.getRMSLevel(0, 0, 512);
+    if (rms > maxRms)
+      maxRms = rms;
+  }
+
+  std::printf("  Max RMS over 10 idle blocks (voices disabled): %.6f\n",
+              maxRms);
+  ASSERT_TRUE(maxRms < 0.01f, "No persistent tone at idle (anti-drone)");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -661,6 +807,12 @@ int main() {
   testLFOWaveformStateRoundTrip();
   testGetSampleRate();
   testMasterVolumeAPVTSSync();
+
+  // v0.9.2 hardening tests
+  testPanDefaultPreservesLegacy();
+  testPanExtremes();
+  testInputBusNotOutputFeedback();
+  testIdleAntiDrone();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

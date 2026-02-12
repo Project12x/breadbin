@@ -268,6 +268,8 @@ private:
   std::atomic<float> *clockModePtr = nullptr;
   std::atomic<float> *extInputEnablePtr = nullptr;
   std::atomic<float> *extInputLevelPtr = nullptr;
+  std::atomic<float> *leftPanPtr = nullptr;
+  std::atomic<float> *rightPanPtr = nullptr;
 
   std::atomic<float> *lfoEnablePtr = nullptr;
   std::atomic<float> *lfoWavePtr = nullptr;

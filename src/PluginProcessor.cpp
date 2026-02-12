@@ -4,7 +4,8 @@
 BreadbinProcessor::BreadbinProcessor()
     : juce::AudioProcessor(
           juce::AudioProcessor::BusesProperties()
-              .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)
+              .withInput("External Input", juce::AudioChannelSet::stereo(),
+                         false)
               .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout()) {
   // Initialize both SIDs with default models
@@ -179,40 +180,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
-  // Compute per-SID pan from voice settings (average of active voice pans)
-  float leftSidPan = 0.0f;
-  float rightSidPan = 0.0f;
-  {
-    int leftCount = 0, rightCount = 0;
-    for (int v = 0; v < 3; ++v) {
-      if (voiceSettings[v].enabled) {
-        leftSidPan += voiceSettings[v].pan;
-        ++leftCount;
-      }
-      if (voiceSettings[v + 3].enabled) {
-        rightSidPan += voiceSettings[v + 3].pan;
-        ++rightCount;
-      }
-    }
-    if (leftCount > 0)
-      leftSidPan /= static_cast<float>(leftCount);
-    if (rightCount > 0)
-      rightSidPan /= static_cast<float>(rightCount);
-  }
+  // Read per-SID pan from APVTS (-1=left, 0=center, +1=right)
+  float leftSidPan = leftPanPtr->load();
+  float rightSidPan = rightPanPtr->load();
 
-  // Per-SID pan: offset from natural position (left SID→left, right SID→right)
-  // pan=0 preserves original stereo split behavior (backward compatible)
-  // pan=-1 shifts toward left, pan=+1 shifts toward right
-  constexpr float piOver2 = 1.5707963267948966f; // pi/2
-  // Left SID natural position = full left (angle 0); shift toward center/right
-  float leftAngle =
-      juce::jlimit(0.0f, piOver2, leftSidPan * piOver2 * 0.5f + 0.0f);
+  // Standard equal-power pan law: convert [-1,+1] to angle [0, pi/2]
+  constexpr float piOver2 = 1.5707963267948966f;
+  float leftAngle = (leftSidPan + 1.0f) * 0.5f * piOver2;
   float leftGainL = std::cos(leftAngle);
   float leftGainR = std::sin(leftAngle);
-  // Right SID natural position = full right (angle pi/2); shift toward
-  // center/left
-  float rightAngle =
-      juce::jlimit(0.0f, piOver2, piOver2 + rightSidPan * piOver2 * -0.5f);
+  float rightAngle = (rightSidPan + 1.0f) * 0.5f * piOver2;
   float rightGainL = std::cos(rightAngle);
   float rightGainR = std::sin(rightAngle);
 
@@ -1127,6 +1104,10 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"extInputLevel", 1}, "Ext Input Level", 0.0f, 2.0f,
       1.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"leftPan", 1}, "Left SID Pan", -1.0f, 1.0f, -1.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"rightPan", 1}, "Right SID Pan", -1.0f, 1.0f, 1.0f));
 
   // LFO
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -1207,6 +1188,8 @@ void BreadbinProcessor::initializeParameterPointers() {
   clockModePtr = apvts.getRawParameterValue("clockMode");
   extInputEnablePtr = apvts.getRawParameterValue("extInputEnable");
   extInputLevelPtr = apvts.getRawParameterValue("extInputLevel");
+  leftPanPtr = apvts.getRawParameterValue("leftPan");
+  rightPanPtr = apvts.getRawParameterValue("rightPan");
 
   lfoEnablePtr = apvts.getRawParameterValue("lfoEnable");
   lfoWavePtr = apvts.getRawParameterValue("lfoWave");
