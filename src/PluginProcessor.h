@@ -330,6 +330,24 @@ private:
   };
   std::array<VoiceState, 6> voices;
 
+  // FX CHAIN
+  juce::dsp::Chorus<float> chorus;
+  juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>
+      delayLineL{88200};
+  juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>
+      delayLineR{88200};
+
+  // FX APVTS pointers
+  std::atomic<float> *chorusEnablePtr = nullptr;
+  std::atomic<float> *chorusRatePtr = nullptr;
+  std::atomic<float> *chorusDepthPtr = nullptr;
+  std::atomic<float> *chorusMixPtr = nullptr;
+  std::atomic<float> *delayEnablePtr = nullptr;
+  std::atomic<float> *delayTimeLPtr = nullptr;
+  std::atomic<float> *delayTimeRPtr = nullptr;
+  std::atomic<float> *delayFeedbackPtr = nullptr;
+  std::atomic<float> *delayMixPtr = nullptr;
+
   // SAFETY DSP CHAIN
   // DC blocker / subsonic filter (20Hz high-pass)
   juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>,

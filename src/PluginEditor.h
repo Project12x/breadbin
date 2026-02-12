@@ -335,6 +335,27 @@ private:
   static constexpr int width = 1000;
   static constexpr int height = 650;
 
+  // ========== FX: CHORUS ==========
+  juce::ToggleButton chorusEnableButton{"Chorus"};
+  juce::Slider chorusRateSlider, chorusDepthSlider, chorusMixSlider;
+  juce::Label chorusRateLabel, chorusDepthLabel, chorusMixLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      chorusEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      chorusRateAttach, chorusDepthAttach, chorusMixAttach;
+
+  // ========== FX: DELAY ==========
+  juce::ToggleButton delayEnableButton{"Delay"};
+  juce::Slider delayTimeLSlider, delayTimeRSlider;
+  juce::Slider delayFeedbackSlider, delayMixSlider;
+  juce::Label delayTimeLLabel, delayTimeRLabel, delayFBLabel, delayMixLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      delayEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      delayTimeLAttach, delayTimeRAttach, delayFBAttach, delayMixAttach;
+
   // ========== FILTER ENVELOPE ==========
   juce::ToggleButton filterEnvEnableButton{"Filt Env"};
   juce::Slider filterEnvAttackSlider;

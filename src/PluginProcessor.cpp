@@ -53,6 +53,23 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
 
   // Initialize safety chain
   prepareSafetyChain(sampleRate, samplesPerBlock);
+
+  // Initialize FX chain
+  juce::dsp::ProcessSpec fxSpec;
+  fxSpec.sampleRate = sampleRate;
+  fxSpec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
+  fxSpec.numChannels = 2;
+
+  chorus.prepare(fxSpec);
+  chorus.reset();
+
+  // DelayLine uses single-channel push/pop, prepare with 1 channel
+  juce::dsp::ProcessSpec delaySpec = fxSpec;
+  delaySpec.numChannels = 1;
+  delayLineL.prepare(delaySpec);
+  delayLineR.prepare(delaySpec);
+  delayLineL.reset();
+  delayLineR.reset();
 }
 
 void BreadbinProcessor::releaseResources() {}
@@ -229,6 +246,52 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     leftChannel[i] = outL;
     if (rightChannel)
       rightChannel[i] = outR;
+  }
+
+  // === FX CHAIN ===
+  // Chorus
+  if (chorusEnablePtr->load() > 0.5f) {
+    chorus.setRate(chorusRatePtr->load());
+    chorus.setDepth(chorusDepthPtr->load());
+    chorus.setMix(chorusMixPtr->load());
+    chorus.setCentreDelay(7.0f);
+    chorus.setFeedback(0.0f);
+
+    juce::dsp::AudioBlock<float> chorusBlock(buffer);
+    juce::dsp::ProcessContextReplacing<float> chorusCtx(chorusBlock);
+    chorus.process(chorusCtx);
+  }
+
+  // Stereo delay
+  if (delayEnablePtr->load() > 0.5f) {
+    float delayTimeLMs = delayTimeLPtr->load();
+    float delayTimeRMs = delayTimeRPtr->load();
+    float feedback = delayFeedbackPtr->load();
+    float mix = delayMixPtr->load();
+
+    float delaySamplesL =
+        (delayTimeLMs / 1000.0f) * static_cast<float>(hostSampleRate);
+    float delaySamplesR =
+        (delayTimeRMs / 1000.0f) * static_cast<float>(hostSampleRate);
+
+    auto *left = buffer.getWritePointer(0);
+    auto *right =
+        buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+
+    for (int i = 0; i < numSamples; ++i) {
+      float dryL = left[i];
+      float dryR = right ? right[i] : dryL;
+
+      float wetL = delayLineL.popSample(0, delaySamplesL);
+      float wetR = delayLineR.popSample(0, delaySamplesR);
+
+      delayLineL.pushSample(0, dryL + wetL * feedback);
+      delayLineR.pushSample(0, dryR + wetR * feedback);
+
+      left[i] = dryL * (1.0f - mix) + wetL * mix;
+      if (right)
+        right[i] = dryR * (1.0f - mix) + wetR * mix;
+    }
   }
 
   // Apply safety chain (DC blocker, ultrasonic filter, limiter)
@@ -1227,6 +1290,31 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"filterEnvAmount", 1}, "Filter Env Amount", -1.0f,
       1.0f, 0.5f));
 
+  // FX: Chorus
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"chorusEnable", 1}, "Chorus Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"chorusRate", 1}, "Chorus Rate", 0.1f, 10.0f, 1.5f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"chorusDepth", 1}, "Chorus Depth", 0.0f, 1.0f, 0.3f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"chorusMix", 1}, "Chorus Mix", 0.0f, 1.0f, 0.5f));
+
+  // FX: Delay
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"delayEnable", 1}, "Delay Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"delayTimeL", 1}, "Delay Time L", 1.0f, 1000.0f,
+      375.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"delayTimeR", 1}, "Delay Time R", 1.0f, 1000.0f,
+      500.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"delayFeedback", 1}, "Delay Feedback", 0.0f, 0.95f,
+      0.3f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"delayMix", 1}, "Delay Mix", 0.0f, 1.0f, 0.3f));
+
   // Arpeggiator
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"arpEnable", 1}, "Arpeggiator", false));
@@ -1306,6 +1394,17 @@ void BreadbinProcessor::initializeParameterPointers() {
   filterEnvSustainPtr = apvts.getRawParameterValue("filterEnvSustain");
   filterEnvReleasePtr = apvts.getRawParameterValue("filterEnvRelease");
   filterEnvAmountPtr = apvts.getRawParameterValue("filterEnvAmount");
+
+  // FX
+  chorusEnablePtr = apvts.getRawParameterValue("chorusEnable");
+  chorusRatePtr = apvts.getRawParameterValue("chorusRate");
+  chorusDepthPtr = apvts.getRawParameterValue("chorusDepth");
+  chorusMixPtr = apvts.getRawParameterValue("chorusMix");
+  delayEnablePtr = apvts.getRawParameterValue("delayEnable");
+  delayTimeLPtr = apvts.getRawParameterValue("delayTimeL");
+  delayTimeRPtr = apvts.getRawParameterValue("delayTimeR");
+  delayFeedbackPtr = apvts.getRawParameterValue("delayFeedback");
+  delayMixPtr = apvts.getRawParameterValue("delayMix");
 
   for (int v = 0; v < 6; ++v) {
     juce::String prefix = "v" + juce::String(v) + "_";

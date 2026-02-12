@@ -81,6 +81,37 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "extInputLevel", extInputLevelSlider);
 
+  // FX: Chorus
+  chorusEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "chorusEnable", chorusEnableButton);
+  chorusRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "chorusRate", chorusRateSlider);
+  chorusDepthAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "chorusDepth", chorusDepthSlider);
+  chorusMixAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "chorusMix", chorusMixSlider);
+
+  // FX: Delay
+  delayEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "delayEnable", delayEnableButton);
+  delayTimeLAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "delayTimeL", delayTimeLSlider);
+  delayTimeRAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "delayTimeR", delayTimeRSlider);
+  delayFBAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "delayFeedback", delayFeedbackSlider);
+  delayMixAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "delayMix", delayMixSlider);
+
   // Filter Envelope
   filterEnvEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -412,6 +443,48 @@ void BreadbinEditor::setupControls() {
                                : SIDEngine::ClockMode::PAL);
   };
   addAndMakeVisible(clockModeSelector);
+
+  // ===== FX: CHORUS =====
+  chorusEnableButton.setTooltip("Chorus: Dimension D-style stereo widening");
+  addAndMakeVisible(chorusEnableButton);
+
+  auto setupFXSlider = [this](juce::Slider &slider, juce::Label &label,
+                              const juce::String &name, float minVal,
+                              float maxVal, float defaultVal, float step,
+                              const juce::String &tooltip) {
+    label.setText(name, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    label.setFont(retroFont.withHeight(7.0f));
+    label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
+
+    slider.setRange(minVal, maxVal, step);
+    slider.setValue(defaultVal);
+    slider.setSliderStyle(juce::Slider::LinearHorizontal);
+    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    slider.setTooltip(tooltip);
+    addAndMakeVisible(slider);
+  };
+
+  setupFXSlider(chorusRateSlider, chorusRateLabel, "Rate", 0.1f, 10.0f, 1.5f,
+                0.1f, "Chorus Rate (Hz)");
+  setupFXSlider(chorusDepthSlider, chorusDepthLabel, "Depth", 0.0f, 1.0f,
+                0.3f, 0.01f, "Chorus Depth");
+  setupFXSlider(chorusMixSlider, chorusMixLabel, "Mix", 0.0f, 1.0f, 0.5f,
+                0.01f, "Chorus Wet/Dry Mix");
+
+  // ===== FX: DELAY =====
+  delayEnableButton.setTooltip("Stereo Delay with independent L/R times");
+  addAndMakeVisible(delayEnableButton);
+
+  setupFXSlider(delayTimeLSlider, delayTimeLLabel, "L ms", 1.0f, 1000.0f,
+                375.0f, 1.0f, "Delay Time Left (ms)");
+  setupFXSlider(delayTimeRSlider, delayTimeRLabel, "R ms", 1.0f, 1000.0f,
+                500.0f, 1.0f, "Delay Time Right (ms)");
+  setupFXSlider(delayFeedbackSlider, delayFBLabel, "FB", 0.0f, 0.95f, 0.3f,
+                0.01f, "Delay Feedback");
+  setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f,
+                0.01f, "Delay Wet/Dry Mix");
 
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
@@ -1260,7 +1333,52 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromBottom(10); // Separation from LFO
 
-  // 3. Filter Envelope (Left-justified)
+  // 3. FX: Chorus + Delay (Left-justified, two rows)
+  auto fxArea = bounds.removeFromBottom(50);
+  auto chorusRow = fxArea.removeFromTop(25);
+  auto delayRow = fxArea;
+
+  // Chorus row
+  auto chorusStack = chorusRow.removeFromLeft(420);
+  chorusEnableButton.setBounds(
+      chorusStack.removeFromLeft(60).withSize(60, 20).translated(0, 2));
+  chorusStack.removeFromLeft(6);
+  chorusRateLabel.setBounds(chorusStack.removeFromLeft(30).withHeight(12));
+  chorusRateSlider.setBounds(
+      chorusStack.removeFromLeft(90).withHeight(18).translated(0, 3));
+  chorusStack.removeFromLeft(4);
+  chorusDepthLabel.setBounds(chorusStack.removeFromLeft(35).withHeight(12));
+  chorusDepthSlider.setBounds(
+      chorusStack.removeFromLeft(80).withHeight(18).translated(0, 3));
+  chorusStack.removeFromLeft(4);
+  chorusMixLabel.setBounds(chorusStack.removeFromLeft(25).withHeight(12));
+  chorusMixSlider.setBounds(
+      chorusStack.removeFromLeft(80).withHeight(18).translated(0, 3));
+
+  // Delay row
+  auto delayStack = delayRow.removeFromLeft(420);
+  delayEnableButton.setBounds(
+      delayStack.removeFromLeft(60).withSize(60, 20).translated(0, 2));
+  delayStack.removeFromLeft(6);
+  delayTimeLLabel.setBounds(delayStack.removeFromLeft(30).withHeight(12));
+  delayTimeLSlider.setBounds(
+      delayStack.removeFromLeft(65).withHeight(18).translated(0, 3));
+  delayStack.removeFromLeft(4);
+  delayTimeRLabel.setBounds(delayStack.removeFromLeft(30).withHeight(12));
+  delayTimeRSlider.setBounds(
+      delayStack.removeFromLeft(65).withHeight(18).translated(0, 3));
+  delayStack.removeFromLeft(4);
+  delayFBLabel.setBounds(delayStack.removeFromLeft(20).withHeight(12));
+  delayFeedbackSlider.setBounds(
+      delayStack.removeFromLeft(50).withHeight(18).translated(0, 3));
+  delayStack.removeFromLeft(4);
+  delayMixLabel.setBounds(delayStack.removeFromLeft(25).withHeight(12));
+  delayMixSlider.setBounds(
+      delayStack.removeFromLeft(50).withHeight(18).translated(0, 3));
+
+  bounds.removeFromBottom(4);
+
+  // 4. Filter Envelope (Left-justified)
   auto filterEnvRow = bounds.removeFromBottom(60);
   auto filterEnvStack = filterEnvRow.removeFromLeft(310);
 

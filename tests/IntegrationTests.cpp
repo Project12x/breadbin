@@ -881,6 +881,170 @@ void testFilterEnvStateRoundTrip() {
 }
 
 // ============================================================================
+// Built-in FX (Chorus + Delay)
+// ============================================================================
+
+void testChorusDefaultOff() {
+  std::printf("--- Chorus: Default Off ---\n");
+  auto p = createTestProcessor();
+
+  // Chorus should be off by default
+  float chorusEnable = p->apvts.getRawParameterValue("chorusEnable")->load();
+  ASSERT_TRUE(chorusEnable < 0.5f, "chorusEnable defaults to off");
+
+  // Play a note and get reference output
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  float rms = processBlock(*p, 512, &midi);
+  ASSERT_TRUE(rms > 0.0f, "Output present with chorus off");
+}
+
+void testChorusChangesOutput() {
+  std::printf("--- Chorus: Changes Output When Enabled ---\n");
+  auto p1 = createTestProcessor();
+  auto p2 = createTestProcessor();
+
+  // Play same note on both
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+
+  // Warm up both identically
+  processBlock(*p1, 512, &midi);
+  processBlock(*p2, 512, &midi);
+
+  // Enable chorus on p2
+  p2->apvts.getParameter("chorusEnable")->setValueNotifyingHost(1.0f);
+  p2->apvts.getParameter("chorusDepth")->setValueNotifyingHost(0.8f);
+  p2->apvts.getParameter("chorusMix")->setValueNotifyingHost(1.0f);
+
+  // Process several blocks and accumulate samples
+  juce::MidiBuffer empty;
+  float diffSum = 0.0f;
+  for (int i = 0; i < 10; ++i) {
+    juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
+    buf1.clear();
+    buf2.clear();
+    p1->processBlock(buf1, empty);
+    p2->processBlock(buf2, empty);
+    for (int s = 0; s < 512; ++s) {
+      diffSum +=
+          std::abs(buf1.getSample(0, s) - buf2.getSample(0, s));
+    }
+  }
+  ASSERT_TRUE(diffSum > 0.001f,
+              "Chorus produces different output when enabled");
+}
+
+void testDelayDefaultOff() {
+  std::printf("--- Delay: Default Off ---\n");
+  auto p = createTestProcessor();
+
+  float delayEnable = p->apvts.getRawParameterValue("delayEnable")->load();
+  ASSERT_TRUE(delayEnable < 0.5f, "delayEnable defaults to off");
+}
+
+void testDelayProducesEcho() {
+  std::printf("--- Delay: Produces Echo ---\n");
+  auto p = createTestProcessor();
+
+  // Enable delay with moderate time, high mix, high feedback
+  p->apvts.getParameter("delayEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("delayTimeL")->setValueNotifyingHost(0.15f);
+  p->apvts.getParameter("delayTimeR")->setValueNotifyingHost(0.15f);
+  p->apvts.getParameter("delayFeedback")->setValueNotifyingHost(0.7f);
+  p->apvts.getParameter("delayMix")->setValueNotifyingHost(1.0f);
+
+  // Play note for several blocks to fill delay buffer
+  juce::MidiBuffer midiOn;
+  midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midiOn);
+  juce::MidiBuffer empty;
+  for (int i = 0; i < 5; ++i)
+    processBlock(*p, 512, &empty);
+
+  // Note off
+  juce::MidiBuffer midiOff;
+  midiOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &midiOff);
+
+  // Compare: with delay enabled we should have output well after SID decay
+  // Process enough blocks that the SID voice fully decays
+  float totalRmsLate = 0.0f;
+  for (int i = 0; i < 30; ++i) {
+    float rms = processBlock(*p, 512);
+    if (i >= 15)
+      totalRmsLate += rms;
+  }
+  ASSERT_TRUE(totalRmsLate > 0.0001f,
+              "Delay produces echo after note off");
+}
+
+void testDelayFeedbackDecays() {
+  std::printf("--- Delay: Feedback Decays Over Time ---\n");
+  auto p = createTestProcessor();
+
+  // Enable delay
+  p->apvts.getParameter("delayEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("delayTimeL")->setValueNotifyingHost(0.05f); // ~50ms
+  p->apvts.getParameter("delayTimeR")->setValueNotifyingHost(0.05f);
+  p->apvts.getParameter("delayFeedback")->setValueNotifyingHost(0.3f);
+  p->apvts.getParameter("delayMix")->setValueNotifyingHost(0.8f);
+
+  // Play and release a note
+  juce::MidiBuffer midiOn;
+  midiOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midiOn);
+
+  juce::MidiBuffer midiOff;
+  midiOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &midiOff);
+
+  // Collect RMS values over time
+  float earlyRms = 0.0f, lateRms = 0.0f;
+  for (int i = 0; i < 40; ++i) {
+    float rms = processBlock(*p, 512);
+    if (i >= 2 && i < 6)
+      earlyRms += rms;
+    if (i >= 30 && i < 34)
+      lateRms += rms;
+  }
+
+  // Late RMS should be less than early RMS (feedback decaying)
+  ASSERT_TRUE(lateRms < earlyRms,
+              "Delay feedback decays: late output < early output");
+}
+
+void testFXStateRoundTrip() {
+  std::printf("--- FX: State Round-trip ---\n");
+  auto p = createTestProcessor();
+
+  // Set non-default FX values
+  p->apvts.getParameter("chorusEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("chorusRate")->setValueNotifyingHost(0.6f);
+  p->apvts.getParameter("chorusDepth")->setValueNotifyingHost(0.7f);
+  p->apvts.getParameter("delayEnable")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("delayTimeL")->setValueNotifyingHost(0.4f);
+  p->apvts.getParameter("delayFeedback")->setValueNotifyingHost(0.6f);
+
+  // Save state
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  // Restore into fresh processor
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), (int)stateData.getSize());
+
+  auto getVal = [](BreadbinProcessor &proc, const juce::String &id) {
+    return proc.apvts.getRawParameterValue(id)->load();
+  };
+
+  ASSERT_TRUE(getVal(*p2, "chorusEnable") > 0.5f, "chorusEnable restored");
+  ASSERT_TRUE(getVal(*p2, "delayEnable") > 0.5f, "delayEnable restored");
+  ASSERT_NEAR(getVal(*p2, "delayFeedback"), getVal(*p, "delayFeedback"), 0.05,
+              "delayFeedback round-trip");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -929,6 +1093,14 @@ int main() {
   testFilterEnvReleaseDecay();
   testModStackingBugFix();
   testFilterEnvStateRoundTrip();
+
+  // Built-in FX (chorus + delay)
+  testChorusDefaultOff();
+  testChorusChangesOutput();
+  testDelayDefaultOff();
+  testDelayProducesEcho();
+  testDelayFeedbackDecays();
+  testFXStateRoundTrip();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
