@@ -228,7 +228,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
-  // Get input channels from sidechain bus for external audio routing
+  // Get input channels from external input bus for external audio routing
   const float *inputLeft = nullptr;
   const float *inputRight = nullptr;
   if (extInputEnabled) {
@@ -1063,8 +1063,8 @@ void BreadbinProcessor::applyModMatrix() {
     }
   }
 
-  // Apply resonance mod (additive, on top of base resonance)
-  if (resMod != 0.0f) {
+  // Apply resonance: always write each block to avoid stale values
+  {
     int resOffset = static_cast<int>(resMod * 15.0f);
     int leftRes = juce::jlimit(0, 15, baseFilterResLeft + resOffset);
     int rightRes = juce::jlimit(0, 15, baseFilterResRight + resOffset);

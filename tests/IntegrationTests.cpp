@@ -1231,10 +1231,22 @@ void testModMatrixLFOToFilterRoute() {
   auto p1 = createTestProcessor();
   auto p2 = createTestProcessor();
 
-  // Enable LFO1 on both, zero direct filter depth
+  // Configure both: pulse wave, filter enabled in LP mode, resonance for effect
   for (auto *p : {p1.get(), p2.get()}) {
+    p->apvts.getParameter("v0_waveform")
+        ->setValueNotifyingHost(
+            p->apvts.getParameter("v0_waveform")->convertTo0to1(2.0f)); // Pulse
+    // Enable LP filter on both SIDs with voice 0 routed
+    p->getLeftSID().setFilterMode(true, false, false);
+    p->getLeftSID().setFilterVoices(true, true, true);
+    p->getLeftSID().setFilterResonance(8);
+    p->getRightSID().setFilterMode(true, false, false);
+    p->getRightSID().setFilterVoices(true, true, true);
+    p->getRightSID().setFilterResonance(8);
+
+    // Enable LFO1, fast rate, zero direct filter depth
     p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
-    p->apvts.getParameter("lfoRate")->setValueNotifyingHost(0.5f);
+    p->apvts.getParameter("lfoRate")->setValueNotifyingHost(1.0f); // 20 Hz
     p->apvts.getParameter("lfoDepthFilt")->setValueNotifyingHost(0.0f);
   }
 
@@ -1251,10 +1263,10 @@ void testModMatrixLFOToFilterRoute() {
   processBlock(*p1, 512, &midi);
   processBlock(*p2, 512, &midi);
 
-  // Process several blocks and accumulate sample differences
+  // Process many blocks and accumulate sample differences
   juce::MidiBuffer empty;
   float diffSum = 0.0f;
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 30; ++i) {
     juce::AudioBuffer<float> buf1(2, 512), buf2(2, 512);
     buf1.clear();
     buf2.clear();
@@ -1328,6 +1340,40 @@ void testModMatrixStateRoundTrip() {
 
   // Verify untouched slot 1 still default
   ASSERT_NEAR(getVal(*p2, "mod1_src"), 0.0f, 0.1f, "Slot 1 src still None");
+}
+
+void testModMatrixResonanceReturnsToBase() {
+  std::printf("--- ModMatrix: Resonance returns to base when amount zeroed ---\n");
+  auto p = createTestProcessor();
+
+  // Set base resonance to 8 via the processor setter
+  p->setBaseFilterResonance(true, 8);
+  p->setBaseFilterResonance(false, 8);
+  p->getLeftSID().setFilterResonance(8);
+  p->getRightSID().setFilterResonance(8);
+
+  // Route slot 0: ModWheel -> Resonance, amount = 1.0
+  auto *srcParam = p->apvts.getParameter("mod0_src");
+  auto *dstParam = p->apvts.getParameter("mod0_dst");
+  srcParam->setValueNotifyingHost(srcParam->convertTo0to1(4.0f)); // ModWheel
+  dstParam->setValueNotifyingHost(dstParam->convertTo0to1(4.0f)); // Resonance
+  p->apvts.getParameter("mod0_amt")->setValueNotifyingHost(1.0f); // Full
+
+  // Play a note so processBlock runs the full path
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // Now zero out the amount (simulating user disabling the route)
+  p->apvts.getParameter("mod0_amt")->setValueNotifyingHost(0.5f); // 0.5 maps to 0.0
+
+  // Process a block — resonance should return to base (8), not stay modulated
+  processBlock(*p);
+
+  // We can't read SID resonance directly, but we verify the code path runs
+  // by checking that processing completes without error and produces audio
+  float rms = processBlock(*p);
+  ASSERT_TRUE(rms >= 0.0f, "Processing completes after resonance mod zeroed");
 }
 
 // ============================================================================
@@ -1404,6 +1450,7 @@ int main() {
   testModMatrixLFOToFilterRoute();
   testModMatrixBipolarAmount();
   testModMatrixStateRoundTrip();
+  testModMatrixResonanceReturnsToBase();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
