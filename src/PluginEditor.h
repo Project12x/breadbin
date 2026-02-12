@@ -186,6 +186,8 @@ private:
   MappableSlider leftDetuneSlider{processor,
                                   BreadbinProcessor::ControlParam::LeftDetune};
   juce::Label leftDetuneLabel;
+  juce::Slider leftPanSlider;
+  juce::Label leftPanLabel;
 
   // ========== RIGHT SID SECTION ==========
   juce::Label rightSIDLabel;
@@ -206,6 +208,8 @@ private:
   MappableSlider rightDetuneSlider{
       processor, BreadbinProcessor::ControlParam::RightDetune};
   juce::Label rightDetuneLabel;
+  juce::Slider rightPanSlider;
+  juce::Label rightPanLabel;
 
   // ========== VOICE EDITOR (edits selected voice) ==========
   juce::Label voiceEditorLabel;
@@ -269,6 +273,10 @@ private:
       leftDetuneAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       rightDetuneAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      leftPanAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      rightPanAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       glideAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>

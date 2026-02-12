@@ -462,7 +462,7 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   vs.decay = static_cast<int>(ptrs.decay->load());
   vs.sustain = static_cast<int>(ptrs.sustain->load());
   vs.release = static_cast<int>(ptrs.release->load());
-  vs.pan = ptrs.pan->load();
+  // per-voice pan removed (now per-SID: leftPan/rightPan)
   vs.ringMod = ptrs.ringMod->load() > 0.5f;
   vs.sync = ptrs.sync->load() > 0.5f;
   vs.filterEnabled = ptrs.filter->load() > 0.5f;
@@ -553,7 +553,7 @@ juce::ValueTree BreadbinProcessor::getVoiceState(int v) const {
   voiceState.setProperty("decay", vs.decay, nullptr);
   voiceState.setProperty("sustain", vs.sustain, nullptr);
   voiceState.setProperty("release", vs.release, nullptr);
-  voiceState.setProperty("pan", vs.pan, nullptr);
+  // per-voice pan no longer saved (now per-SID: leftPan/rightPan)
   voiceState.setProperty("presetId", vs.presetId, nullptr);
   voiceState.setProperty("filterEnabled", vs.filterEnabled, nullptr);
   voiceState.setProperty("ringMod", vs.ringMod, nullptr);
@@ -575,7 +575,7 @@ void BreadbinProcessor::setVoiceState(int v,
   vs.decay = voiceState.getProperty("decay", 0);
   vs.sustain = voiceState.getProperty("sustain", 15);
   vs.release = voiceState.getProperty("release", 0);
-  vs.pan = voiceState.getProperty("pan", 0.0f);
+  // per-voice pan no longer loaded (now per-SID: leftPan/rightPan)
   vs.presetId = voiceState.getProperty("presetId", 1);
   vs.filterEnabled = voiceState.getProperty("filterEnabled", true);
   vs.ringMod = voiceState.getProperty("ringMod", false);
@@ -1153,9 +1153,7 @@ BreadbinProcessor::createParameterLayout() {
         15));
     layout.add(std::make_unique<juce::AudioParameterInt>(
         juce::ParameterID{prefix + "release", 1}, label + "Release", 0, 15, 0));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{prefix + "pan", 1}, label + "Pan", -1.0f, 1.0f,
-        0.0f));
+    // per-voice pan removed (now per-SID: leftPan/rightPan)
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{prefix + "ringMod", 1}, label + "Ring Mod", false));
     layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -1205,7 +1203,7 @@ void BreadbinProcessor::initializeParameterPointers() {
     ptrs.decay = apvts.getRawParameterValue(prefix + "decay");
     ptrs.sustain = apvts.getRawParameterValue(prefix + "sustain");
     ptrs.release = apvts.getRawParameterValue(prefix + "release");
-    ptrs.pan = apvts.getRawParameterValue(prefix + "pan");
+    // per-voice pan removed (now per-SID: leftPan/rightPan)
     ptrs.ringMod = apvts.getRawParameterValue(prefix + "ringMod");
     ptrs.sync = apvts.getRawParameterValue(prefix + "sync");
     ptrs.filter = apvts.getRawParameterValue(prefix + "filter");

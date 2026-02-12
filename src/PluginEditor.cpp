@@ -62,6 +62,12 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   rightDetuneAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "rightDetune", rightDetuneSlider);
+  leftPanAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "leftPan", leftPanSlider);
+  rightPanAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "rightPan", rightPanSlider);
   glideAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "glide", glideTimeSlider);
@@ -582,6 +588,19 @@ void BreadbinEditor::setupLeftSID() {
     processor.setLeftDetune(static_cast<float>(leftDetuneSlider.getValue()));
   };
   addAndMakeVisible(leftDetuneSlider);
+
+  // Pan slider
+  leftPanLabel.setText("Pan", juce::dontSendNotification);
+  leftPanLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  leftPanLabel.setFont(retroFont.withHeight(7.0f));
+  addAndMakeVisible(leftPanLabel);
+
+  leftPanSlider.setRange(-1.0, 1.0, 0.01);
+  leftPanSlider.setValue(-1.0);
+  leftPanSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  leftPanSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
+  leftPanSlider.setTooltip("Left SID Pan: -1 (left) to +1 (right)");
+  addAndMakeVisible(leftPanSlider);
 }
 
 void BreadbinEditor::setupRightSID() {
@@ -694,6 +713,19 @@ void BreadbinEditor::setupRightSID() {
     processor.setRightDetune(static_cast<float>(rightDetuneSlider.getValue()));
   };
   addAndMakeVisible(rightDetuneSlider);
+
+  // Pan slider
+  rightPanLabel.setText("Pan", juce::dontSendNotification);
+  rightPanLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  rightPanLabel.setFont(retroFont.withHeight(7.0f));
+  addAndMakeVisible(rightPanLabel);
+
+  rightPanSlider.setRange(-1.0, 1.0, 0.01);
+  rightPanSlider.setValue(1.0);
+  rightPanSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  rightPanSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
+  rightPanSlider.setTooltip("Right SID Pan: -1 (left) to +1 (right)");
+  addAndMakeVisible(rightPanSlider);
 }
 
 void BreadbinEditor::setupVoiceEditor() {
@@ -955,7 +987,7 @@ void BreadbinEditor::resized() {
   bounds.removeFromTop(pad * 2);
 
   // ===== SID PANELS: Left and Right side by side =====
-  auto sidRow = bounds.removeFromTop(160);
+  auto sidRow = bounds.removeFromTop(180);
   const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
 
   // ----- LEFT SID -----
@@ -991,6 +1023,11 @@ void BreadbinEditor::resized() {
   leftDetuneLabel.setBounds(leftDetuneRow.removeFromLeft(45));
   leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(130));
 
+  // Pan
+  auto leftPanRow = leftPanel.removeFromTop(20);
+  leftPanLabel.setBounds(leftPanRow.removeFromLeft(45));
+  leftPanSlider.setBounds(leftPanRow.removeFromLeft(130));
+
   sidRow.removeFromLeft(pad * 2);
 
   // ----- RIGHT SID -----
@@ -1025,6 +1062,11 @@ void BreadbinEditor::resized() {
   auto rightDetuneRow = rightPanel.removeFromTop(20);
   rightDetuneSlider.setBounds(rightDetuneRow.removeFromRight(130));
   rightDetuneLabel.setBounds(rightDetuneRow.removeFromRight(45));
+
+  // Pan (right-justified)
+  auto rightPanRow = rightPanel.removeFromTop(20);
+  rightPanSlider.setBounds(rightPanRow.removeFromRight(130));
+  rightPanLabel.setBounds(rightPanRow.removeFromRight(45));
 
   bounds.removeFromTop(pad * 2);
 
@@ -1182,8 +1224,7 @@ void BreadbinEditor::resized() {
 
 void BreadbinEditor::applyPreset(int presetId) {
   auto configureVoice = [this, presetId](int voice, SIDEngine::Waveform wave,
-                                         int pw, int a, int d, int s, int r,
-                                         float pan) {
+                                         int pw, int a, int d, int s, int r) {
     auto &settings = processor.getVoiceSettings(voice);
     settings.presetId = presetId;
     settings.waveform = wave;
@@ -1192,29 +1233,25 @@ void BreadbinEditor::applyPreset(int presetId) {
     settings.decay = d;
     settings.sustain = s;
     settings.release = r;
-    settings.pan = pan;
     processor.applyVoiceSettings(voice);
   };
 
   // Apply preset to selected voice only
-  float pan = (selectedVoice < 3) ? -0.5f : 0.5f;
 
   switch (presetId) {
   case 2: // Classic Lead (Monty) - Pulse with medium PWM
-    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4,
-                   pan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4);
     break;
   case 3: // Fat Bass (Ocean) - Sawtooth with slow attack
     configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12,
-                   3, pan);
+                   3);
     break;
   case 4: // PWM Pad (Hubbard) - Pulse with slow attack/release
-    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12, 8,
-                   pan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12,
+                   8);
     break;
   case 5: // Noise Snare - Noise with fast decay
-    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 8, 0, 4,
-                   pan);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 8, 0, 4);
     break;
   }
 
@@ -1224,7 +1261,7 @@ void BreadbinEditor::applyPreset(int presetId) {
 void BreadbinEditor::applyGlobalPreset(int presetId) {
   // Helper to configure a voice
   auto configVoice = [this](int v, SIDEngine::Waveform wave, int pw, int a,
-                            int d, int s, int r, float pan) {
+                            int d, int s, int r) {
     auto &vs = processor.getVoiceSettings(v);
     vs.waveform = wave;
     vs.pulseWidth = pw;
@@ -1232,7 +1269,6 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     vs.decay = d;
     vs.sustain = s;
     vs.release = r;
-    vs.pan = pan;
     vs.enabled = true;
     processor.applyVoiceSettings(v);
   };
@@ -1260,8 +1296,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   switch (presetId) {
   case 1: // Init - Basic pulse on all voices
     for (int v = 0; v < 6; ++v) {
-      float pan = (v < 3) ? -0.3f : 0.3f;
-      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 0, pan);
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 0);
     }
     processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
     dualModeSelector.setSelectedId(1, juce::dontSendNotification);
@@ -1273,13 +1308,13 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 2: // Dual Lead - Classic SID lead sound
     // Left SID voices - slightly detuned saw
-    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4, -0.7f);
-    configVoice(1, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5, -0.3f);
-    configVoice(2, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5, -0.5f);
+    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4);
+    configVoice(1, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5);
+    configVoice(2, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5);
     // Right SID voices - complement
-    configVoice(3, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4, 0.7f);
-    configVoice(4, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5, 0.3f);
-    configVoice(5, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5, 0.5f);
+    configVoice(3, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 10, 4);
+    configVoice(4, SIDEngine::Waveform::Pulse, 1800, 0, 8, 8, 5);
+    configVoice(5, SIDEngine::Waveform::Pulse, 2200, 0, 8, 8, 5);
     processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
     dualModeSelector.setSelectedId(1, juce::dontSendNotification);
     processor.setLeftDetune(-5.0f);
@@ -1299,9 +1334,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 3: // Pad Stack - Slow attack pad
     for (int v = 0; v < 6; ++v) {
-      float pan = (v < 3) ? -0.5f : 0.5f;
       int pw = 1024 + (v % 3) * 300; // Varied pulse widths
-      configVoice(v, SIDEngine::Waveform::Pulse, pw, 10, 4, 12, 10, pan);
+      configVoice(v, SIDEngine::Waveform::Pulse, pw, 10, 4, 12, 10);
     }
     processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
     dualModeSelector.setSelectedId(1, juce::dontSendNotification);
@@ -1322,8 +1356,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 4: // Arpeggiated - Fast arp with bright sound
     for (int v = 0; v < 6; ++v) {
-      float pan = (v < 3) ? -0.4f : 0.4f;
-      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 3, pan);
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 3);
     }
     processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
     dualModeSelector.setSelectedId(1, juce::dontSendNotification);
@@ -1339,7 +1372,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 5: // Fat Unison - Thick unison sound
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 14, 5, 0.0f);
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 14, 5);
     }
     processor.setDualMode(BreadbinProcessor::DualMode::Unison);
     dualModeSelector.setSelectedId(2, juce::dontSendNotification);
@@ -1359,12 +1392,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
 
   case 6: // Retro Synth - Mixed waveforms for classic vibe
-    configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, -0.6f);
-    configVoice(1, SIDEngine::Waveform::Pulse, 1536, 0, 6, 12, 4, -0.2f);
-    configVoice(2, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5, -0.4f);
-    configVoice(3, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 0.6f);
-    configVoice(4, SIDEngine::Waveform::Pulse, 2560, 0, 6, 12, 4, 0.2f);
-    configVoice(5, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5, 0.4f);
+    configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
+    configVoice(1, SIDEngine::Waveform::Pulse, 1536, 0, 6, 12, 4);
+    configVoice(2, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5);
+    configVoice(3, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
+    configVoice(4, SIDEngine::Waveform::Pulse, 2560, 0, 6, 12, 4);
+    configVoice(5, SIDEngine::Waveform::Sawtooth, 0, 0, 8, 8, 5);
     processor.setDualMode(BreadbinProcessor::DualMode::StereoSplit);
     dualModeSelector.setSelectedId(1, juce::dontSendNotification);
     resetFilters();

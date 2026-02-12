@@ -24,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   external audio routes through a proper host input, not a feedback loop from the output buffer.
 - **Per-SID pan**: `leftPan` and `rightPan` APVTS params with standard semantics
   (-1=left, 0=center, +1=right). Left SID defaults -1, right SID defaults +1.
-  Equal-power pan law (cos/sin).
+  Equal-power pan law (cos/sin). Pan sliders exposed in each SID panel's UI.
+- **Dead code removal**: Removed legacy per-voice pan APVTS parameter, serialization,
+  and preset references. Per-voice pan was a no-op superseded by per-SID pan.
 
 ### Added
 

@@ -121,9 +121,9 @@ public:
     int decay = 0;
     int sustain = 15;
     int release = 0;
-    float pan = 0.0f;     // -1.0 = full left, 0.0 = center, 1.0 = full right
-    bool ringMod = false; // Ring modulation with previous voice
-    bool sync = false;    // Hard sync with previous voice
+    // per-voice pan removed (now per-SID: leftPan/rightPan)
+    bool ringMod = false;      // Ring modulation with previous voice
+    bool sync = false;         // Hard sync with previous voice
     bool filterEnabled = true; // Route this voice through filter
   };
   VoiceSettings &getVoiceSettings(int voice) { return voiceSettings[voice]; }
@@ -291,7 +291,7 @@ private:
     std::atomic<float> *decay = nullptr;
     std::atomic<float> *sustain = nullptr;
     std::atomic<float> *release = nullptr;
-    std::atomic<float> *pan = nullptr;
+    // per-voice pan removed (now per-SID: leftPan/rightPan)
     std::atomic<float> *ringMod = nullptr;
     std::atomic<float> *sync = nullptr;
     std::atomic<float> *filter = nullptr;
