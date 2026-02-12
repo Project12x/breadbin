@@ -1590,50 +1590,62 @@ void testPostModPWStorage() {
   std::printf("--- Post-mod PW storage: LFO PW depth changes lastAppliedPW ---\n");
   auto p = createTestProcessor();
 
-  // Enable LFO1 with PW modulation depth
+  // Use Square LFO (always +-1.0, never zero) to guarantee a delta
   p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
   auto *rateParam = p->apvts.getParameter("lfoRate");
-  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(10.0f));
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f)); // slow rate
   p->apvts.getParameter("lfoDepthPW")->setValueNotifyingHost(1.0f); // max depth
 
-  // Trigger a note
+  int basePW = p->getVoiceSettings(0).pulseWidth; // default 2048
+
+  // Trigger a note and process
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
   processBlock(*p, 512, &midi);
-
-  // Process a few blocks for LFO to produce non-zero value
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 3; ++i)
     processBlock(*p);
 
-  int basePW = p->getVoiceSettings(0).pulseWidth; // default 2048
   int appliedPW = p->getLastAppliedPW();
 
   ASSERT_TRUE(appliedPW >= 0 && appliedPW <= 4095,
               "Post-mod PW within valid range");
-  // With max LFO depth and active LFO, PW should differ from base at some point
-  // (LFO might be near zero crossing, so just check range is valid)
-  ASSERT_TRUE(basePW >= 0, "Base PW is valid");
+  ASSERT_TRUE(appliedPW != basePW,
+              "Post-mod PW differs from base when LFO active");
+  // Square LFO at max depth: PW offset = +-1.0 * 2048 = +-2048
+  int delta = std::abs(appliedPW - basePW);
+  ASSERT_TRUE(delta > 100, "Post-mod PW delta is substantial (>100)");
 }
 
 void testPostModPitchStorage() {
   std::printf("--- Post-mod pitch storage: LFO pitch depth changes offset ---\n");
   auto p = createTestProcessor();
 
-  // Enable LFO1 with pitch modulation depth
+  // Verify baseline: no LFO -> pitch offset is zero
+  processBlock(*p);
+  ASSERT_NEAR(p->getLastAppliedPitchOffset(), 0.0f, 0.001f,
+              "Pitch offset is zero with LFO disabled");
+
+  // Enable Square LFO with pitch modulation (always +-1.0)
   p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
   auto *rateParam = p->apvts.getParameter("lfoRate");
-  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(10.0f));
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f)); // slow rate
   p->apvts.getParameter("lfoDepthPitch")->setValueNotifyingHost(1.0f);
 
   // Trigger a note and process
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
   processBlock(*p, 512, &midi);
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 3; ++i)
     processBlock(*p);
 
   float pitchOffset = p->getLastAppliedPitchOffset();
-  // LFO at max depth produces up to +-2.0 semitones
+  // Square LFO at max depth: offset = +-1.0 * 2.0 semitones
+  ASSERT_TRUE(std::abs(pitchOffset) > 0.1f,
+              "Post-mod pitch offset is non-zero with active LFO");
   ASSERT_TRUE(pitchOffset >= -3.0f && pitchOffset <= 3.0f,
               "Post-mod pitch offset within expected range");
 }
@@ -1642,16 +1654,19 @@ void testPostModResonanceStorage() {
   std::printf("--- Post-mod resonance storage: mod matrix LFO->Res changes value ---\n");
   auto p = createTestProcessor();
 
-  // Set base resonance
-  p->setBaseFilterResonance(true, 5);
-  p->setBaseFilterResonance(false, 5);
-  p->getLeftSID().setFilterResonance(5);
-  p->getRightSID().setFilterResonance(5);
+  // Set base resonance to 7 (mid-range, so both +/- offsets stay in [0,15])
+  int baseRes = 7;
+  p->setBaseFilterResonance(true, baseRes);
+  p->setBaseFilterResonance(false, baseRes);
+  p->getLeftSID().setFilterResonance(baseRes);
+  p->getRightSID().setFilterResonance(baseRes);
 
-  // Enable LFO1
+  // Enable Square LFO (always +-1.0) for deterministic source value
   p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
   auto *rateParam = p->apvts.getParameter("lfoRate");
-  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(10.0f));
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f)); // slow
 
   // Route mod matrix: LFO1 -> Resonance, full amount
   auto *srcParam = p->apvts.getParameter("mod0_src");
@@ -1664,22 +1679,26 @@ void testPostModResonanceStorage() {
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
   processBlock(*p, 512, &midi);
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 3; ++i)
     processBlock(*p);
 
   int appliedRes = p->getLastAppliedResLeft();
   ASSERT_TRUE(appliedRes >= 0 && appliedRes <= 15,
               "Post-mod resonance within valid range [0,15]");
+  ASSERT_TRUE(appliedRes != baseRes,
+              "Post-mod resonance differs from base when mod matrix active");
 }
 
 void testModSlotDisplayValues() {
   std::printf("--- Mod slot display: active slot reports non-zero source/contribution ---\n");
   auto p = createTestProcessor();
 
-  // Enable LFO1
+  // Enable Square LFO (always +-1.0, never zero)
   p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
   auto *rateParam = p->apvts.getParameter("lfoRate");
-  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(10.0f));
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f)); // slow
 
   // Route slot 0: LFO1 -> Filter, amount 0.5
   auto *srcParam = p->apvts.getParameter("mod0_src");
@@ -1693,20 +1712,24 @@ void testModSlotDisplayValues() {
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
   processBlock(*p, 512, &midi);
-  for (int i = 0; i < 10; ++i)
+  for (int i = 0; i < 3; ++i)
     processBlock(*p);
 
-  // Slot 0 should have a source value (LFO1 currentValue) stored
-  // The LFO may or may not be exactly zero, but sourceValue should be set
   float srcVal = p->getModSlotSourceValue(0);
   float contrib = p->getModSlotContribution(0);
+
+  // Square LFO guarantees |srcVal| = 1.0
+  ASSERT_TRUE(std::abs(srcVal) > 0.5f,
+              "Mod slot source value is non-zero (Square LFO)");
   // Contribution = srcVal * 0.5
-  if (std::abs(srcVal) > 0.001f) {
-    ASSERT_NEAR(contrib, srcVal * 0.5f, 0.01f,
-                "Mod slot contribution = srcVal * amount");
-  } else {
-    ASSERT_TRUE(true, "LFO near zero crossing - contribution check skipped");
-  }
+  ASSERT_NEAR(contrib, srcVal * 0.5f, 0.01f,
+              "Mod slot contribution = srcVal * amount");
+
+  // Unconfigured slot 1 should still be zero
+  ASSERT_NEAR(p->getModSlotSourceValue(1), 0.0f, 0.001f,
+              "Unconfigured slot 1 source is zero");
+  ASSERT_NEAR(p->getModSlotContribution(1), 0.0f, 0.001f,
+              "Unconfigured slot 1 contribution is zero");
 }
 
 void testModSlotInactiveZeros() {
@@ -1734,18 +1757,65 @@ void testPresetDirtyDetection() {
   // Should not be dirty immediately after snapshot
   ASSERT_TRUE(!p->isPresetDirty(), "Not dirty immediately after snapshot");
 
-  // Change a parameter
+  // Change an APVTS parameter -> dirty
   auto *param = p->apvts.getParameter("masterVol");
   float origVal = param->getValue();
   float newVal = origVal > 0.5f ? 0.2f : 0.8f;
   param->setValueNotifyingHost(newVal);
+  ASSERT_TRUE(p->isPresetDirty(), "Dirty after changing APVTS parameter");
 
-  // Should now be dirty
-  ASSERT_TRUE(p->isPresetDirty(), "Dirty after changing parameter");
-
-  // Restore original and re-snapshot
+  // Restore original -> clean
   param->setValueNotifyingHost(origVal);
   ASSERT_TRUE(!p->isPresetDirty(), "Clean after restoring original value");
+
+  // Change a non-APVTS filter value -> dirty
+  p->setBaseFilterCutoff(true, 500);
+  ASSERT_TRUE(p->isPresetDirty(), "Dirty after changing non-APVTS filter cutoff");
+
+  // Re-snapshot with new state, then verify clean
+  p->snapshotPresetState();
+  ASSERT_TRUE(!p->isPresetDirty(), "Clean after re-snapshot");
+
+  // Change non-APVTS resonance -> dirty
+  p->setBaseFilterResonance(true, 10);
+  ASSERT_TRUE(p->isPresetDirty(), "Dirty after changing non-APVTS filter resonance");
+}
+
+void testPostModValuesReturnToBaseline() {
+  std::printf("--- Post-mod values return to baseline when modulation disabled ---\n");
+  auto p = createTestProcessor();
+
+  // Enable Square LFO with PW + pitch depth
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f));
+  p->apvts.getParameter("lfoDepthPW")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfoDepthPitch")->setValueNotifyingHost(1.0f);
+
+  // Play note and process with LFO active
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+  for (int i = 0; i < 3; ++i)
+    processBlock(*p);
+
+  // Verify modulation is active
+  int basePW = p->getVoiceSettings(0).pulseWidth;
+  ASSERT_TRUE(p->getLastAppliedPW() != basePW,
+              "PW modulated while LFO active");
+  ASSERT_TRUE(std::abs(p->getLastAppliedPitchOffset()) > 0.1f,
+              "Pitch offset non-zero while LFO active");
+
+  // Disable LFO and process
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(0.0f);
+  for (int i = 0; i < 3; ++i)
+    processBlock(*p);
+
+  // PW should return to base, pitch offset to zero
+  ASSERT_TRUE(p->getLastAppliedPW() == basePW,
+              "PW returns to base when LFO disabled");
+  ASSERT_NEAR(p->getLastAppliedPitchOffset(), 0.0f, 0.001f,
+              "Pitch offset returns to zero when LFO disabled");
 }
 
 // ============================================================================
@@ -1835,6 +1905,7 @@ int main() {
   testModSlotDisplayValues();
   testModSlotInactiveZeros();
   testPresetDirtyDetection();
+  testPostModValuesReturnToBaseline();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
