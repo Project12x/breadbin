@@ -37,6 +37,22 @@ public:
     float currentValue = 0.0f; // 0.0-1.0 envelope output
   };
 
+  // Wavetable step sequencer
+  struct WavetableStep {
+    int waveform = 2;      // 0=Tri,1=Saw,2=Pulse,3=Noise
+    int pitchOffset = 0;   // -24 to +24 semitones
+    int pulseWidth = 2048; // 0-4095
+  };
+  struct WavetableState {
+    bool enabled = false;
+    int numSteps = 4;
+    float rateHz = 50.0f;
+    bool loop = true;
+    int currentStep = 0;
+    double timer = 0.0;
+    std::array<WavetableStep, 16> steps;
+  };
+
   enum class ControlParam {
     None = 0,
     MasterVolume,
@@ -340,6 +356,18 @@ private:
   };
   std::array<VoiceState, 6> voices;
 
+  // Wavetable APVTS pointers
+  std::atomic<float> *wtEnablePtr = nullptr;
+  std::atomic<float> *wtNumStepsPtr = nullptr;
+  std::atomic<float> *wtRatePtr = nullptr;
+  std::atomic<float> *wtLoopPtr = nullptr;
+  struct WTStepPtrs {
+    std::atomic<float> *wave = nullptr;
+    std::atomic<float> *pitch = nullptr;
+    std::atomic<float> *pw = nullptr;
+  };
+  std::array<WTStepPtrs, 16> wtStepPtrs;
+
   // FX CHAIN
   juce::dsp::Chorus<float> chorus;
   juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>
@@ -401,6 +429,10 @@ private:
 
   // Filter Envelope state
   FilterEnvelopeState filterEnv;
+
+  // Wavetable step sequencer state
+  WavetableState wavetable;
+  void processWavetable(int numSamples);
 
   // Master Control & MIDI
   float masterVolume = 0.8f;

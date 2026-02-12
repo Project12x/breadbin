@@ -347,7 +347,7 @@ private:
 
   // Editor constants
   static constexpr int width = 1000;
-  static constexpr int height = 714;
+  static constexpr int height = 743;
 
   // ========== FX: CHORUS ==========
   juce::ToggleButton chorusEnableButton{"Chorus"};
@@ -369,6 +369,20 @@ private:
       delayEnableAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       delayTimeLAttach, delayTimeRAttach, delayFBAttach, delayMixAttach;
+
+  // ========== WAVETABLE STEP SEQUENCER ==========
+  juce::ToggleButton wtEnableButton{"WaveTab"};
+  juce::Slider wtNumStepsSlider;
+  juce::Slider wtRateSlider;
+  juce::ToggleButton wtLoopButton{"Loop"};
+  juce::Label wtStepsLabel, wtRateLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      wtEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      wtNumStepsAttach, wtRateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      wtLoopAttach;
 
   // ========== FILTER ENVELOPE ==========
   juce::ToggleButton filterEnvEnableButton{"Filt Env"};

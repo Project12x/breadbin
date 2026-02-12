@@ -108,6 +108,17 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   lfo2.depthPulseWidth = lfo2DepthPWPtr->load();
   lfo2.depthPitch = lfo2DepthPitchPtr->load();
 
+  // Sync Wavetable from APVTS
+  wavetable.enabled = wtEnablePtr->load() > 0.5f;
+  wavetable.numSteps = static_cast<int>(wtNumStepsPtr->load());
+  wavetable.rateHz = wtRatePtr->load();
+  wavetable.loop = wtLoopPtr->load() > 0.5f;
+  for (int i = 0; i < 16; ++i) {
+    wavetable.steps[i].waveform = static_cast<int>(wtStepPtrs[i].wave->load());
+    wavetable.steps[i].pitchOffset = static_cast<int>(wtStepPtrs[i].pitch->load());
+    wavetable.steps[i].pulseWidth = static_cast<int>(wtStepPtrs[i].pw->load());
+  }
+
   // Sync Arp from APVTS
   arpEnabled = arpEnablePtr->load() > 0.5f;
   arpPattern = static_cast<ArpPattern>(static_cast<int>(arpPatternPtr->load()));
@@ -150,6 +161,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   const int numSamples = buffer.getNumSamples();
   if (arpEnabled && !arpSequence.empty()) {
     processArpeggiator(numSamples);
+  }
+
+  // Process wavetable step sequencer (after arp, before LFO)
+  if (wavetable.enabled) {
+    processWavetable(numSamples);
   }
 
   // Process glide/portamento for all voices
@@ -949,6 +965,72 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
   }
 }
 
+void BreadbinProcessor::processWavetable(int numSamples) {
+  // Block-rate timer: advance by block duration
+  double samplesPerStep = hostSampleRate / static_cast<double>(wavetable.rateHz);
+  wavetable.timer += numSamples;
+
+  if (wavetable.timer >= samplesPerStep) {
+    wavetable.timer -= samplesPerStep;
+
+    // Advance step
+    int nextStep = wavetable.currentStep + 1;
+    if (nextStep >= wavetable.numSteps) {
+      if (wavetable.loop)
+        nextStep = 0;
+      else
+        nextStep = wavetable.numSteps - 1; // Stay on last step
+    }
+    wavetable.currentStep = nextStep;
+  }
+
+  // Apply current step to all active voices
+  auto &step = wavetable.steps[wavetable.currentStep];
+
+  // Map waveform index to SIDEngine::Waveform
+  SIDEngine::Waveform wf;
+  switch (step.waveform) {
+  case 0:
+    wf = SIDEngine::Waveform::Triangle;
+    break;
+  case 1:
+    wf = SIDEngine::Waveform::Sawtooth;
+    break;
+  case 2:
+    wf = SIDEngine::Waveform::Pulse;
+    break;
+  case 3:
+    wf = SIDEngine::Waveform::Noise;
+    break;
+  default:
+    wf = SIDEngine::Waveform::Pulse;
+    break;
+  }
+
+  for (int v = 0; v < 6; ++v) {
+    if (!voices[v].active)
+      continue;
+
+    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+    int sidVoice = v % 3;
+
+    // Set waveform
+    sid.setWaveform(sidVoice, wf);
+
+    // Set pulse width
+    sid.setPulseWidth(sidVoice, step.pulseWidth);
+
+    // Apply pitch offset
+    if (step.pitchOffset != 0) {
+      double baseHz =
+          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+      double modHz =
+          baseHz * std::pow(2.0, step.pitchOffset / 12.0);
+      sid.setFrequency(sidVoice, modHz);
+    }
+  }
+}
+
 void BreadbinProcessor::processLFO(int numSamples) {
   // Advance phase
   double phaseInc =
@@ -1362,6 +1444,30 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"filterEnvAmount", 1}, "Filter Env Amount", -1.0f,
       1.0f, 0.5f));
 
+  // Wavetable Step Sequencer
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"wtEnable", 1}, "Wavetable Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"wtNumSteps", 1}, "Wavetable Steps", 1, 16, 4));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"wtRate", 1}, "Wavetable Rate", 1.0f, 200.0f, 50.0f));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"wtLoop", 1}, "Wavetable Loop", true));
+  // Per-step parameters (16 steps)
+  for (int i = 0; i < 16; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{prefix + "wave", 1},
+        "WT Step " + juce::String(i) + " Wave",
+        juce::StringArray{"Tri", "Saw", "Pulse", "Noise"}, 2));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "pitch", 1},
+        "WT Step " + juce::String(i) + " Pitch", -24, 24, 0));
+    layout.add(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{prefix + "pw", 1},
+        "WT Step " + juce::String(i) + " PW", 0, 4095, 2048));
+  }
+
   // FX: Chorus
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"chorusEnable", 1}, "Chorus Enable", false));
@@ -1473,6 +1579,18 @@ void BreadbinProcessor::initializeParameterPointers() {
   filterEnvSustainPtr = apvts.getRawParameterValue("filterEnvSustain");
   filterEnvReleasePtr = apvts.getRawParameterValue("filterEnvRelease");
   filterEnvAmountPtr = apvts.getRawParameterValue("filterEnvAmount");
+
+  // Wavetable
+  wtEnablePtr = apvts.getRawParameterValue("wtEnable");
+  wtNumStepsPtr = apvts.getRawParameterValue("wtNumSteps");
+  wtRatePtr = apvts.getRawParameterValue("wtRate");
+  wtLoopPtr = apvts.getRawParameterValue("wtLoop");
+  for (int i = 0; i < 16; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    wtStepPtrs[i].wave = apvts.getRawParameterValue(prefix + "wave");
+    wtStepPtrs[i].pitch = apvts.getRawParameterValue(prefix + "pitch");
+    wtStepPtrs[i].pw = apvts.getRawParameterValue(prefix + "pw");
+  }
 
   // FX
   chorusEnablePtr = apvts.getRawParameterValue("chorusEnable");

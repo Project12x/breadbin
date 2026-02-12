@@ -112,6 +112,20 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "delayMix", delayMixSlider);
 
+  // Wavetable
+  wtEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "wtEnable", wtEnableButton);
+  wtNumStepsAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "wtNumSteps", wtNumStepsSlider);
+  wtRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "wtRate", wtRateSlider);
+  wtLoopAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "wtLoop", wtLoopButton);
+
   // Filter Envelope
   filterEnvEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -505,6 +519,20 @@ void BreadbinEditor::setupControls() {
                 0.01f, "Delay Feedback");
   setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f,
                 0.01f, "Delay Wet/Dry Mix");
+
+  // ===== WAVETABLE STEP SEQUENCER =====
+  wtEnableButton.setTooltip("Wavetable: C64-style step sequencer");
+  wtEnableButton.setButtonText("WaveTab");
+  addAndMakeVisible(wtEnableButton);
+
+  wtLoopButton.setTooltip("Loop: Cycle steps or stop at end");
+  wtLoopButton.setButtonText("Loop");
+  addAndMakeVisible(wtLoopButton);
+
+  setupFXSlider(wtNumStepsSlider, wtStepsLabel, "Steps", 1.0f, 16.0f, 4.0f,
+                1.0f, "Number of active steps");
+  setupFXSlider(wtRateSlider, wtRateLabel, "Rate", 1.0f, 200.0f, 50.0f,
+                1.0f, "Step rate in Hz");
 
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
@@ -1445,6 +1473,25 @@ void BreadbinEditor::resized() {
   delayMixLabel.setBounds(delayStack.removeFromLeft(25).withHeight(12));
   delayMixSlider.setBounds(
       delayStack.removeFromLeft(50).withHeight(18).translated(0, 3));
+
+  bounds.removeFromBottom(4);
+
+  // 3b. Wavetable Step Sequencer row
+  auto wtRow = bounds.removeFromBottom(25);
+  auto wtStack = wtRow.removeFromLeft(420);
+  wtEnableButton.setBounds(
+      wtStack.removeFromLeft(70).withSize(70, 20).translated(0, 2));
+  wtStack.removeFromLeft(6);
+  wtStepsLabel.setBounds(wtStack.removeFromLeft(35).withHeight(12));
+  wtNumStepsSlider.setBounds(
+      wtStack.removeFromLeft(60).withHeight(18).translated(0, 3));
+  wtStack.removeFromLeft(4);
+  wtRateLabel.setBounds(wtStack.removeFromLeft(30).withHeight(12));
+  wtRateSlider.setBounds(
+      wtStack.removeFromLeft(80).withHeight(18).translated(0, 3));
+  wtStack.removeFromLeft(6);
+  wtLoopButton.setBounds(
+      wtStack.removeFromLeft(50).withSize(50, 20).translated(0, 2));
 
   bounds.removeFromBottom(4);
 
