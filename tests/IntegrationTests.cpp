@@ -1583,6 +1583,91 @@ void testModMatrixResonanceReturnsToBase() {
 }
 
 // ============================================================================
+// Pitch Bend Range APVTS Tests
+// ============================================================================
+
+void testPitchBendRangeAPVTSDefault() {
+  std::printf("--- Pitch bend range APVTS default = 2 ---\n");
+  auto p = createTestProcessor();
+  auto *val = p->apvts.getRawParameterValue("pitchBendRange");
+  ASSERT_TRUE(val != nullptr, "pitchBendRange parameter exists");
+  ASSERT_TRUE(static_cast<int>(val->load()) == 2,
+              "pitchBendRange default is 2");
+}
+
+void testPitchBendRangeAPVTSSync() {
+  std::printf("--- Pitch bend range APVTS sync to engine ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Set APVTS to 7
+  auto *param = p->apvts.getParameter("pitchBendRange");
+  ASSERT_TRUE(param != nullptr, "pitchBendRange param found");
+  param->setValueNotifyingHost(param->convertTo0to1(7.0f));
+
+  // Process a block so processBlock syncs the value
+  warmUp(*p);
+
+  ASSERT_TRUE(p->getPitchBendRange() == 7,
+              "Engine pitchBendRange synced to 7 from APVTS");
+}
+
+void testPitchBendRangeStatePersistence() {
+  std::printf("--- Pitch bend range persists across save/restore ---\n");
+  juce::MemoryBlock stateData;
+
+  {
+    auto p = createTestProcessor();
+    warmUp(*p);
+    auto *param = p->apvts.getParameter("pitchBendRange");
+    param->setValueNotifyingHost(param->convertTo0to1(12.0f));
+    warmUp(*p);
+    ASSERT_TRUE(p->getPitchBendRange() == 12, "Range set to 12 before save");
+    p->getStateInformation(stateData);
+  }
+
+  {
+    auto p2 = createTestProcessor();
+    p2->setStateInformation(stateData.getData(), (int)stateData.getSize());
+    warmUp(*p2);
+    ASSERT_TRUE(p2->getPitchBendRange() == 12,
+                "Range restored to 12 after load");
+  }
+}
+
+void testPitchBendRangeFullCycle() {
+  std::printf("--- Pitch bend range full lifecycle (set/sync/clamp/reset) ---\n");
+  auto p = createTestProcessor();
+  auto *param = p->apvts.getParameter("pitchBendRange");
+
+  // Test all valid values sync correctly through processBlock
+  static constexpr int testValues[] = {2, 3, 5, 7, 12};
+  for (int val : testValues) {
+    param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(val)));
+    warmUp(*p);
+    ASSERT_TRUE(p->getPitchBendRange() == val,
+                ("Range synced to " + std::to_string(val)).c_str());
+  }
+
+  // Verify APVTS int parameter clamps out-of-range: set to min boundary
+  param->setValueNotifyingHost(0.0f); // normalized 0 = min = 2
+  warmUp(*p);
+  ASSERT_TRUE(p->getPitchBendRange() == 2, "Normalized 0.0 clamps to min (2)");
+
+  // Set to max boundary
+  param->setValueNotifyingHost(1.0f); // normalized 1 = max = 12
+  warmUp(*p);
+  ASSERT_TRUE(p->getPitchBendRange() == 12, "Normalized 1.0 clamps to max (12)");
+
+  // Verify reset: set to 12, then reset via APVTS to default 2
+  param->setValueNotifyingHost(param->convertTo0to1(12.0f));
+  warmUp(*p);
+  ASSERT_TRUE(p->getPitchBendRange() == 12, "Set to 12 before reset");
+  param->setValueNotifyingHost(param->convertTo0to1(2.0f));
+  warmUp(*p);
+  ASSERT_TRUE(p->getPitchBendRange() == 2, "Reset back to 2");
+}
+
 // Post-Modulation Value Storage Tests
 // ============================================================================
 
@@ -1616,6 +1701,97 @@ void testPostModPWStorage() {
   // Square LFO at max depth: PW offset = +-1.0 * 2048 = +-2048
   int delta = std::abs(appliedPW - basePW);
   ASSERT_TRUE(delta > 100, "Post-mod PW delta is substantial (>100)");
+}
+
+// ==================== PWM SWEEP TESTS ====================
+
+void testPWMSweepDefaultOff() {
+  std::printf("--- PWM Sweep: default off, depth=0 ---\n");
+  auto p = createTestProcessor();
+
+  auto *enableParam = p->apvts.getParameter("pwmSweepEnable");
+  auto *rateParam = p->apvts.getParameter("pwmSweepRate");
+  auto *depthParam = p->apvts.getParameter("pwmSweepDepth");
+
+  ASSERT_TRUE(enableParam != nullptr, "pwmSweepEnable param exists");
+  ASSERT_TRUE(rateParam != nullptr, "pwmSweepRate param exists");
+  ASSERT_TRUE(depthParam != nullptr, "pwmSweepDepth param exists");
+  if (!enableParam || !rateParam || !depthParam) return;
+
+  // AudioParameterBool: getValue() returns 0.0 (false) or 1.0 (true)
+  ASSERT_NEAR(enableParam->getValue(), 0.0f, 0.01f, "PWM sweep disabled by default");
+
+  float depthVal = depthParam->convertFrom0to1(depthParam->getValue());
+  ASSERT_NEAR(depthVal, 0.0f, 0.01f, "PWM sweep depth=0 by default");
+
+  float rateVal = rateParam->convertFrom0to1(rateParam->getValue());
+  ASSERT_NEAR(rateVal, 0.5f, 0.05f, "PWM sweep rate=0.5 by default");
+}
+
+void testPWMSweepModifiesPW() {
+  std::printf("--- PWM Sweep: modifies PW when enabled ---\n");
+  auto p = createTestProcessor();
+
+  // Set voice 0 to Pulse waveform with known PW
+  p->apvts.getParameter("v0_waveform")->setValueNotifyingHost(
+      p->apvts.getParameter("v0_waveform")->convertTo0to1(2.0f)); // Pulse
+  p->apvts.getParameter("v0_pw")->setValueNotifyingHost(
+      p->apvts.getParameter("v0_pw")->convertTo0to1(2048.0f)); // center
+
+  // Process a block with sweep disabled to get baseline PW
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  int basePW = p->getLastAppliedPW();
+
+  // Enable PWM sweep with full depth and high rate
+  p->apvts.getParameter("pwmSweepEnable")->setValueNotifyingHost(1.0f);
+  auto *rateParam = p->apvts.getParameter("pwmSweepRate");
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(5.0f)); // fast
+  p->apvts.getParameter("pwmSweepDepth")->setValueNotifyingHost(1.0f); // max
+
+  // Process several blocks to let the sweep oscillator advance
+  for (int i = 0; i < 10; ++i)
+    processBlock(*p);
+
+  int modPW = p->getLastAppliedPW();
+
+  ASSERT_TRUE(modPW >= 0 && modPW <= 4095,
+              "Post-sweep PW within valid range");
+  ASSERT_TRUE(modPW != basePW,
+              "PWM sweep modifies PW when enabled with depth > 0");
+}
+
+void testPWMSweepStateRoundTrip() {
+  std::printf("--- PWM Sweep: state round-trip ---\n");
+  auto p = createTestProcessor();
+
+  // Set non-default values
+  p->apvts.getParameter("pwmSweepEnable")->setValueNotifyingHost(1.0f);
+  auto *rateParam = p->apvts.getParameter("pwmSweepRate");
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(3.5f));
+  p->apvts.getParameter("pwmSweepDepth")->setValueNotifyingHost(0.75f);
+
+  // Save state
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  // Restore to a fresh processor
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), static_cast<int>(stateData.getSize()));
+
+  float enable2 = p2->apvts.getParameter("pwmSweepEnable")->convertFrom0to1(
+      p2->apvts.getParameter("pwmSweepEnable")->getValue());
+  ASSERT_NEAR(enable2, 1.0f, 0.01f, "PWM sweep enable restored");
+
+  float rate2 = p2->apvts.getParameter("pwmSweepRate")->convertFrom0to1(
+      p2->apvts.getParameter("pwmSweepRate")->getValue());
+  ASSERT_NEAR(rate2, 3.5f, 0.1f, "PWM sweep rate restored (~3.5)");
+
+  float depth2 = p2->apvts.getParameter("pwmSweepDepth")->convertFrom0to1(
+      p2->apvts.getParameter("pwmSweepDepth")->getValue());
+  ASSERT_NEAR(depth2, 0.75f, 0.01f, "PWM sweep depth restored (0.75)");
 }
 
 void testPostModPitchStorage() {
@@ -1819,6 +1995,215 @@ void testPostModValuesReturnToBaseline() {
 }
 
 // ============================================================================
+// Chord Memory tests
+// ============================================================================
+
+void testChordMemoryDefaultOff() {
+  std::printf("--- Chord Memory default: disabled, all intervals zero ---\n");
+  auto p = createTestProcessor();
+
+  auto *enableParam = p->apvts.getParameter("chordEnable");
+  auto *slotParam = p->apvts.getParameter("chordSlot");
+  if (!enableParam || !slotParam) {
+    ASSERT_TRUE(false, "chordEnable or chordSlot param missing");
+    return;
+  }
+
+  float enable = enableParam->convertFrom0to1(enableParam->getValue());
+  ASSERT_NEAR(enable, 0.0f, 0.01f, "Chord memory disabled by default");
+
+  float slot = slotParam->convertFrom0to1(slotParam->getValue());
+  ASSERT_NEAR(slot, 0.0f, 0.01f, "Chord slot defaults to 0");
+
+  // All 20 intervals should be 0
+  for (int s = 0; s < 4; ++s) {
+    for (int i = 0; i < 5; ++i) {
+      auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+      auto *intParam = p->apvts.getParameter(id);
+      ASSERT_TRUE(intParam != nullptr, ("Param exists: " + id).toStdString().c_str());
+      if (intParam) {
+        float val = intParam->convertFrom0to1(intParam->getValue());
+        ASSERT_NEAR(val, 0.0f, 0.01f, ("Interval " + id + " defaults to 0").toStdString().c_str());
+      }
+    }
+  }
+}
+
+void testChordMemoryTriggersAudio() {
+  std::printf("--- Chord Memory: enable + intervals -> noteOn produces audio ---\n");
+  auto p = createTestProcessor();
+
+  // Enable chord memory
+  p->apvts.getParameter("chordEnable")->setValueNotifyingHost(1.0f);
+
+  // Set slot 0 intervals: +4 (major third), +7 (perfect fifth)
+  auto *i0 = p->apvts.getParameter("chord_s0_i0");
+  auto *i1 = p->apvts.getParameter("chord_s0_i1");
+  if (!i0 || !i1) {
+    ASSERT_TRUE(false, "chord interval params missing");
+    return;
+  }
+  i0->setValueNotifyingHost(i0->convertTo0to1(4.0f));
+  i1->setValueNotifyingHost(i1->convertTo0to1(7.0f));
+
+  // Sync params via processBlock
+  processBlock(*p);
+
+  // Send note-on
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // Let SID settle and measure RMS
+  float maxRms = 0.0f;
+  for (int i = 0; i < 10; ++i) {
+    float rms = processBlock(*p);
+    if (rms > maxRms) maxRms = rms;
+  }
+  std::printf("  Chord memory max RMS over 10 blocks: %f\n", maxRms);
+  ASSERT_TRUE(maxRms > 0.0001f, "Chord memory produces audio output");
+}
+
+void testChordMemoryStateRoundTrip() {
+  std::printf("--- Chord Memory state round-trip: save/restore preserves settings ---\n");
+  auto p = createTestProcessor();
+
+  // Configure: enable, slot 2, set some intervals
+  p->apvts.getParameter("chordEnable")->setValueNotifyingHost(1.0f);
+  auto *slotParam = p->apvts.getParameter("chordSlot");
+  slotParam->setValueNotifyingHost(slotParam->convertTo0to1(2.0f));
+
+  auto *i0 = p->apvts.getParameter("chord_s2_i0");
+  auto *i1 = p->apvts.getParameter("chord_s2_i1");
+  i0->setValueNotifyingHost(i0->convertTo0to1(3.0f));
+  i1->setValueNotifyingHost(i1->convertTo0to1(7.0f));
+
+  // Process to sync
+  processBlock(*p);
+
+  // Save state
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  // Restore to fresh processor
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), static_cast<int>(stateData.getSize()));
+
+  float enable2 = p2->apvts.getParameter("chordEnable")->convertFrom0to1(
+      p2->apvts.getParameter("chordEnable")->getValue());
+  ASSERT_NEAR(enable2, 1.0f, 0.01f, "Chord enable restored");
+
+  float slot2 = p2->apvts.getParameter("chordSlot")->convertFrom0to1(
+      p2->apvts.getParameter("chordSlot")->getValue());
+  ASSERT_NEAR(slot2, 2.0f, 0.01f, "Chord slot restored (2)");
+
+  float int0 = p2->apvts.getParameter("chord_s2_i0")->convertFrom0to1(
+      p2->apvts.getParameter("chord_s2_i0")->getValue());
+  ASSERT_NEAR(int0, 3.0f, 0.01f, "Chord interval s2_i0 restored (3)");
+
+  float int1 = p2->apvts.getParameter("chord_s2_i1")->convertFrom0to1(
+      p2->apvts.getParameter("chord_s2_i1")->getValue());
+  ASSERT_NEAR(int1, 7.0f, 0.01f, "Chord interval s2_i1 restored (7)");
+}
+
+// ============================================================================
+// Wavetable Step Editor Tests
+// ============================================================================
+
+void testWavetableStepParamsEditable() {
+  std::printf("--- Wavetable step params: all 48 per-step params exist and are editable ---\n");
+  auto p = createTestProcessor();
+
+  // Verify all 48 per-step params exist and can be set
+  for (int i = 0; i < 16; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+
+    // Wave param (AudioParameterChoice: 0=Tri, 1=Saw, 2=Pulse, 3=Noise)
+    auto *waveParam = p->apvts.getParameter(prefix + "wave");
+    ASSERT_TRUE(waveParam != nullptr, ("WT step " + juce::String(i) + " wave param exists").toStdString().c_str());
+
+    // Pitch param (-24 to 24, default 0)
+    auto *pitchParam = p->apvts.getParameter(prefix + "pitch");
+    ASSERT_TRUE(pitchParam != nullptr, ("WT step " + juce::String(i) + " pitch param exists").toStdString().c_str());
+
+    // PW param (0 to 4095, default 2048)
+    auto *pwParam = p->apvts.getParameter(prefix + "pw");
+    ASSERT_TRUE(pwParam != nullptr, ("WT step " + juce::String(i) + " pw param exists").toStdString().c_str());
+
+    // Set and read back non-default values
+    if (waveParam) waveParam->setValueNotifyingHost(waveParam->convertTo0to1(1.0f)); // Saw
+    if (pitchParam) pitchParam->setValueNotifyingHost(pitchParam->convertTo0to1(7.0f));
+    if (pwParam) pwParam->setValueNotifyingHost(pwParam->convertTo0to1(1024.0f));
+
+    if (waveParam) {
+      float readWave = waveParam->convertFrom0to1(waveParam->getValue());
+      ASSERT_NEAR(readWave, 1.0f, 0.5f, ("WT step " + juce::String(i) + " wave set to Saw").toStdString().c_str());
+    }
+    if (pitchParam) {
+      float readPitch = pitchParam->convertFrom0to1(pitchParam->getValue());
+      ASSERT_NEAR(readPitch, 7.0f, 0.5f, ("WT step " + juce::String(i) + " pitch set to 7").toStdString().c_str());
+    }
+    if (pwParam) {
+      float readPW = pwParam->convertFrom0to1(pwParam->getValue());
+      ASSERT_NEAR(readPW, 1024.0f, 1.0f, ("WT step " + juce::String(i) + " pw set to 1024").toStdString().c_str());
+    }
+  }
+}
+
+void testWavetableStepSequencerProducesVariation() {
+  std::printf("--- Wavetable: different steps produce audible variation ---\n");
+  auto p = createTestProcessor();
+  p->prepareToPlay(44100.0, 512);
+
+  // Set up: 2 steps, high rate, very different waveforms
+  auto setParam = [&](const juce::String &id, float val) {
+    auto *param = p->apvts.getParameter(id);
+    if (param) param->setValueNotifyingHost(param->convertTo0to1(val));
+  };
+
+  setParam("wtEnable", 1.0f);
+  setParam("wtNumSteps", 2.0f);
+  setParam("wtRate", 100.0f);  // Fast rate to cycle quickly
+  setParam("wtLoop", 1.0f);
+
+  // Step 0: Triangle (soft, no harmonics)
+  setParam("wt_s0_wave", 0.0f);  // Triangle
+  setParam("wt_s0_pitch", 0.0f);
+  setParam("wt_s0_pw", 2048.0f);
+
+  // Step 1: Noise (harsh, random)
+  setParam("wt_s1_wave", 3.0f);  // Noise
+  setParam("wt_s1_pitch", 0.0f);
+  setParam("wt_s1_pw", 2048.0f);
+
+  // Send note-on
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // Process several blocks and collect RMS values
+  float rmsValues[20];
+  for (int i = 0; i < 20; ++i)
+    rmsValues[i] = processBlock(*p, 512);
+
+  // Verify we get audio output
+  float maxRMS = 0.0f;
+  for (int i = 0; i < 20; ++i)
+    if (rmsValues[i] > maxRMS) maxRMS = rmsValues[i];
+
+  ASSERT_TRUE(maxRMS > 0.0001f, "Wavetable produces audio output");
+
+  // Verify there is RMS variation between blocks (different waveforms should
+  // produce different amplitudes). Check that not all blocks have identical RMS.
+  float minRMS = maxRMS;
+  for (int i = 0; i < 20; ++i)
+    if (rmsValues[i] > 0.0001f && rmsValues[i] < minRMS) minRMS = rmsValues[i];
+
+  float ratio = (minRMS > 0.0f) ? (maxRMS / minRMS) : 999.0f;
+  ASSERT_TRUE(ratio > 1.05f, "Wavetable steps produce varied audio (Triangle vs Noise)");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -1897,6 +2282,26 @@ int main() {
   testModMatrixBipolarAmount();
   testModMatrixStateRoundTrip();
   testModMatrixResonanceReturnsToBase();
+
+  // Pitch Bend Range APVTS
+  testPitchBendRangeAPVTSDefault();
+  testPitchBendRangeAPVTSSync();
+  testPitchBendRangeStatePersistence();
+  testPitchBendRangeFullCycle();
+
+  // PWM Sweep
+  testPWMSweepDefaultOff();
+  testPWMSweepModifiesPW();
+  testPWMSweepStateRoundTrip();
+
+  // Chord Memory
+  testChordMemoryDefaultOff();
+  testChordMemoryTriggersAudio();
+  testChordMemoryStateRoundTrip();
+
+  // Wavetable Step Editor
+  testWavetableStepParamsEditable();
+  testWavetableStepSequencerProducesVariation();
 
   // Post-modulation value storage and preset dirty detection
   testPostModPWStorage();

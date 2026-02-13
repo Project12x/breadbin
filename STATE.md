@@ -29,9 +29,13 @@
 - Filter Envelope (ADSR with bipolar amount)
 - Built-in FX: Chorus + Stereo Delay
 - Second LFO (LFO2, independent from LFO1)
-- Wavetable step sequencer (16 steps, per-step waveform/PW/pitch)
+- Wavetable step sequencer (16 steps, per-step waveform/PW/pitch, popup step editor)
 - 4-slot Mod Matrix (LFO1/LFO2/FilterEnv/ModWheel/Velocity -> Filter/PW/Pitch/Resonance)
 - Global presets with full parameter reset
+- Pitch bend range selector (APVTS-exposed, ±2–12 semitones)
+- Modulation popup (LFO1/LFO2, PWM sweep, pitch bend range, mod matrix in single dialog)
+- PWM Sweep (dedicated triangle oscillator for pulse width automation)
+- Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
 
 ### Known Issues
 
@@ -50,7 +54,7 @@
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations | 5.6% survival |
-| BreadbinIntegrationTests | 146 | Pass |
+| BreadbinIntegrationTests | 347 | Pass |
 
 ## Directory Structure
 

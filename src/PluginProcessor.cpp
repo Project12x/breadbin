@@ -91,6 +91,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   glideTimeMs = glidePtr->load();
   extInputEnabled = extInputEnablePtr->load() > 0.5f;
   extInputLevel = extInputLevelPtr->load();
+  pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
 
   // Sync LFO from APVTS
   lfo.enabled = lfoEnablePtr->load() > 0.5f;
@@ -124,6 +125,13 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   arpPattern = static_cast<ArpPattern>(static_cast<int>(arpPatternPtr->load()));
   arpRateHz = arpRatePtr->load();
   arpOctaves = static_cast<int>(arpOctavesPtr->load());
+
+  // Sync Chord Memory from APVTS
+  chordMemory.enabled = chordEnablePtr->load() > 0.5f;
+  chordMemory.activeSlot = juce::jlimit(0, 3, static_cast<int>(chordSlotPtr->load()));
+  for (int s = 0; s < 4; ++s)
+    for (int i = 0; i < 5; ++i)
+      chordMemory.intervals[s][i] = static_cast<int>(chordSlotPtrs[s].intervals[i]->load());
 
   // Check for discrete changes (handled by SIDEngine/Processor comparisons
   // internally)
@@ -206,7 +214,19 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (lfo2.enabled) {
     processLFO2(numSamples);
   }
-  applyLFOModulation(); // Apply LFO1+LFO2 to PW and pitch
+
+  // PWM Sweep phase (triangle oscillator, block-rate)
+  if (pwmSweepEnablePtr->load() > 0.5f) {
+    float sweepRate = pwmSweepRatePtr->load();
+    pwmSweepPhase += (static_cast<double>(sweepRate) * numSamples) / hostSampleRate;
+    pwmSweepPhase -= std::floor(pwmSweepPhase);
+    float p = static_cast<float>(pwmSweepPhase);
+    pwmSweepCurrentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
+  } else {
+    pwmSweepCurrentValue = 0.0f;
+  }
+
+  applyLFOModulation(); // Apply LFO1+LFO2+PWM sweep to PW and pitch
 
   // Process filter envelope
   if (filterEnvEnablePtr->load() > 0.5f) {
@@ -356,6 +376,20 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       rebuildArpSequence();
     }
 
+    // Chord memory takes priority over arp and normal handling
+    if (chordMemory.enabled) {
+      if (dualMode == DualMode::Multitimbral) {
+        if (channel == 2)
+          triggerChord(false, note, lastVelocity);
+        else
+          triggerChord(true, note, lastVelocity);
+      } else {
+        triggerChord(true, note, lastVelocity);
+        triggerChord(false, note, lastVelocity);
+      }
+      return;
+    }
+
     // If arp is enabled, don't do normal note handling
     if (arpEnabled)
       return;
@@ -384,6 +418,22 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     if (it != arpHeldNotes.end()) {
       arpHeldNotes.erase(it);
       rebuildArpSequence();
+    }
+
+    // Chord memory release
+    if (chordMemory.enabled) {
+      if (!sustainActive) {
+        if (dualMode == DualMode::Multitimbral) {
+          if (msg.getChannel() == 2)
+            releaseChord(false);
+          else
+            releaseChord(true);
+        } else {
+          releaseChord(true);
+          releaseChord(false);
+        }
+      }
+      return;
     }
 
     // If arp is enabled, handle release when no notes held
@@ -971,6 +1021,34 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
   }
 }
 
+void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote, int velocity) {
+  const int base = isLeftSID ? 0 : 3;
+  const int slot = chordMemory.activeSlot;
+
+  // Build chord notes: root + up to 2 non-zero intervals (3 voices per SID)
+  int notes[3] = { rootNote, -1, -1 };
+  int count = 1;
+  for (int i = 0; i < 5 && count < 3; ++i) {
+    int interval = chordMemory.intervals[slot][i];
+    if (interval != 0)
+      notes[count++] = juce::jlimit(0, 127, rootNote + interval);
+  }
+
+  // Trigger voices with chord notes
+  for (int v = 0; v < 3; ++v) {
+    if (v < count && voiceSettings[base + v].enabled)
+      triggerNote(base + v, notes[v], velocity);
+    else if (voices[base + v].active)
+      releaseNote(base + v);
+  }
+}
+
+void BreadbinProcessor::releaseChord(bool isLeftSID) {
+  const int base = isLeftSID ? 0 : 3;
+  for (int v = base; v < base + 3; ++v)
+    if (voices[v].active) releaseNote(v);
+}
+
 void BreadbinProcessor::applyModMatrix() {
   // Accumulate per-destination modulation
   float filterMod = 0.0f;
@@ -1197,13 +1275,16 @@ void BreadbinProcessor::applyLFOModulation() {
   bool wtActive = wavetable.enabled;
   auto &wtStep = wavetable.steps[wavetable.currentStep];
 
-  // Pulse width modulation (sum LFO1 + LFO2, stacked on wavetable PW if active)
+  // Pulse width modulation (sum LFO1 + LFO2 + PWM sweep, stacked on wavetable PW if active)
   float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
   float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
+  float sweepDepth = (pwmSweepEnablePtr->load() > 0.5f) ? pwmSweepDepthPtr->load() : 0.0f;
   int pwMod = 0;
   if (pwDepth1 > 0.0f || pwDepth2 > 0.0f)
     pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f)
           + static_cast<int>(val2 * pwDepth2 * 2048.0f);
+  if (sweepDepth > 0.0f)
+    pwMod += static_cast<int>(pwmSweepCurrentValue * sweepDepth * 2048.0f);
   for (int v = 0; v < 6; ++v) {
     int basePW = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
     int modPW = std::clamp(basePW + pwMod, 0, 4095);
@@ -1324,9 +1405,11 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
   case ControlParam::GlobalGlide:
     setGlideTimeMs(normalized * 2000.0f);
     break;
-  case ControlParam::PitchBendRange:
-    setPitchBendRange(2 + static_cast<int>(normalized * 10.0f));
+  case ControlParam::PitchBendRange: {
+    auto *p = apvts.getParameter("pitchBendRange");
+    if (p) p->setValueNotifyingHost(p->convertTo0to1(2.0f + normalized * 10.0f));
     break;
+  }
   case ControlParam::LFORate:
     lfo.rate = 0.1f + (normalized * 19.9f);
     break;
@@ -1519,6 +1602,10 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"rightPan", 1}, "Right SID Pan", -1.0f, 1.0f, 1.0f));
 
+  // Pitch Bend Range
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"pitchBendRange", 1}, "Pitch Bend Range", 2, 12, 2));
+
   // LFO
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"lfoEnable", 1}, "LFO Enable", false));
@@ -1555,6 +1642,29 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfo2DepthPitch", 1}, "LFO2 Pitch Depth", 0.0f, 1.0f,
       0.0f));
+
+  // PWM Sweep
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"pwmSweepEnable", 1}, "PWM Sweep Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"pwmSweepRate", 1}, "PWM Sweep Rate", 0.05f, 10.0f, 0.5f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"pwmSweepDepth", 1}, "PWM Sweep Depth", 0.0f, 1.0f, 0.0f));
+
+  // Chord Memory
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"chordEnable", 1}, "Chord Memory Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"chordSlot", 1}, "Chord Active Slot", 0, 3, 0));
+  for (int s = 0; s < 4; ++s) {
+    for (int i = 0; i < 5; ++i) {
+      auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+      layout.add(std::make_unique<juce::AudioParameterInt>(
+          juce::ParameterID{id, 1},
+          "Chord " + juce::String(s) + " Int " + juce::String(i),
+          -24, 24, 0));
+    }
+  }
 
   // Filter Envelope
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -1701,6 +1811,7 @@ void BreadbinProcessor::initializeParameterPointers() {
   extInputLevelPtr = apvts.getRawParameterValue("extInputLevel");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");
+  pitchBendRangePtr = apvts.getRawParameterValue("pitchBendRange");
 
   lfoEnablePtr = apvts.getRawParameterValue("lfoEnable");
   lfoWavePtr = apvts.getRawParameterValue("lfoWave");
@@ -1715,6 +1826,21 @@ void BreadbinProcessor::initializeParameterPointers() {
   lfo2DepthFiltPtr = apvts.getRawParameterValue("lfo2DepthFilt");
   lfo2DepthPWPtr = apvts.getRawParameterValue("lfo2DepthPW");
   lfo2DepthPitchPtr = apvts.getRawParameterValue("lfo2DepthPitch");
+
+  // PWM Sweep
+  pwmSweepEnablePtr = apvts.getRawParameterValue("pwmSweepEnable");
+  pwmSweepRatePtr = apvts.getRawParameterValue("pwmSweepRate");
+  pwmSweepDepthPtr = apvts.getRawParameterValue("pwmSweepDepth");
+
+  // Chord Memory
+  chordEnablePtr = apvts.getRawParameterValue("chordEnable");
+  chordSlotPtr = apvts.getRawParameterValue("chordSlot");
+  for (int s = 0; s < 4; ++s) {
+    for (int i = 0; i < 5; ++i) {
+      auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+      chordSlotPtrs[s].intervals[i] = apvts.getRawParameterValue(id);
+    }
+  }
 
   arpEnablePtr = apvts.getRawParameterValue("arpEnable");
   arpPatternPtr = apvts.getRawParameterValue("arpPattern");

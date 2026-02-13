@@ -118,19 +118,7 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "delayMix", delayMixSlider);
 
-  // Wavetable
-  wtEnableAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-          processor.apvts, "wtEnable", wtEnableButton);
-  wtNumStepsAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "wtNumSteps", wtNumStepsSlider);
-  wtRateAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "wtRate", wtRateSlider);
-  wtLoopAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-          processor.apvts, "wtLoop", wtLoopButton);
+  // Wavetable attachments are now in WavetablePanel popup
 
   // Filter Envelope
   filterEnvEnableAttach =
@@ -151,45 +139,6 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   filterEnvAmountAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "filterEnvAmount", filterEnvAmountSlider);
-
-  lfoEnableAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-          processor.apvts, "lfoEnable", lfoEnableButton);
-  lfoWaveAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-          processor.apvts, "lfoWave", lfoWaveformSelector);
-  lfoRateAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfoRate", lfoRateSlider);
-  lfoDepthFiltAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfoDepthFilt", lfoDepthFilterSlider);
-  lfoDepthPWAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfoDepthPW", lfoDepthPWSlider);
-  lfoDepthPitchAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfoDepthPitch", lfoDepthPitchSlider);
-
-  // LFO2 attachments
-  lfo2EnableAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-          processor.apvts, "lfo2Enable", lfo2EnableButton);
-  lfo2WaveAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-          processor.apvts, "lfo2Wave", lfo2WaveformSelector);
-  lfo2RateAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfo2Rate", lfo2RateSlider);
-  lfo2DepthFiltAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfo2DepthFilt", lfo2DepthFilterSlider);
-  lfo2DepthPWAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfo2DepthPW", lfo2DepthPWSlider);
-  lfo2DepthPitchAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "lfo2DepthPitch", lfo2DepthPitchSlider);
 
   arpEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -266,17 +215,129 @@ void BreadbinEditor::timerCallback() {
 // ========== ModMatrixPanel Implementation ==========
 
 ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
+  // ========== LFO1 SETUP ==========
+  lfoEnableButton.setTooltip("LFO 1: Low-frequency oscillator for modulation");
+  lfoEnableButton.setColour(juce::ToggleButton::tickColourId,
+                            juce::Colours::cyan);
+  addAndMakeVisible(lfoEnableButton);
+
+  lfoWaveformSelector.addItem("Tri", 1);
+  lfoWaveformSelector.addItem("Saw", 2);
+  lfoWaveformSelector.addItem("Sq", 3);
+  lfoWaveformSelector.addItem("S&H", 4);
+  lfoWaveformSelector.setTooltip("LFO1 waveform shape");
+  addAndMakeVisible(lfoWaveformSelector);
+
+  auto setupLfoSlider = [this](std::unique_ptr<MappableSlider> &slider,
+                               juce::Label &label, const juce::String &name,
+                               float minVal, float maxVal, float defaultVal,
+                               juce::Slider::SliderStyle style,
+                               juce::Slider::TextEntryBoxPosition textPos) {
+    slider = std::make_unique<MappableSlider>(
+        processor, BreadbinProcessor::ControlParam::None);
+    slider->setRange(minVal, maxVal, 0.01);
+    slider->setValue(defaultVal);
+    slider->setSliderStyle(style);
+    slider->setTextBoxStyle(textPos, false, 40, 14);
+    slider->setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
+    slider->setColour(juce::Slider::textBoxOutlineColourId,
+                      juce::Colours::transparentBlack);
+    addAndMakeVisible(*slider);
+    label.setText(name, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    label.setFont(juce::Font(juce::FontOptions(9.0f)));
+    addAndMakeVisible(label);
+  };
+
+  setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 20.0f, 2.0f,
+                 juce::Slider::LinearHorizontal,
+                 juce::Slider::TextBoxBelow);
+  setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
+                 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+  setupLfoSlider(lfoDepthPWSlider, lfoDepthPWLabel, "PW", 0.0f, 1.0f, 0.0f,
+                 juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+  setupLfoSlider(lfoDepthPitchSlider, lfoDepthPitchLabel, "Vib", 0.0f, 1.0f,
+                 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+
+  // ========== LFO2 SETUP ==========
+  lfo2EnableButton.setTooltip("LFO 2: Second LFO for additional modulation");
+  lfo2EnableButton.setColour(juce::ToggleButton::tickColourId,
+                             juce::Colours::orange);
+  addAndMakeVisible(lfo2EnableButton);
+
+  lfo2WaveformSelector.addItem("Tri", 1);
+  lfo2WaveformSelector.addItem("Saw", 2);
+  lfo2WaveformSelector.addItem("Sq", 3);
+  lfo2WaveformSelector.addItem("S&H", 4);
+  lfo2WaveformSelector.setTooltip("LFO2 waveform shape");
+  addAndMakeVisible(lfo2WaveformSelector);
+
+  setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 20.0f, 3.0f,
+                 juce::Slider::LinearHorizontal,
+                 juce::Slider::TextBoxBelow);
+  setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f,
+                 1.0f, 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+  setupLfoSlider(lfo2DepthPWSlider, lfo2DepthPWLabel, "PW", 0.0f, 1.0f, 0.0f,
+                 juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+  setupLfoSlider(lfo2DepthPitchSlider, lfo2DepthPitchLabel, "Vib", 0.0f, 1.0f,
+                 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::NoTextBox);
+
+  // ========== PITCH BEND RANGE ==========
+  pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
+  pitchBendRangeLabel.setColour(juce::Label::textColourId,
+                                juce::Colours::lightgrey);
+  pitchBendRangeLabel.setFont(juce::Font(juce::FontOptions(11.0f)));
+  addAndMakeVisible(pitchBendRangeLabel);
+
+  pitchBendRangeSelector.addItem("+/- 2", 1);
+  pitchBendRangeSelector.addItem("+/- 3", 2);
+  pitchBendRangeSelector.addItem("+/- 5", 3);
+  pitchBendRangeSelector.addItem("+/- 7", 4);
+  pitchBendRangeSelector.addItem("+/- 12", 5);
+  pitchBendRangeSelector.setTooltip("Pitch bend range in semitones");
+  addAndMakeVisible(pitchBendRangeSelector);
+
+  // Sync PB ComboBox with APVTS
+  auto *pbParam = processor.apvts.getParameter("pitchBendRange");
+  if (pbParam) {
+    int pbVal = static_cast<int>(pbParam->convertFrom0to1(pbParam->getValue()));
+    int selId = 1;
+    if (pbVal == 3)
+      selId = 2;
+    else if (pbVal == 5)
+      selId = 3;
+    else if (pbVal == 7)
+      selId = 4;
+    else if (pbVal >= 12)
+      selId = 5;
+    pitchBendRangeSelector.setSelectedId(selId, juce::dontSendNotification);
+  }
+  pitchBendRangeSelector.onChange = [this]() {
+    static constexpr int vals[] = {2, 3, 5, 7, 12};
+    int idx = pitchBendRangeSelector.getSelectedId() - 1;
+    if (idx >= 0 && idx < 5) {
+      auto *p = processor.apvts.getParameter("pitchBendRange");
+      if (p)
+        p->setValueNotifyingHost(p->convertTo0to1(static_cast<float>(vals[idx])));
+    }
+  };
+
+  // ========== MOD MATRIX SLOTS ==========
   for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
     auto &s = slots[i];
     auto prefix = "mod" + juce::String(i) + "_";
 
-    // Slot label
     s.slotLabel.setText("Slot " + juce::String(i + 1),
                         juce::dontSendNotification);
     s.slotLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     addAndMakeVisible(s.slotLabel);
 
-    // Source combo
     s.srcBox.addItem("None", 1);
     s.srcBox.addItem("LFO1", 2);
     s.srcBox.addItem("LFO2", 3);
@@ -285,7 +346,6 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.srcBox.addItem("Velocity", 6);
     addAndMakeVisible(s.srcBox);
 
-    // Dest combo
     s.dstBox.addItem("None", 1);
     s.dstBox.addItem("Filter", 2);
     s.dstBox.addItem("PW", 3);
@@ -293,7 +353,6 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.dstBox.addItem("Resonance", 5);
     addAndMakeVisible(s.dstBox);
 
-    // Amount slider
     s.amtSlider.setRange(-1.0, 1.0, 0.01);
     s.amtSlider.setValue(0.0);
     s.amtSlider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -304,7 +363,6 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
                           juce::Colours::transparentBlack);
     addAndMakeVisible(s.amtSlider);
 
-    // Source value and contribution display labels
     s.sourceValueLabel.setColour(juce::Label::textColourId,
                                  juce::Colours::cyan);
     s.sourceValueLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
@@ -317,7 +375,6 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.contributionLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.contributionLabel);
 
-    // APVTS attachments
     s.srcAttach =
         std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
             processor.apvts, prefix + "src", s.srcBox);
@@ -329,6 +386,92 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
             processor.apvts, prefix + "amt", s.amtSlider);
   }
 
+  // ========== PWM SWEEP SETUP ==========
+  pwmSweepEnableButton.setColour(juce::ToggleButton::tickColourId,
+                                  juce::Colours::greenyellow);
+  pwmSweepEnableButton.setTooltip("Enable dedicated PWM sweep oscillator");
+  addAndMakeVisible(pwmSweepEnableButton);
+
+  pwmSweepRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  pwmSweepRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+  pwmSweepRateSlider.setRange(0.05, 10.0, 0.01);
+  pwmSweepRateSlider.setColour(juce::Slider::textBoxTextColourId,
+                                juce::Colours::greenyellow);
+  pwmSweepRateSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                                juce::Colours::transparentBlack);
+  addAndMakeVisible(pwmSweepRateSlider);
+
+  pwmSweepRateLabel.setText("Rate", juce::dontSendNotification);
+  pwmSweepRateLabel.setColour(juce::Label::textColourId,
+                               juce::Colours::greenyellow);
+  pwmSweepRateLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  addAndMakeVisible(pwmSweepRateLabel);
+
+  pwmSweepDepthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  pwmSweepDepthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+  pwmSweepDepthSlider.setRange(0.0, 1.0, 0.01);
+  pwmSweepDepthSlider.setColour(juce::Slider::textBoxTextColourId,
+                                 juce::Colours::greenyellow);
+  pwmSweepDepthSlider.setColour(juce::Slider::textBoxOutlineColourId,
+                                 juce::Colours::transparentBlack);
+  addAndMakeVisible(pwmSweepDepthSlider);
+
+  pwmSweepDepthLabel.setText("Depth", juce::dontSendNotification);
+  pwmSweepDepthLabel.setColour(juce::Label::textColourId,
+                                juce::Colours::greenyellow);
+  pwmSweepDepthLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  addAndMakeVisible(pwmSweepDepthLabel);
+
+  // ========== APVTS ATTACHMENTS (LFO1/LFO2) ==========
+  lfoEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfoEnable", lfoEnableButton);
+  lfoWaveAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "lfoWave", lfoWaveformSelector);
+  lfoRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoRate", *lfoRateSlider);
+  lfoDepthFiltAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthFilt", *lfoDepthFilterSlider);
+  lfoDepthPWAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthPW", *lfoDepthPWSlider);
+  lfoDepthPitchAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfoDepthPitch", *lfoDepthPitchSlider);
+
+  lfo2EnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfo2Enable", lfo2EnableButton);
+  lfo2WaveAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "lfo2Wave", lfo2WaveformSelector);
+  lfo2RateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2Rate", *lfo2RateSlider);
+  lfo2DepthFiltAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthFilt", *lfo2DepthFilterSlider);
+  lfo2DepthPWAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthPW", *lfo2DepthPWSlider);
+  lfo2DepthPitchAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "lfo2DepthPitch", *lfo2DepthPitchSlider);
+
+  // PWM Sweep attachments
+  pwmSweepEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "pwmSweepEnable", pwmSweepEnableButton);
+  pwmSweepRateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "pwmSweepRate", pwmSweepRateSlider);
+  pwmSweepDepthAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "pwmSweepDepth", pwmSweepDepthSlider);
+
   startTimerHz(30);
   setSize(panelWidth, panelHeight);
 }
@@ -336,23 +479,103 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 void ModMatrixPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
 
-  // Column headers
+  // Section labels
+  g.setColour(juce::Colours::cyan);
+  g.setFont(11.0f);
+  g.drawText("LFO 1", 4, 2, 50, 14, juce::Justification::centredLeft);
+
+  g.setColour(juce::Colours::orange);
+  g.drawText("LFO 2", 4, 57, 50, 14, juce::Justification::centredLeft);
+
+  // PWM Sweep label
+  g.setColour(juce::Colours::greenyellow);
+  g.drawText("PWM Sweep", 4, 112, 70, 14, juce::Justification::centredLeft);
+
+  // Separator after PWM row
+  g.setColour(juce::Colours::grey.withAlpha(0.3f));
+  g.drawHorizontalLine(140, 4.0f, static_cast<float>(panelWidth - 4));
+
+  // PB Range label drawn via component
+
+  // Separator after PB row
+  g.drawHorizontalLine(168, 4.0f, static_cast<float>(panelWidth - 4));
+
+  // Mod matrix column headers
+  const int mmTop = 172;
   g.setColour(juce::Colours::cyan);
   g.setFont(12.0f);
-  g.drawText("Source", 50, 2, 90, 16, juce::Justification::centred);
-  g.drawText("Dest", 150, 2, 90, 16, juce::Justification::centred);
-  g.drawText("Amount", 250, 2, 120, 16, juce::Justification::centred);
-  g.drawText("Src", 380, 2, 45, 16, juce::Justification::centred);
+  g.drawText("Source", 50, mmTop, 90, 16, juce::Justification::centred);
+  g.drawText("Dest", 150, mmTop, 90, 16, juce::Justification::centred);
+  g.drawText("Amount", 250, mmTop, 120, 16, juce::Justification::centred);
+  g.drawText("Src", 380, mmTop, 45, 16, juce::Justification::centred);
   g.setColour(juce::Colours::orange);
-  g.drawText("Out", 430, 2, 45, 16, juce::Justification::centred);
+  g.drawText("Out", 430, mmTop, 45, 16, juce::Justification::centred);
 }
 
 void ModMatrixPanel::resized() {
+  // LFO row layout helper
+  auto layoutLfoRow = [this](int y,
+                             juce::ToggleButton &enableBtn,
+                             juce::ComboBox &waveBox,
+                             MappableSlider &rateSldr, juce::Label &rateLbl,
+                             MappableSlider &fltSldr, juce::Label &fltLbl,
+                             MappableSlider &pwSldr, juce::Label &pwLbl,
+                             MappableSlider &vibSldr, juce::Label &vibLbl) {
+    int x = 4;
+    enableBtn.setBounds(x, y + 14, 50, 20);
+    x += 54;
+    waveBox.setBounds(x, y + 14, 68, 20);
+    x += 76;
+    rateLbl.setBounds(x, y + 2, 40, 12);
+    rateSldr.setBounds(x, y + 14, 80, 20);
+    x += 88;
+    const int dW = 42;
+    fltLbl.setBounds(x, y + 2, dW, 12);
+    fltSldr.setBounds(x, y + 14, dW, 36);
+    x += dW + 4;
+    pwLbl.setBounds(x, y + 2, dW, 12);
+    pwSldr.setBounds(x, y + 14, dW, 36);
+    x += dW + 4;
+    vibLbl.setBounds(x, y + 2, dW, 12);
+    vibSldr.setBounds(x, y + 14, dW, 36);
+  };
+
+  // LFO1 row: y=0..54
+  layoutLfoRow(0, lfoEnableButton, lfoWaveformSelector,
+               *lfoRateSlider, lfoRateLabel,
+               *lfoDepthFilterSlider, lfoDepthFilterLabel,
+               *lfoDepthPWSlider, lfoDepthPWLabel,
+               *lfoDepthPitchSlider, lfoDepthPitchLabel);
+
+  // LFO2 row: y=55..109
+  layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector,
+               *lfo2RateSlider, lfo2RateLabel,
+               *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
+               *lfo2DepthPWSlider, lfo2DepthPWLabel,
+               *lfo2DepthPitchSlider, lfo2DepthPitchLabel);
+
+  // PWM Sweep row: y=112..139
+  {
+    int x = 4;
+    pwmSweepEnableButton.setBounds(x, 126, 60, 20);
+    x += 64;
+    pwmSweepRateLabel.setBounds(x, 114, 35, 12);
+    pwmSweepRateSlider.setBounds(x, 126, 170, 20);
+    x += 178;
+    pwmSweepDepthLabel.setBounds(x, 114, 40, 12);
+    pwmSweepDepthSlider.setBounds(x, 126, 170, 20);
+  }
+
+  // PB Range row: y=144..166
+  pitchBendRangeLabel.setBounds(4, 146, 60, 18);
+  pitchBendRangeSelector.setBounds(66, 146, 90, 20);
+
+  // Mod matrix slots: y=190 onward (header at 172)
+  const int mmTop = 190;
   const int rowH = 35;
-  const int topOffset = 20; // Below header labels
   for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
     auto &s = slots[i];
-    int y = topOffset + i * rowH;
+    int y = mmTop + i * rowH;
 
     s.slotLabel.setBounds(4, y + 8, 44, 18);
     s.srcBox.setBounds(50, y + 6, 90, 22);
@@ -374,6 +597,271 @@ void ModMatrixPanel::timerCallback() {
   }
 }
 
+// ========== CHORD MEMORY PANEL ==========
+
+ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
+  // Enable toggle
+  enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(enableButton);
+  enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "chordEnable", enableButton);
+
+  // 4 slot radio buttons
+  int currentSlot = static_cast<int>(processor.apvts.getRawParameterValue("chordSlot")->load());
+  for (int s = 0; s < 4; ++s) {
+    slotButtons[s].setButtonText(juce::String(s + 1));
+    slotButtons[s].setColour(juce::TextButton::buttonColourId,
+                              s == currentSlot ? juce::Colours::cyan.withAlpha(0.3f)
+                                               : juce::Colour(50, 50, 60));
+    slotButtons[s].setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
+    slotButtons[s].setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    slotButtons[s].onClick = [this, s]() {
+      if (auto *param = processor.apvts.getParameter("chordSlot"))
+        param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(s)));
+      for (int j = 0; j < 4; ++j)
+        slotButtons[j].setColour(juce::TextButton::buttonColourId,
+                                  j == s ? juce::Colours::cyan.withAlpha(0.3f)
+                                         : juce::Colour(50, 50, 60));
+    };
+    addAndMakeVisible(slotButtons[s]);
+  }
+
+  // 4 rows x 5 interval sliders
+  for (int s = 0; s < 4; ++s) {
+    slots[s].label.setText("Slot " + juce::String(s + 1), juce::dontSendNotification);
+    slots[s].label.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    slots[s].label.setFont(juce::Font(juce::FontOptions(11.0f)));
+    addAndMakeVisible(slots[s].label);
+
+    for (int i = 0; i < 5; ++i) {
+      auto &slider = slots[s].sliders[i];
+      slider.setSliderStyle(juce::Slider::LinearVertical);
+      slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
+      slider.setRange(-24, 24, 1);
+      slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::lightgrey);
+      slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+      addAndMakeVisible(slider);
+
+      auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+      slots[s].attachments[i] =
+          std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+              processor.apvts, id, slider);
+    }
+  }
+}
+
+void ChordMemoryPanel::paint(juce::Graphics &g) {
+  g.fillAll(juce::Colour(30, 30, 35));
+
+  g.setColour(juce::Colours::cyan);
+  g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
+  g.drawText("CHORD MEMORY", 10, 10, 120, 20, juce::Justification::centredLeft);
+
+  // Column headers
+  g.setColour(juce::Colours::lightgrey);
+  g.setFont(juce::Font(juce::FontOptions(10.0f)));
+  for (int i = 0; i < 5; ++i)
+    g.drawText("Int " + juce::String(i + 1), 100 + i * 70, 35, 60, 14,
+               juce::Justification::centred);
+}
+
+void ChordMemoryPanel::resized() {
+  enableButton.setBounds(140, 8, 80, 24);
+  for (int s = 0; s < 4; ++s)
+    slotButtons[s].setBounds(230 + s * 50, 10, 40, 20);
+
+  for (int s = 0; s < 4; ++s) {
+    int y = 50 + s * 40;
+    slots[s].label.setBounds(10, y + 5, 60, 20);
+    for (int i = 0; i < 5; ++i)
+      slots[s].sliders[i].setBounds(80 + i * 70, y, 60, 36);
+  }
+}
+
+// ========== WAVETABLE PANEL ==========
+
+WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
+  // Enable toggle
+  enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(enableButton);
+  enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "wtEnable", enableButton);
+
+  // Steps slider
+  stepsLabel.setText("Steps", juce::dontSendNotification);
+  stepsLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  stepsLabel.setJustificationType(juce::Justification::centredRight);
+  addAndMakeVisible(stepsLabel);
+
+  numStepsSlider.setRange(1.0, 16.0, 1.0);
+  numStepsSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  numStepsSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 14);
+  numStepsSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+  addAndMakeVisible(numStepsSlider);
+  stepsAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+      processor.apvts, "wtNumSteps", numStepsSlider);
+
+  // Rate slider
+  rateLabel.setText("Rate Hz", juce::dontSendNotification);
+  rateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  rateLabel.setJustificationType(juce::Justification::centredRight);
+  addAndMakeVisible(rateLabel);
+
+  rateSlider.setRange(1.0, 200.0, 1.0);
+  rateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 14);
+  rateSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+  addAndMakeVisible(rateSlider);
+  rateAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+      processor.apvts, "wtRate", rateSlider);
+
+  // Loop toggle
+  loopButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(loopButton);
+  loopAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "wtLoop", loopButton);
+
+  // Per-step controls
+  for (int i = 0; i < 16; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    auto &step = steps[i];
+
+    // Waveform ComboBox
+    step.waveBox.addItem("T", 1);  // Triangle
+    step.waveBox.addItem("S", 2);  // Sawtooth
+    step.waveBox.addItem("P", 3);  // Pulse
+    step.waveBox.addItem("N", 4);  // Noise
+    addAndMakeVisible(step.waveBox);
+    step.waveAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        processor.apvts, prefix + "wave", step.waveBox);
+
+    // Pitch slider
+    step.pitchSlider.setRange(-24.0, 24.0, 1.0);
+    step.pitchSlider.setSliderStyle(juce::Slider::LinearVertical);
+    step.pitchSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 12);
+    step.pitchSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    step.pitchSlider.setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
+    addAndMakeVisible(step.pitchSlider);
+    step.pitchAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processor.apvts, prefix + "pitch", step.pitchSlider);
+
+    // PW slider
+    step.pwSlider.setRange(0.0, 4095.0, 1.0);
+    step.pwSlider.setSliderStyle(juce::Slider::LinearVertical);
+    step.pwSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 12);
+    step.pwSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    step.pwSlider.setColour(juce::Slider::thumbColourId, juce::Colours::orange);
+    addAndMakeVisible(step.pwSlider);
+    step.pwAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processor.apvts, prefix + "pw", step.pwSlider);
+  }
+
+  startTimer(33);
+  setSize(panelWidth, panelHeight);
+}
+
+void WavetablePanel::paint(juce::Graphics &g) {
+  g.fillAll(juce::Colour(30, 30, 35));
+
+  // Title
+  g.setColour(juce::Colours::cyan);
+  g.setFont(16.0f);
+  g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
+             juce::Justification::centred);
+
+  // Row labels
+  g.setColour(juce::Colours::lightgrey);
+  g.setFont(11.0f);
+  g.drawText("Wave", 4, 62, 48, 16, juce::Justification::centredRight);
+  g.drawText("Pitch", 4, 120, 48, 16, juce::Justification::centredRight);
+  g.drawText("PW", 4, 225, 48, 16, juce::Justification::centredRight);
+
+  // Step number headers
+  int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
+  auto &wt = processor.getWavetable();
+  int currentStep = wt.enabled ? wt.currentStep : -1;
+
+  g.setFont(10.0f);
+  for (int i = 0; i < 16; ++i) {
+    int x = 55 + i * 40;
+    bool isActive = i < numActiveSteps;
+    bool isCurrent = (i == currentStep) && wt.enabled;
+
+    if (isCurrent) {
+      g.setColour(juce::Colours::cyan);
+      g.fillRoundedRectangle(static_cast<float>(x), 44.0f, 38.0f, 14.0f, 3.0f);
+      g.setColour(juce::Colours::black);
+    } else if (isActive) {
+      g.setColour(juce::Colours::white);
+    } else {
+      g.setColour(juce::Colour(70, 70, 80));
+    }
+    g.drawText(juce::String(i + 1), x, 44, 38, 14, juce::Justification::centred);
+  }
+}
+
+void WavetablePanel::resized() {
+  // Header row (y=24..42)
+  enableButton.setBounds(10, 24, 65, 20);
+  stepsLabel.setBounds(80, 24, 40, 18);
+  numStepsSlider.setBounds(122, 22, 80, 34);
+  rateLabel.setBounds(210, 24, 50, 18);
+  rateSlider.setBounds(262, 22, 130, 34);
+  loopButton.setBounds(400, 24, 55, 20);
+
+  // Per-step columns
+  const int leftMargin = 55;
+  const int colW = 40;
+  const int ctrlW = 38;
+
+  for (int i = 0; i < 16; ++i) {
+    int x = leftMargin + i * colW;
+    auto &step = steps[i];
+
+    step.waveBox.setBounds(x, 60, ctrlW, 22);
+    step.pitchSlider.setBounds(x, 84, ctrlW, 110);
+    step.pwSlider.setBounds(x, 196, ctrlW, 110);
+  }
+}
+
+void WavetablePanel::timerCallback() {
+  auto &wt = processor.getWavetable();
+  int current = wt.enabled ? wt.currentStep : -1;
+  if (current != lastHighlightedStep) {
+    lastHighlightedStep = current;
+    repaint();
+  }
+
+  // Dim inactive step columns
+  int numActive = static_cast<int>(numStepsSlider.getValue());
+  for (int i = 0; i < 16; ++i) {
+    float alpha = (i < numActive) ? 1.0f : 0.3f;
+    steps[i].waveBox.setAlpha(alpha);
+    steps[i].pitchSlider.setAlpha(alpha);
+    steps[i].pwSlider.setAlpha(alpha);
+  }
+}
+
+void BreadbinEditor::showChordMemoryPopup() {
+  if (chordMemoryWindow != nullptr) {
+    chordMemoryWindow->toFront(true);
+    return;
+  }
+
+  auto *panel = new ChordMemoryPanel(processor);
+
+  juce::DialogWindow::LaunchOptions opts;
+  opts.content.setOwned(panel);
+  opts.dialogTitle = "Chord Memory";
+  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
+  opts.escapeKeyTriggersCloseButton = true;
+  opts.useNativeTitleBar = true;
+  opts.resizable = false;
+  opts.componentToCentreAround = this;
+
+  chordMemoryWindow = opts.launchAsync();
+}
+
 void BreadbinEditor::showModMatrixPopup() {
   if (modMatrixWindow != nullptr) {
     modMatrixWindow->toFront(true);
@@ -384,7 +872,7 @@ void BreadbinEditor::showModMatrixPopup() {
 
   juce::DialogWindow::LaunchOptions opts;
   opts.content.setOwned(panel);
-  opts.dialogTitle = "Mod Matrix";
+  opts.dialogTitle = "Modulation";
   opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
   opts.escapeKeyTriggersCloseButton = true;
   opts.useNativeTitleBar = true;
@@ -392,6 +880,26 @@ void BreadbinEditor::showModMatrixPopup() {
   opts.componentToCentreAround = this;
 
   modMatrixWindow = opts.launchAsync();
+}
+
+void BreadbinEditor::showWavetablePopup() {
+  if (wavetableWindow != nullptr) {
+    wavetableWindow->toFront(true);
+    return;
+  }
+
+  auto *panel = new WavetablePanel(processor);
+
+  juce::DialogWindow::LaunchOptions opts;
+  opts.content.setOwned(panel);
+  opts.dialogTitle = "Wavetable Step Sequencer";
+  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
+  opts.escapeKeyTriggersCloseButton = true;
+  opts.useNativeTitleBar = true;
+  opts.resizable = false;
+  opts.componentToCentreAround = this;
+
+  wavetableWindow = opts.launchAsync();
 }
 
 void BreadbinEditor::setupControls() {
@@ -425,6 +933,10 @@ void BreadbinEditor::setupControls() {
   globalPresetSelector.addItem("Arpeggiated", 3);
   globalPresetSelector.addItem("Fat Unison", 4);
   globalPresetSelector.addItem("Retro Synth", 5);
+  globalPresetSelector.addItem("Chord Stab", 6);
+  globalPresetSelector.addItem("Mod Madness", 7);
+  globalPresetSelector.addItem("WT Arpeggio", 8);
+  globalPresetSelector.addItem("WT Morph", 9);
   globalPresetSelector.setSelectedId(1);
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
@@ -572,26 +1084,6 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(glideTimeSlider);
 
-  // Pitch Bend Range
-  pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
-  pitchBendRangeLabel.setColour(juce::Label::textColourId,
-                                juce::Colours::lightgrey);
-  pitchBendRangeLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
-  addAndMakeVisible(pitchBendRangeLabel);
-
-  pitchBendRangeSelector.addItem("+/-2", 2);
-  pitchBendRangeSelector.addItem("+/-3", 3);
-  pitchBendRangeSelector.addItem("+/-5", 5);
-  pitchBendRangeSelector.addItem("+/-7", 7);
-  pitchBendRangeSelector.addItem("+/-12", 12);
-  pitchBendRangeSelector.setSelectedId(processor.getPitchBendRange(),
-                                       juce::dontSendNotification);
-  pitchBendRangeSelector.setTooltip("Pitch bend range in semitones");
-  pitchBendRangeSelector.onChange = [this]() {
-    processor.setPitchBendRange(pitchBendRangeSelector.getSelectedId());
-  };
-  addAndMakeVisible(pitchBendRangeSelector);
-
   // Master Volume
   masterVolLabel.setText("Master", juce::dontSendNotification);
   masterVolLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
@@ -690,21 +1182,18 @@ void BreadbinEditor::setupControls() {
                 0.01f, "Delay Wet/Dry Mix");
 
   // ===== WAVETABLE STEP SEQUENCER =====
-  wtEnableButton.setTooltip("Wavetable: C64-style step sequencer");
-  wtEnableButton.setButtonText("WaveTab");
-  addAndMakeVisible(wtEnableButton);
-
-  wtLoopButton.setTooltip("Loop: Cycle steps or stop at end");
-  wtLoopButton.setButtonText("Loop");
-  addAndMakeVisible(wtLoopButton);
-
-  setupFXSlider(wtNumStepsSlider, wtStepsLabel, "Steps", 1.0f, 16.0f, 4.0f,
-                1.0f, "Number of active steps");
-  setupFXSlider(wtRateSlider, wtRateLabel, "Rate", 1.0f, 200.0f, 50.0f,
-                1.0f, "Step rate in Hz");
+  wavetableButton.setTooltip("Wavetable: C64-style step sequencer editor");
+  wavetableButton.setColour(juce::TextButton::buttonColourId,
+                            juce::Colour(60, 60, 70));
+  wavetableButton.setColour(juce::TextButton::textColourOnId,
+                            juce::Colours::cyan);
+  wavetableButton.setColour(juce::TextButton::textColourOffId,
+                            juce::Colours::cyan);
+  wavetableButton.onClick = [this]() { showWavetablePopup(); };
+  addAndMakeVisible(wavetableButton);
 
   // ===== MOD MATRIX BUTTON =====
-  modMatrixButton.setTooltip("Mod Matrix: 4-slot modulation routing");
+  modMatrixButton.setTooltip("Modulation: LFO, pitch bend range, mod matrix");
   modMatrixButton.setColour(juce::TextButton::buttonColourId,
                             juce::Colour(60, 60, 70));
   modMatrixButton.setColour(juce::TextButton::textColourOnId,
@@ -713,6 +1202,17 @@ void BreadbinEditor::setupControls() {
                             juce::Colours::cyan);
   modMatrixButton.onClick = [this]() { showModMatrixPopup(); };
   addAndMakeVisible(modMatrixButton);
+
+  // ===== CHORD MEMORY BUTTON =====
+  chordMemoryButton.setTooltip("Chord Memory: Trigger chords from single keys");
+  chordMemoryButton.setColour(juce::TextButton::buttonColourId,
+                              juce::Colour(60, 60, 70));
+  chordMemoryButton.setColour(juce::TextButton::textColourOnId,
+                              juce::Colours::cyan);
+  chordMemoryButton.setColour(juce::TextButton::textColourOffId,
+                              juce::Colours::cyan);
+  chordMemoryButton.onClick = [this]() { showChordMemoryPopup(); };
+  addAndMakeVisible(chordMemoryButton);
 
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
@@ -766,134 +1266,6 @@ void BreadbinEditor::setupControls() {
   filterEnvAmountSlider.setTooltip(
       "Filter Env Amount: Bipolar (-1 to +1). Positive opens filter on attack.");
   addAndMakeVisible(filterEnvAmountSlider);
-
-  // ===== LFO =====
-  lfoEnableButton.setTooltip("Global LFO: Toggle all LFO modulations");
-  lfoEnableButton.setButtonText("LFO");
-  // No onClick needed — APVTS ButtonAttachment handles state sync
-  addAndMakeVisible(lfoEnableButton);
-
-  lfoWaveformSelector.addItem("Tri", 1);
-  lfoWaveformSelector.addItem("Saw", 2);
-  lfoWaveformSelector.addItem("Sq", 3);
-  lfoWaveformSelector.addItem("S&H", 4);
-  // No setSelectedId or onChange needed — APVTS ComboBoxAttachment handles it.
-  // ComboBox IDs 1-4 map to APVTS indices 0-3 which match LFOWaveform enum.
-  lfoWaveformSelector.setTooltip(
-      "LFO Shape: Tri (Smooth), Saw (Ramp), Sq (Hard), S&H (Random)");
-  addAndMakeVisible(lfoWaveformSelector);
-
-  lfoRateLabel.setText("Hz", juce::dontSendNotification);
-  lfoRateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  lfoRateLabel.setFont(retroFont.withHeight(7.0f));
-  addAndMakeVisible(lfoRateLabel);
-
-  lfoRateSlider.setRange(0.1, 20.0, 0.1);
-  lfoRateSlider.setValue(processor.getLFO().rate);
-  lfoRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  lfoRateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 12);
-  lfoRateSlider.setColour(juce::Slider::textBoxTextColourId,
-                          juce::Colours::cyan);
-  lfoRateSlider.setColour(juce::Slider::textBoxOutlineColourId,
-                          juce::Colours::transparentBlack);
-  lfoRateSlider.setTooltip(
-      "LFO Rate: Adjust modulation speed (0.1Hz - 20Hz). Click to type Hz.");
-  addAndMakeVisible(lfoRateSlider);
-
-  // Depth sliders - larger rotary style
-  auto setupDepthSlider = [this](juce::Slider &slider, juce::Label &label,
-                                 const juce::String &name,
-                                 const juce::String &tooltip, float initVal) {
-    label.setText(name, juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(retroFont.withHeight(10.0f));
-    label.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(label);
-
-    slider.setRange(0.0, 1.0, 0.01);
-    slider.setValue(initVal);
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 12);
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
-    slider.setColour(juce::Slider::textBoxOutlineColourId,
-                     juce::Colours::transparentBlack);
-    slider.setTooltip(tooltip);
-    addAndMakeVisible(slider);
-  };
-
-  setupDepthSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt",
-                   "Filter Mod: LFO influence on SID filter cutoff",
-                   processor.getLFO().depthFilter);
-  lfoDepthFilterSlider.onValueChange = [this]() {
-    processor.getLFO().depthFilter =
-        static_cast<float>(lfoDepthFilterSlider.getValue());
-  };
-
-  setupDepthSlider(lfoDepthPWSlider, lfoDepthPWLabel, "PW",
-                   "PWM: LFO influence on pulse width",
-                   processor.getLFO().depthPulseWidth);
-  lfoDepthPWSlider.onValueChange = [this]() {
-    processor.getLFO().depthPulseWidth =
-        static_cast<float>(lfoDepthPWSlider.getValue());
-  };
-
-  setupDepthSlider(lfoDepthPitchSlider, lfoDepthPitchLabel, "Vib",
-                   "Vibrato: LFO influence on pitch",
-                   processor.getLFO().depthPitch);
-  lfoDepthPitchSlider.onValueChange = [this]() {
-    processor.getLFO().depthPitch =
-        static_cast<float>(lfoDepthPitchSlider.getValue());
-  };
-
-  // LFO2
-  lfo2EnableButton.setTooltip("LFO2: Second independent LFO");
-  lfo2EnableButton.setButtonText("LFO2");
-  addAndMakeVisible(lfo2EnableButton);
-
-  lfo2WaveformSelector.addItem("Tri", 1);
-  lfo2WaveformSelector.addItem("Saw", 2);
-  lfo2WaveformSelector.addItem("Sq", 3);
-  lfo2WaveformSelector.addItem("S&H", 4);
-  lfo2WaveformSelector.setTooltip(
-      "LFO2 Shape: Tri (Smooth), Saw (Ramp), Sq (Hard), S&H (Random)");
-  addAndMakeVisible(lfo2WaveformSelector);
-
-  lfo2RateLabel.setText("Hz", juce::dontSendNotification);
-  lfo2RateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  lfo2RateLabel.setFont(retroFont.withHeight(7.0f));
-  addAndMakeVisible(lfo2RateLabel);
-
-  lfo2RateSlider.setRange(0.1, 20.0, 0.1);
-  lfo2RateSlider.setValue(processor.getLFO2().rate);
-  lfo2RateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  lfo2RateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 12);
-  lfo2RateSlider.setColour(juce::Slider::textBoxTextColourId,
-                            juce::Colours::cyan);
-  lfo2RateSlider.setColour(juce::Slider::textBoxOutlineColourId,
-                            juce::Colours::transparentBlack);
-  lfo2RateSlider.setTooltip("LFO2 Rate: 0.1Hz - 20Hz");
-  addAndMakeVisible(lfo2RateSlider);
-
-  setupDepthSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt",
-                   "LFO2 Filter Mod", processor.getLFO2().depthFilter);
-  lfo2DepthFilterSlider.onValueChange = [this]() {
-    processor.getLFO2().depthFilter =
-        static_cast<float>(lfo2DepthFilterSlider.getValue());
-  };
-
-  setupDepthSlider(lfo2DepthPWSlider, lfo2DepthPWLabel, "PW",
-                   "LFO2 PWM", processor.getLFO2().depthPulseWidth);
-  lfo2DepthPWSlider.onValueChange = [this]() {
-    processor.getLFO2().depthPulseWidth =
-        static_cast<float>(lfo2DepthPWSlider.getValue());
-  };
-
-  setupDepthSlider(lfo2DepthPitchSlider, lfo2DepthPitchLabel, "Vib",
-                   "LFO2 Vibrato", processor.getLFO2().depthPitch);
-  lfo2DepthPitchSlider.onValueChange = [this]() {
-    processor.getLFO2().depthPitch =
-        static_cast<float>(lfo2DepthPitchSlider.getValue());
-  };
 
   // Keyboard
   keyboard.setKeyWidth(16.0f);
@@ -1582,8 +1954,6 @@ void BreadbinEditor::resized() {
   row2.removeFromLeft(pad);
   voiceFilterButton.setBounds(row2.removeFromLeft(45));
   row2.removeFromLeft(pad * 2);
-  pitchBendRangeLabel.setBounds(row2.removeFromLeft(55));
-  pitchBendRangeSelector.setBounds(row2.removeFromLeft(65));
   row2.removeFromLeft(pad * 2);
   // Ext input removed from here (now in header)
 
@@ -1686,26 +2056,19 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromBottom(4);
 
-  // 3b. Wavetable Step Sequencer row
+  // 3b. Popup buttons row (Wavetable, Chord, Modulation)
   auto wtRow = bounds.removeFromBottom(25);
-  auto wtStack = wtRow.removeFromLeft(420);
-  wtEnableButton.setBounds(
-      wtStack.removeFromLeft(70).withSize(70, 20).translated(0, 2));
-  wtStack.removeFromLeft(6);
-  wtStepsLabel.setBounds(wtStack.removeFromLeft(35).withHeight(12));
-  wtNumStepsSlider.setBounds(
-      wtStack.removeFromLeft(60).withHeight(18).translated(0, 3));
-  wtStack.removeFromLeft(4);
-  wtRateLabel.setBounds(wtStack.removeFromLeft(30).withHeight(12));
-  wtRateSlider.setBounds(
-      wtStack.removeFromLeft(80).withHeight(18).translated(0, 3));
-  wtStack.removeFromLeft(6);
-  wtLoopButton.setBounds(
-      wtStack.removeFromLeft(50).withSize(50, 20).translated(0, 2));
+  wavetableButton.setBounds(
+      wtRow.removeFromLeft(80).withSize(80, 20).translated(0, 2));
 
-  // Mod Matrix button (right side of wavetable row)
+  // Chord Memory button (right side)
+  chordMemoryButton.setBounds(
+      wtRow.removeFromRight(70).withSize(70, 20).translated(0, 2));
+  wtRow.removeFromRight(4); // spacing
+
+  // Modulation button (right side)
   modMatrixButton.setBounds(
-      wtRow.removeFromRight(80).withSize(80, 20).translated(0, 2));
+      wtRow.removeFromRight(90).withSize(90, 20).translated(0, 2));
 
   bounds.removeFromBottom(4);
 
@@ -1743,75 +2106,7 @@ void BreadbinEditor::resized() {
   filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 50, 12);
   filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 14, 50, 44);
 
-  bounds.removeFromBottom(4);
-
-  // 4b. LFO2 Row (Right-justified, below LFO1)
-  auto lfo2Row = bounds.removeFromBottom(60);
-  auto lfo2Stack = lfo2Row.removeFromRight(349);
-
-  lfo2EnableButton.setBounds(
-      lfo2Stack.removeFromLeft(40).withSize(40, 20).translated(0, 8));
-  lfo2Stack.removeFromLeft(10);
-  lfo2WaveformSelector.setBounds(
-      lfo2Stack.removeFromLeft(80).withSize(80, 20).translated(0, 8));
-  lfo2Stack.removeFromLeft(pad * 2);
-
-  auto rate2Area = lfo2Stack.removeFromLeft(60);
-  lfo2RateSlider.setBounds(rate2Area.withSize(60, 48).translated(0, 2));
-  lfo2RateLabel.setBounds(rate2Area.getX(), lfo2Row.getY() + 2, 30, 12);
-
-  lfo2Stack.removeFromLeft(pad * 2);
-
-  const int dW2 = 45;
-  auto f2Area = lfo2Stack.removeFromLeft(dW2);
-  lfo2DepthFilterLabel.setBounds(f2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
-  lfo2DepthFilterSlider.setBounds(f2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
-
-  lfo2Stack.removeFromLeft(pad);
-  auto p2Area = lfo2Stack.removeFromLeft(dW2);
-  lfo2DepthPWLabel.setBounds(p2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
-  lfo2DepthPWSlider.setBounds(p2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
-
-  lfo2Stack.removeFromLeft(pad);
-  auto v2Area = lfo2Stack.removeFromLeft(dW2);
-  lfo2DepthPitchLabel.setBounds(v2Area.getX(), lfo2Row.getY() + 2, dW2, 12);
-  lfo2DepthPitchSlider.setBounds(v2Area.getX(), lfo2Row.getY() + 14, dW2, 44);
-
-  bounds.removeFromBottom(4);
-
-  // 4. Top Row: Global LFO (Right-justified)
-  auto lfoRow = bounds.removeFromBottom(60);
-  auto lfoStack = lfoRow.removeFromRight(349); // Exact width for content
-
-  lfoEnableButton.setBounds(
-      lfoStack.removeFromLeft(40).withSize(40, 20).translated(0, 8));
-  lfoStack.removeFromLeft(10);
-  lfoWaveformSelector.setBounds(
-      lfoStack.removeFromLeft(80).withSize(80, 20).translated(0, 8));
-  lfoStack.removeFromLeft(pad * 2);
-
-  // LFO Rate
-  auto rateArea = lfoStack.removeFromLeft(60);
-  lfoRateSlider.setBounds(rateArea.withSize(60, 48).translated(0, 2));
-  lfoRateLabel.setBounds(rateArea.getX(), lfoRow.getY() + 2, 30, 12);
-
-  lfoStack.removeFromLeft(pad * 2);
-
-  // Three Depths
-  const int dW = 45;
-  auto fArea = lfoStack.removeFromLeft(dW);
-  lfoDepthFilterLabel.setBounds(fArea.getX(), lfoRow.getY() + 2, dW, 12);
-  lfoDepthFilterSlider.setBounds(fArea.getX(), lfoRow.getY() + 14, dW, 44);
-
-  lfoStack.removeFromLeft(pad);
-  auto pArea = lfoStack.removeFromLeft(dW);
-  lfoDepthPWLabel.setBounds(pArea.getX(), lfoRow.getY() + 2, dW, 12);
-  lfoDepthPWSlider.setBounds(pArea.getX(), lfoRow.getY() + 14, dW, 44);
-
-  lfoStack.removeFromLeft(pad);
-  auto vArea = lfoStack.removeFromLeft(dW);
-  lfoDepthPitchLabel.setBounds(vArea.getX(), lfoRow.getY() + 2, dW, 12);
-  lfoDepthPitchSlider.setBounds(vArea.getX(), lfoRow.getY() + 14, dW, 44);
+  // LFO1/LFO2 moved to Modulation popup (ModMatrixPanel)
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
@@ -2002,6 +2297,21 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam(mp + "amt", 0.0f);
   }
 
+  // Pitch Bend Range: reset to default
+  setParam("pitchBendRange", 2.0f);
+
+  // PWM Sweep: reset to default
+  setParam("pwmSweepEnable", 0.0f);
+  setParam("pwmSweepRate", 0.5f);
+  setParam("pwmSweepDepth", 0.0f);
+
+  // Chord Memory: off, all intervals = 0
+  setParam("chordEnable", 0.0f);
+  setParam("chordSlot", 0.0f);
+  for (int s = 0; s < 4; ++s)
+    for (int i = 0; i < 5; ++i)
+      setParam("chord_s" + juce::String(s) + "_i" + juce::String(i), 0.0f);
+
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user preference)
 
   // ---- VOICE CONFIGURATION HELPER ----
@@ -2051,41 +2361,290 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("leftDetune", -5.0f);
     setParam("rightDetune", 5.0f);
     setFilters(1800, 4);
+    // Light chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.15f);
+    setParam("chorusMix", 0.25f);
+    // Gentle LFO1 on filter for movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoRate", 0.4f);
+    setParam("lfoDepthFilt", 0.15f);
     break;
 
-  case 2: // Pad Stack - PWM Pad on all voices, chorus on
+  case 2: // Pad Stack - PWM Pad on all voices, lush FX
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12, 8, 4);
     setParam("leftDetune", -8.0f);
     setParam("rightDetune", 8.0f);
     setFilters(800, 6);
+    // Chorus for lushness
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.35f);
+    setParam("chorusMix", 0.4f);
+    // Slow PWM sweep for evolving texture
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.3f);
+    setParam("pwmSweepDepth", 0.4f);
+    // Filter envelope: slow swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 2.0f);
+    setParam("filterEnvDecay", 1.5f);
+    setParam("filterEnvSustain", 0.7f);
+    setParam("filterEnvRelease", 3.0f);
+    setParam("filterEnvAmount", 0.4f);
     break;
 
-  case 3: // Arpeggiated - Classic Lead with fast arp
+  case 3: // Arpeggiated - Classic Lead with arp + echo
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
     setParam("arpEnable", 1.0f);
     setParam("arpRate", 8.0f);
     setParam("arpOctaves", 2.0f);
+    // Stereo delay for rhythmic echo
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 250.0f);
+    setParam("delayTimeR", 375.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.3f);
+    // Filter envelope for plucky attack
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.15f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.3f);
+    setParam("filterEnvAmount", 0.6f);
+    setFilters(600, 4);
     break;
 
-  case 4: // Fat Unison - Fat Bass on all voices with heavy detune
+  case 4: // Fat Unison - Fat Bass, PWM sweep + mod matrix
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
     setParam("dualMode", 1.0f); // Unison
     setParam("leftDetune", -12.0f);
     setParam("rightDetune", 12.0f);
     setFilters(1200, 3);
+    // PWM sweep for subtle movement
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.6f);
+    setParam("pwmSweepDepth", 0.25f);
+    // Mod matrix: LFO1 -> Resonance for growl
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoRate", 0.3f);
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
+      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(4.0f)); // Resonance
+      setParam("mod0_amt", 0.3f);
+    }
     break;
 
-  case 5: // Retro Synth - Mixed voice presets for classic vibe
+  case 5: // Retro Synth - Mixed voices, vibrato + chorus
     configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 6);
     configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
     configVoice(2, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
     configVoice(3, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 6);
     configVoice(4, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
     configVoice(5, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
+    // LFO2 for subtle pitch vibrato
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 5.0f);
+    setParam("lfo2DepthPitch", 0.08f);
+    // Light chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.3f);
+    setParam("pitchBendRange", 7.0f);
     break;
+
+  case 6: { // Chord Stab - Chord memory + delay + filter env stab
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 3, 10, 2, 2);
+    setFilters(1400, 5);
+    // Chord memory: major 7th voicing (+4, +7, +11)
+    setParam("chordEnable", 1.0f);
+    setParam("chordSlot", 0.0f);
+    setParam("chord_s0_i0", 4.0f);   // major 3rd
+    setParam("chord_s0_i1", 7.0f);   // perfect 5th
+    // Slot 1: minor chord (-3, -7)
+    setParam("chord_s1_i0", 3.0f);   // minor 3rd
+    setParam("chord_s1_i1", 7.0f);   // perfect 5th
+    // Slot 2: sus4 (+5, +7)
+    setParam("chord_s2_i0", 5.0f);   // perfect 4th
+    setParam("chord_s2_i1", 7.0f);   // perfect 5th
+    // Slot 3: power chord (+7, +12)
+    setParam("chord_s3_i0", 7.0f);   // perfect 5th
+    setParam("chord_s3_i1", 12.0f);  // octave
+    // Punchy filter envelope
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.12f);
+    setParam("filterEnvSustain", 0.1f);
+    setParam("filterEnvRelease", 0.2f);
+    setParam("filterEnvAmount", 0.7f);
+    // Stereo delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 330.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.35f);
+    // Chorus for width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.5f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    break;
+  }
+
+  case 7: { // Mod Madness - Everything cranked: both LFOs, mod matrix, WT, FX
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 10, 6, 2);
+    setParam("leftDetune", -10.0f);
+    setParam("rightDetune", 10.0f);
+    setFilters(1000, 6);
+    // LFO1: S&H on filter for glitchy movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 3.0f);       // S&H
+    setParam("lfoRate", 6.0f);
+    setParam("lfoDepthFilt", 0.5f);
+    // LFO2: Triangle on pitch for wobble
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f);      // Triangle
+    setParam("lfo2Rate", 1.5f);
+    setParam("lfo2DepthPitch", 0.15f);
+    // PWM sweep: fast and deep
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 2.5f);
+    setParam("pwmSweepDepth", 0.7f);
+    // Filter envelope: sharp attack, slow release
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.5f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 2.0f);
+    setParam("filterEnvAmount", 0.6f);
+    // Mod matrix: LFO2->PW, FilterEnv->Resonance
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(2.0f)); // LFO2
+      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(2.0f)); // PW
+      setParam("mod0_amt", 0.6f);
+      auto *s1src = processor.apvts.getParameter("mod1_src");
+      auto *s1dst = processor.apvts.getParameter("mod1_dst");
+      if (s1src) s1src->setValueNotifyingHost(s1src->convertTo0to1(3.0f)); // FilterEnv
+      if (s1dst) s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
+      setParam("mod1_amt", 0.5f);
+    }
+    // Wavetable: 4-step cycling through waveforms
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 4.0f);
+    setParam("wtRate", 12.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Pulse, root
+      setWTStep(1, 1.0f, 0.0f, 2048.0f);   // Saw, root
+      setWTStep(2, 2.0f, 12.0f, 1024.0f);  // Pulse, +octave, narrow PW
+      setWTStep(3, 0.0f, 7.0f, 2048.0f);   // Triangle, +fifth
+    }
+    // Both FX
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 2.0f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.35f);
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 200.0f);
+    setParam("delayTimeR", 300.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.3f);
+    setParam("pitchBendRange", 12.0f);
+    break;
+  }
+
+  case 8: { // WT Arpeggio - Classic C64 wavetable arpeggio (Rob Hubbard technique)
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 4, 2);
+    setFilters(1200, 4);
+    // Wavetable: 3-step major chord arpeggio at 50Hz
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 3.0f);
+    setParam("wtRate", 50.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Pulse, root
+      setWTStep(1, 2.0f, 4.0f, 2048.0f);   // Pulse, major 3rd
+      setWTStep(2, 2.0f, 7.0f, 2048.0f);   // Pulse, 5th
+    }
+    // Light chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    // Subtle filter envelope pluck
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.2f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 0.4f);
+    setParam("filterEnvAmount", 0.5f);
+    break;
+  }
+
+  case 9: { // WT Morph - Timbral morphing through waveforms and PW
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 2, 4, 12, 6, 2);
+    setFilters(1400, 3);
+    // Wavetable: 8-step timbral sequence
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 8.0f);
+    setParam("wtRate", 8.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 3500.0f);    // Pulse, thin
+      setWTStep(1, 1.0f, 0.0f, 2048.0f);    // Saw
+      setWTStep(2, 2.0f, 0.0f, 1024.0f);    // Pulse, narrow
+      setWTStep(3, 0.0f, 12.0f, 2048.0f);   // Triangle, octave up
+      setWTStep(4, 2.0f, 0.0f, 2800.0f);    // Pulse, medium-thin
+      setWTStep(5, 1.0f, -12.0f, 2048.0f);  // Saw, octave down
+      setWTStep(6, 3.0f, 0.0f, 2048.0f);    // Noise, percussive hit
+      setWTStep(7, 2.0f, 7.0f, 1500.0f);    // Pulse, 5th, medium PW
+    }
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 250.0f);
+    setParam("delayTimeR", 375.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.35f);
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.3f);
+    // LFO1: slow filter sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);      // Triangle
+    setParam("lfoRate", 0.3f);
+    setParam("lfoDepthFilt", 0.3f);
+    break;
+  }
   }
 
   // Refresh UI for current voice
@@ -2166,8 +2725,7 @@ void BreadbinEditor::loadPresetFromFile() {
               juce::dontSendNotification);
           agingSlider.setValue(processor.getAgingFactor(),
                                juce::dontSendNotification);
-          pitchBendRangeSelector.setSelectedId(processor.getPitchBendRange(),
-                                               juce::dontSendNotification);
+          // pitchBendRange now APVTS-managed, auto-restored
           clockModeSelector.setSelectedId(
               static_cast<int>(processor.getClockMode()) + 1,
               juce::dontSendNotification);

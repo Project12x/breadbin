@@ -374,6 +374,7 @@ private:
   std::atomic<float> *extInputLevelPtr = nullptr;
   std::atomic<float> *leftPanPtr = nullptr;
   std::atomic<float> *rightPanPtr = nullptr;
+  std::atomic<float> *pitchBendRangePtr = nullptr;
 
   std::atomic<float> *lfoEnablePtr = nullptr;
   std::atomic<float> *lfoWavePtr = nullptr;
@@ -389,6 +390,19 @@ private:
   std::atomic<float> *lfo2DepthFiltPtr = nullptr;
   std::atomic<float> *lfo2DepthPWPtr = nullptr;
   std::atomic<float> *lfo2DepthPitchPtr = nullptr;
+
+  // PWM Sweep APVTS pointers
+  std::atomic<float> *pwmSweepEnablePtr = nullptr;
+  std::atomic<float> *pwmSweepRatePtr = nullptr;
+  std::atomic<float> *pwmSweepDepthPtr = nullptr;
+
+  // Chord Memory APVTS pointers
+  std::atomic<float> *chordEnablePtr = nullptr;
+  std::atomic<float> *chordSlotPtr = nullptr;
+  struct ChordSlotPtrs {
+    std::array<std::atomic<float>*, 5> intervals;
+  };
+  std::array<ChordSlotPtrs, 4> chordSlotPtrs;
 
   std::atomic<float> *arpEnablePtr = nullptr;
   std::atomic<float> *arpPatternPtr = nullptr;
@@ -513,6 +527,20 @@ private:
   // LFO state
   LFOState lfo;
   LFOState lfo2;
+
+  // PWM Sweep state
+  double pwmSweepPhase = 0.0;
+  float pwmSweepCurrentValue = 0.0f; // -1 to +1 triangle
+
+  // Chord Memory state
+  struct ChordMemoryState {
+    bool enabled = false;
+    int activeSlot = 0;
+    std::array<std::array<int, 5>, 4> intervals{}; // [slot][idx], 0=unused
+  };
+  ChordMemoryState chordMemory;
+  void triggerChord(bool isLeftSID, int rootNote, int velocity);
+  void releaseChord(bool isLeftSID);
 
   // Filter Envelope state
   FilterEnvelopeState filterEnv;

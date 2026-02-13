@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pitch bend range APVTS**: `pitchBendRange` AudioParameterInt (2-12, default 2) with
+  processBlock sync, CC mapping writes APVTS, global preset reset. Replaces direct
+  `setPitchBendRange()` calls with single source of truth.
+- **Modulation popup**: Consolidated LFO1, LFO2, pitch bend range selector, and mod matrix
+  into a single "Modulation" dialog (was "Mod Matrix"). Reclaimed 124px of main editor
+  vertical space. All controls have APVTS attachments; values persist across popup open/close.
+- **PWM Sweep**: Dedicated triangle-only pulse width sweep oscillator (enable/rate/depth),
+  independent from LFOs, additive with all existing PW modulation. UI row in Modulation popup.
+- **Chord Memory**: 4 chord slots with up to 5 semitone intervals each (-24 to +24),
+  trigger chords from single keys. Mutually exclusive with arpeggiator. Separate popup
+  UI with slot selection and interval sliders. 22 new APVTS parameters (enable, slot,
+  4x5 intervals). Global preset reset included.
+- **Wavetable step editor popup**: Full 16-step grid editor with per-step waveform ComboBox,
+  pitch slider (-24..+24), and PW slider (0..4095). Global controls (enable, steps, rate, loop)
+  moved from inline to popup. Current-step indicator with cyan highlight, inactive step dimming.
+  Replaces ambiguous inline controls with proper editing UI for all 48 per-step APVTS params.
+- **2 new presets**: "WT Arpeggio" (classic C64 wavetable chord arpeggio at 50Hz) and
+  "WT Morph" (8-step timbral morphing sequence with delay + LFO filter sweep).
+  Total global presets: 9.
+- 4 new integration tests for pitchBendRange (default, sync, state persistence, full lifecycle).
+- 3 new integration tests for PWM sweep (default off, modifies PW, state round-trip).
+- 3 new integration tests for Chord Memory (default off, triggers audio, state round-trip).
+- 2 new integration tests for Wavetable (step params editable, step sequencer produces variation).
+  Total integration assertions: 347.
+
 ## [0.9.2] - 2026-02-11
 
 ### Fixed

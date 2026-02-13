@@ -63,12 +63,13 @@
 
 ### Quick Wins
 
-- [ ] Pitch bend range UI selector (engine supports ±2–12 semitones, needs combo box)
-- [ ] PWM sweep UI (dedicated PW automation beyond LFO→PW)
+- [x] Pitch bend range APVTS + UI selector (±2–12 semitones, in Modulation popup)
+- [x] LFO1/LFO2 + Pitch Bend Range moved to Modulation popup (was Mod Matrix)
+- [x] PWM sweep (dedicated triangle oscillator, enable/rate/depth, UI in Modulation popup)
 
 ### Composition Tools
 
-- [ ] Chord Memory (store 4 chord shapes, trigger from single key)
+- [x] Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
 
 ### Release Engineering
 
@@ -95,3 +96,8 @@
 | 2026-02-11 | Per-SID pan (engine) | `leftPan`/`rightPan` APVTS with equal-power pan law | v0.9.2 |
 | 2026-02-11 | Competitive feature sprint | Filter env, chorus+delay, LFO2, wavetable, mod matrix, preset reset | Phase 6 |
 | 2026-02-11 | WT PW/pitch overwrite fix | `applyLFOModulation` uses WT step as base; pipeline order-of-ops test | `c630455` |
+| 2026-02-12 | Pitch bend range APVTS | `pitchBendRange` AudioParameterInt (2-12), processBlock sync, CC mapping writes APVTS, 4 integration tests | pending |
+| 2026-02-12 | Modulation popup consolidation | LFO1/LFO2 + PB range moved from main editor to ModMatrixPanel popup, renamed "Modulation", reclaimed 124px vertical space | pending |
+| 2026-02-12 | PWM Sweep | Dedicated triangle oscillator (enable/rate/depth), additive with LFO PW mod, UI in Modulation popup, 3 integration tests | pending |
+| 2026-02-12 | Chord Memory | 4 slots x 5 intervals (-24..+24), mutually exclusive with arp, popup UI, global preset reset, 3 integration tests | pending |
+| 2026-02-12 | Wavetable step editor | 16-step grid popup (waveform/pitch/PW per step), replaced inline controls, current-step indicator, 2 new presets (WT Arpeggio, WT Morph), 2 integration tests | pending |
