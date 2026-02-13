@@ -70,6 +70,7 @@
 ### Composition Tools
 
 - [x] Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
+- [x] SID File Player (load .SID/.PSID from HVSC, playback with register overlay, snapshot to APVTS presets)
 
 ### Release Engineering
 
@@ -101,3 +102,4 @@
 | 2026-02-12 | PWM Sweep | Dedicated triangle oscillator (enable/rate/depth), additive with LFO PW mod, UI in Modulation popup, 3 integration tests | pending |
 | 2026-02-12 | Chord Memory | 4 slots x 5 intervals (-24..+24), mutually exclusive with arp, popup UI, global preset reset, 3 integration tests | pending |
 | 2026-02-12 | Wavetable step editor | 16-step grid popup (waveform/pitch/PW per step), replaced inline controls, current-step indicator, 2 new presets (WT Arpeggio, WT Morph), 2 integration tests | pending |
+| 2026-02-12 | SID File Player | Load .SID files via libsidplayfp full engine, background thread + ring buffer playback, register overlay on main UI, snapshot registers to APVTS presets, popup UI with transport/info/hex display | pending |

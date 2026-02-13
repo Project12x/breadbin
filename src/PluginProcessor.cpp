@@ -12,6 +12,9 @@ BreadbinProcessor::BreadbinProcessor()
   sidLeft.setChipModel(chipModelLeft);
   sidRight.setChipModel(chipModelRight);
 
+  // Initialize SID file player
+  sidFilePlayer = std::make_unique<SidFilePlayer>();
+
   // Link parameter pointers for fast access
   initializeParameterPointers();
 
@@ -50,6 +53,16 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
   }
+
+  // Initialize SID file player + resampler
+  sidFilePlayer->prepare(sampleRate);
+  sidResampleRatio = SidFilePlayer::ENGINE_SAMPLE_RATE / sampleRate;
+  sidResamplerL.reset();
+  sidResamplerR.reset();
+  // Pre-allocate resampler input buffers (enough for one block at engine rate + margin)
+  size_t resampleBufSize = static_cast<size_t>(samplesPerBlock * sidResampleRatio) + 64;
+  sidResampleBufL.resize(resampleBufSize, 0.0f);
+  sidResampleBufR.resize(resampleBufSize, 0.0f);
 
   // Initialize safety chain
   prepareSafetyChain(sampleRate, samplesPerBlock);
@@ -296,6 +309,46 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     leftChannel[i] = outL;
     if (rightChannel)
       rightChannel[i] = outR;
+  }
+
+  // === SID FILE PLAYER MIX (with resampling from 44100 to host rate) ===
+  if (sidFilePlayer->isPlaying()) {
+    // How many samples we need from the SID engine to produce numSamples at host rate
+    int sourceSamples = static_cast<int>(numSamples * sidResampleRatio) + 4;
+    // Ensure pre-allocated buffers are large enough
+    if (static_cast<size_t>(sourceSamples) > sidResampleBufL.size()) {
+      sidResampleBufL.resize(static_cast<size_t>(sourceSamples) + 64, 0.0f);
+      sidResampleBufR.resize(static_cast<size_t>(sourceSamples) + 64, 0.0f);
+    }
+    // Read from ring buffer at engine rate
+    sidFilePlayer->readSamples(sidResampleBufL.data(), sidResampleBufR.data(), sourceSamples);
+
+    if (std::abs(sidResampleRatio - 1.0) < 0.001) {
+      // No resampling needed (host rate == engine rate)
+      for (int i = 0; i < numSamples; ++i) {
+        leftChannel[i] += sidResampleBufL[static_cast<size_t>(i)];
+        if (rightChannel)
+          rightChannel[i] += sidResampleBufR[static_cast<size_t>(i)];
+      }
+    } else {
+      // Resample from ENGINE_SAMPLE_RATE to host rate using Lagrange interpolation
+      // Stack-allocate output buffers (typical block size <= 4096)
+      float resampledL[4096];
+      float resampledR[4096];
+      int outSamples = std::min(numSamples, 4096);
+
+      sidResamplerL.process(sidResampleRatio, sidResampleBufL.data(), resampledL, outSamples);
+      sidResamplerR.process(sidResampleRatio, sidResampleBufR.data(), resampledR, outSamples);
+
+      for (int i = 0; i < outSamples; ++i) {
+        leftChannel[i] += resampledL[i];
+        if (rightChannel)
+          rightChannel[i] += resampledR[i];
+      }
+    }
+    sidPlayerActive.store(true, std::memory_order_relaxed);
+  } else {
+    sidPlayerActive.store(false, std::memory_order_relaxed);
   }
 
   // === FX CHAIN ===
@@ -1901,4 +1954,72 @@ void BreadbinProcessor::initializeParameterPointers() {
     ptrs.sync = apvts.getRawParameterValue(prefix + "sync");
     ptrs.filter = apvts.getRawParameterValue(prefix + "filter");
   }
+}
+
+void BreadbinProcessor::snapshotSidPlayerToAPVTS() {
+  auto snapshot = sidFilePlayer->getRegisterSnapshot();
+  if (!snapshot.valid)
+    return;
+
+  // Helper: set APVTS param by ID and denormalized value
+  auto setParam = [this](const juce::String &id, float val) {
+    auto *p = apvts.getParameter(id);
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(val));
+  };
+
+  // SID register layout per voice (7 bytes each):
+  // +0: Freq lo, +1: Freq hi, +2: PW lo, +3: PW hi (bits 0-3)
+  // +4: Control (gate, sync, ring, test, waveform bits 4-7)
+  // +5: Attack (hi nibble), Decay (lo nibble)
+  // +6: Sustain (hi nibble), Release (lo nibble)
+  for (int voice = 0; voice < 3; ++voice) {
+    int base = voice * 7;
+    juce::String vp = "v" + juce::String(voice) + "_";
+
+    // Pulse width (12-bit: lo byte + hi nibble)
+    int pw = snapshot.regs[base + 2] | ((snapshot.regs[base + 3] & 0x0F) << 8);
+    setParam(vp + "pw", static_cast<float>(pw));
+
+    // Waveform from control register bits 4-7
+    uint8_t ctrl = snapshot.regs[base + 4];
+    int waveIdx = 0; // Triangle
+    if (ctrl & 0x20) waveIdx = 1;      // Sawtooth
+    else if (ctrl & 0x40) waveIdx = 2; // Pulse
+    else if (ctrl & 0x80) waveIdx = 3; // Noise
+    else if (ctrl & 0x10) waveIdx = 0; // Triangle
+    setParam(vp + "waveform", static_cast<float>(waveIdx));
+
+    // Sync and Ring mod
+    setParam(vp + "sync", (ctrl & 0x02) ? 1.0f : 0.0f);
+    setParam(vp + "ringMod", (ctrl & 0x04) ? 1.0f : 0.0f);
+
+    // ADSR
+    setParam(vp + "attack", static_cast<float>((snapshot.regs[base + 5] >> 4) & 0x0F));
+    setParam(vp + "decay", static_cast<float>(snapshot.regs[base + 5] & 0x0F));
+    setParam(vp + "sustain", static_cast<float>((snapshot.regs[base + 6] >> 4) & 0x0F));
+    setParam(vp + "release", static_cast<float>(snapshot.regs[base + 6] & 0x0F));
+
+    // Filter routing per voice (register 0x17, bits 0-2)
+    bool voiceFiltered = (snapshot.regs[0x17] >> voice) & 0x01;
+    setParam(vp + "filter", voiceFiltered ? 1.0f : 0.0f);
+  }
+
+  // Filter cutoff (11-bit: reg 0x15 bits 0-2 + reg 0x16)
+  int cutoff = (snapshot.regs[0x15] & 0x07) | (snapshot.regs[0x16] << 3);
+  setParam("leftCutoff", static_cast<float>(cutoff));
+
+  // Filter resonance (reg 0x17 hi nibble, 0-15)
+  int resonance = (snapshot.regs[0x17] >> 4) & 0x0F;
+  setParam("leftResonance", static_cast<float>(resonance));
+
+  // Filter mode (reg 0x18 bits 4-6)
+  uint8_t modeReg = snapshot.regs[0x18];
+  setParam("leftLP", (modeReg & 0x10) ? 1.0f : 0.0f);
+  setParam("leftBP", (modeReg & 0x20) ? 1.0f : 0.0f);
+  setParam("leftHP", (modeReg & 0x40) ? 1.0f : 0.0f);
+
+  // Master volume (reg 0x18 lo nibble, 0-15 -> 0.0-1.0)
+  int sidVol = modeReg & 0x0F;
+  setParam("masterVolume", static_cast<float>(sidVol) / 15.0f);
 }

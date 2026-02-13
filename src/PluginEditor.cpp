@@ -1,6 +1,608 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+// ========== CUSTOM LOOKANDFEEL ==========
+
+BreadbinLookAndFeel::BreadbinLookAndFeel() {
+  setColour(juce::Slider::backgroundColourId, juce::Colour(20, 20, 25));
+  setColour(juce::Slider::trackColourId, juce::Colours::cyan);
+  setColour(juce::Slider::thumbColourId, juce::Colour(180, 180, 190));
+
+  setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
+  setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
+  setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+
+  setColour(juce::ComboBox::backgroundColourId, juce::Colour(25, 25, 30));
+  setColour(juce::ComboBox::outlineColourId,
+            juce::Colours::cyan.withAlpha(0.5f));
+  setColour(juce::ComboBox::textColourId, juce::Colours::white);
+  setColour(juce::ComboBox::arrowColourId, juce::Colours::cyan);
+
+  setColour(juce::PopupMenu::backgroundColourId, juce::Colour(25, 25, 30));
+  setColour(juce::PopupMenu::highlightedBackgroundColourId,
+            juce::Colours::cyan.withAlpha(0.25f));
+  setColour(juce::PopupMenu::textColourId, juce::Colours::lightgrey);
+  setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+}
+
+void BreadbinLookAndFeel::drawRotarySlider(
+    juce::Graphics &g, int x, int y, int width, int height,
+    float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
+    juce::Slider &slider) {
+
+  auto bounds =
+      juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                              static_cast<float>(width),
+                              static_cast<float>(height))
+          .reduced(2.0f);
+  float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+  float centreX = bounds.getCentreX();
+  float centreY = bounds.getCentreY();
+  float rx = centreX - radius;
+  float ry = centreY - radius;
+  float rw = radius * 2.0f;
+  float angle =
+      rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+
+  // Accent colour from slider's trackColourId
+  auto accentColour = slider.findColour(juce::Slider::trackColourId);
+
+  // Dark recessed background
+  g.setColour(juce::Colour(15, 15, 20));
+  g.fillEllipse(rx, ry, rw, rw);
+
+  // Inner shadow gradient
+  juce::ColourGradient innerShadow(
+      juce::Colours::black.withAlpha(0.4f), centreX - radius,
+      centreY - radius, juce::Colours::white.withAlpha(0.05f),
+      centreX + radius, centreY + radius, true);
+  g.setGradientFill(innerShadow);
+  g.fillEllipse(rx + 1.0f, ry + 1.0f, rw - 2.0f, rw - 2.0f);
+
+  // Background arc track
+  const float trackWidth = 3.0f;
+  juce::Path backgroundArc;
+  backgroundArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f,
+                              0.0f, rotaryStartAngle, rotaryEndAngle, true);
+  g.setColour(juce::Colour(50, 50, 55));
+  g.strokePath(backgroundArc,
+               juce::PathStrokeType(trackWidth, juce::PathStrokeType::curved,
+                                    juce::PathStrokeType::rounded));
+
+  // Value arc with glow
+  if (sliderPos > 0.0f) {
+    juce::Path valueArc;
+    valueArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f,
+                           0.0f, rotaryStartAngle, angle, true);
+    // Glow (wider, lower alpha)
+    g.setColour(accentColour.withAlpha(0.15f));
+    g.strokePath(valueArc,
+                 juce::PathStrokeType(trackWidth + 4.0f,
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
+    // Solid arc
+    g.setColour(accentColour);
+    g.strokePath(valueArc,
+                 juce::PathStrokeType(trackWidth, juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
+  }
+
+  // Pointer dot
+  float dotRadius = 3.0f;
+  float dotDist = radius - 4.0f;
+  float dotX = centreX + dotDist * std::cos(angle - juce::MathConstants<float>::halfPi);
+  float dotY = centreY + dotDist * std::sin(angle - juce::MathConstants<float>::halfPi);
+  g.setColour(juce::Colours::white);
+  g.fillEllipse(dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f,
+                dotRadius * 2.0f);
+}
+
+void BreadbinLookAndFeel::drawLinearSlider(
+    juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
+    float /*minSliderPos*/, float /*maxSliderPos*/,
+    juce::Slider::SliderStyle style, juce::Slider &slider) {
+
+  bool isHorizontal = (style == juce::Slider::LinearHorizontal ||
+                       style == juce::Slider::LinearBar);
+
+  auto trackColour = slider.findColour(juce::Slider::trackColourId);
+
+  if (isHorizontal) {
+    float trackY = static_cast<float>(y) + static_cast<float>(height) * 0.5f;
+    float trackH = 4.0f;
+    float trackTop = trackY - trackH * 0.5f;
+    float fx = static_cast<float>(x);
+    float fw = static_cast<float>(width);
+
+    // Recessed channel
+    g.setColour(juce::Colour(15, 15, 20));
+    g.fillRoundedRectangle(fx, trackTop, fw, trackH, 2.0f);
+    // Inner shadow edges
+    g.setColour(juce::Colours::black.withAlpha(0.3f));
+    g.drawHorizontalLine(static_cast<int>(trackTop), fx, fx + fw);
+    g.setColour(juce::Colours::white.withAlpha(0.05f));
+    g.drawHorizontalLine(static_cast<int>(trackTop + trackH), fx, fx + fw);
+
+    // Neon fill (bipolar-aware)
+    float fillStart = fx;
+    float fillEnd = sliderPos;
+    auto range = slider.getRange();
+    if (range.getStart() < 0.0 && range.getEnd() > 0.0) {
+      float centre =
+          fx + fw * static_cast<float>(-range.getStart() / range.getLength());
+      fillStart = juce::jmin(centre, sliderPos);
+      fillEnd = juce::jmax(centre, sliderPos);
+    }
+    // Glow
+    g.setColour(trackColour.withAlpha(0.15f));
+    g.fillRoundedRectangle(fillStart, trackTop - 1.5f, fillEnd - fillStart,
+                           trackH + 3.0f, 2.0f);
+    // Solid fill
+    g.setColour(trackColour.withAlpha(0.7f));
+    g.fillRoundedRectangle(fillStart, trackTop, fillEnd - fillStart, trackH,
+                           2.0f);
+
+    // Pill thumb
+    float thumbW = 14.0f;
+    float thumbH = static_cast<float>(height) * 0.65f;
+    float thumbX = sliderPos - thumbW * 0.5f;
+    float thumbY = trackY - thumbH * 0.5f;
+
+    juce::ColourGradient thumbGrad(juce::Colour(200, 200, 210), thumbX, thumbY,
+                                   juce::Colour(80, 80, 90), thumbX,
+                                   thumbY + thumbH, false);
+    g.setGradientFill(thumbGrad);
+    g.fillRoundedRectangle(thumbX, thumbY, thumbW, thumbH, thumbW * 0.35f);
+
+    g.setColour(juce::Colour(60, 60, 70));
+    g.drawRoundedRectangle(thumbX, thumbY, thumbW, thumbH, thumbW * 0.35f,
+                           0.5f);
+
+  } else {
+    // Vertical
+    float trackX = static_cast<float>(x) + static_cast<float>(width) * 0.5f;
+    float trackW = 4.0f;
+    float trackLeft = trackX - trackW * 0.5f;
+    float fy = static_cast<float>(y);
+    float fh = static_cast<float>(height);
+
+    // Recessed channel
+    g.setColour(juce::Colour(15, 15, 20));
+    g.fillRoundedRectangle(trackLeft, fy, trackW, fh, 2.0f);
+    g.setColour(juce::Colours::black.withAlpha(0.3f));
+    g.drawLine(trackLeft, fy, trackLeft, fy + fh);
+
+    // Neon fill from bottom to thumb
+    float fillBottom = fy + fh;
+    g.setColour(trackColour.withAlpha(0.5f));
+    if (fillBottom > sliderPos)
+      g.fillRoundedRectangle(trackLeft, sliderPos, trackW,
+                             fillBottom - sliderPos, 2.0f);
+
+    // Horizontal thumb
+    float thumbH = 8.0f;
+    float thumbW = static_cast<float>(width) * 0.7f;
+    float thumbX = trackX - thumbW * 0.5f;
+    float thumbY = sliderPos - thumbH * 0.5f;
+
+    juce::ColourGradient thumbGrad(juce::Colour(200, 200, 210), thumbX, thumbY,
+                                   juce::Colour(80, 80, 90), thumbX,
+                                   thumbY + thumbH, false);
+    g.setGradientFill(thumbGrad);
+    g.fillRoundedRectangle(thumbX, thumbY, thumbW, thumbH, 3.0f);
+
+    g.setColour(juce::Colour(60, 60, 70));
+    g.drawRoundedRectangle(thumbX, thumbY, thumbW, thumbH, 3.0f, 0.5f);
+  }
+}
+
+void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
+                                           juce::ToggleButton &button,
+                                           bool /*highlighted*/,
+                                           bool /*down*/) {
+  auto bounds = button.getLocalBounds().toFloat();
+  bool isOn = button.getToggleState();
+
+  // LED indicator
+  float ledSize = juce::jmin(14.0f, bounds.getHeight() - 2.0f);
+  float ledX = bounds.getX() + 2.0f;
+  float ledY = bounds.getCentreY() - ledSize * 0.5f;
+  auto ledRect = juce::Rectangle<float>(ledX, ledY, ledSize, ledSize);
+
+  auto accentColour = button.findColour(juce::ToggleButton::tickColourId);
+
+  if (isOn) {
+    // Outer glow
+    g.setColour(accentColour.withAlpha(0.25f));
+    g.fillRoundedRectangle(ledRect.expanded(2.0f), 4.0f);
+    // Filled LED
+    g.setColour(accentColour);
+    g.fillRoundedRectangle(ledRect, 3.0f);
+    // Bright centre highlight
+    g.setColour(accentColour.brighter(0.4f).withAlpha(0.6f));
+    g.fillRoundedRectangle(ledRect.reduced(2.0f), 2.0f);
+  } else {
+    g.setColour(juce::Colour(35, 35, 40));
+    g.fillRoundedRectangle(ledRect, 3.0f);
+    g.setColour(juce::Colour(60, 60, 65));
+    g.drawRoundedRectangle(ledRect, 3.0f, 0.5f);
+  }
+
+  // Label text
+  float textX = ledX + ledSize + 4.0f;
+  float textW = bounds.getWidth() - (textX - bounds.getX());
+  g.setColour(isOn ? juce::Colours::white : juce::Colours::lightgrey);
+  g.setFont(proFont.withHeight(12.0f));
+  g.drawText(button.getButtonText(),
+             juce::Rectangle<float>(textX, bounds.getY(), textW,
+                                    bounds.getHeight()),
+             juce::Justification::centredLeft);
+}
+
+void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
+                                               juce::Button &button,
+                                               const juce::Colour &bgColour,
+                                               bool highlighted, bool down) {
+  auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
+  float cornerRadius = bounds.getHeight() * 0.4f;
+
+  auto baseColour = bgColour;
+  if (down)
+    baseColour = baseColour.darker(0.3f);
+  else if (highlighted)
+    baseColour = baseColour.brighter(0.15f);
+
+  // 3D gradient
+  juce::Colour topColour, bottomColour;
+  if (down) {
+    topColour = baseColour.darker(0.15f);
+    bottomColour = baseColour.brighter(0.05f);
+  } else {
+    topColour = baseColour.brighter(0.15f);
+    bottomColour = baseColour.darker(0.15f);
+  }
+
+  juce::ColourGradient grad = juce::ColourGradient::vertical(
+      topColour, bounds.getY(), bottomColour, bounds.getBottom());
+  g.setGradientFill(grad);
+  g.fillRoundedRectangle(bounds, cornerRadius);
+
+  // Neon accent border
+  auto accentColour = button.findColour(juce::TextButton::textColourOnId);
+  g.setColour(accentColour.withAlpha(highlighted ? 0.6f : 0.3f));
+  g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+}
+
+void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width,
+                                       int height, bool isButtonDown,
+                                       int buttonX, int /*buttonY*/,
+                                       int buttonW, int /*buttonH*/,
+                                       juce::ComboBox &box) {
+  auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width),
+                                       static_cast<float>(height));
+  float corner = 4.0f;
+
+  // Dark recessed background
+  g.setColour(juce::Colour(20, 20, 25));
+  g.fillRoundedRectangle(bounds, corner);
+
+  // Neon accent border
+  auto accentColour = box.findColour(juce::ComboBox::outlineColourId);
+  g.setColour(accentColour.withAlpha(isButtonDown ? 0.8f : 0.4f));
+  g.drawRoundedRectangle(bounds.reduced(0.5f), corner, 1.0f);
+
+  // Arrow indicator
+  float arrowX = static_cast<float>(buttonX) + static_cast<float>(buttonW) * 0.5f;
+  float arrowY = static_cast<float>(height) * 0.5f;
+  float arrowSize = 5.0f;
+  juce::Path arrow;
+  arrow.addTriangle(arrowX - arrowSize, arrowY - arrowSize * 0.4f,
+                    arrowX + arrowSize, arrowY - arrowSize * 0.4f, arrowX,
+                    arrowY + arrowSize * 0.6f);
+  g.setColour(box.findColour(juce::ComboBox::arrowColourId));
+  g.fillPath(arrow);
+}
+
+void BreadbinLookAndFeel::drawPopupMenuBackground(juce::Graphics &g,
+                                                   int width, int height) {
+  g.fillAll(juce::Colour(25, 25, 30));
+  g.setColour(juce::Colours::cyan.withAlpha(0.2f));
+  g.drawRect(0, 0, width, height, 1);
+}
+
+void BreadbinLookAndFeel::drawPopupMenuItem(
+    juce::Graphics &g, const juce::Rectangle<int> &area, bool isSeparator,
+    bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
+    const juce::String &text, const juce::String & /*shortcut*/,
+    const juce::Drawable * /*icon*/, const juce::Colour * /*textColour*/) {
+
+  if (isSeparator) {
+    g.setColour(juce::Colour(50, 50, 60));
+    g.fillRect(area.reduced(5, 0).withHeight(1));
+    return;
+  }
+
+  auto r = area.reduced(1);
+
+  if (isHighlighted && isActive) {
+    g.setColour(juce::Colours::cyan.withAlpha(0.2f));
+    g.fillRect(r);
+  }
+
+  g.setColour(isActive ? (isHighlighted ? juce::Colours::white
+                                        : juce::Colours::lightgrey)
+                       : juce::Colours::grey);
+  g.setFont(proFont.withHeight(14.0f));
+
+  auto textArea = r.reduced(10, 0);
+  if (isTicked) {
+    auto tickArea = textArea.removeFromLeft(16);
+    g.setColour(juce::Colours::cyan);
+    g.setFont(14.0f);
+    g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x9c\x93")), tickArea,
+               juce::Justification::centred);
+    g.setColour(isActive ? juce::Colours::white : juce::Colours::grey);
+    g.setFont(proFont.withHeight(14.0f));
+  }
+
+  g.drawFittedText(text, textArea, juce::Justification::centredLeft, 1);
+
+  if (hasSubMenu) {
+    float arrowH = 8.0f;
+    float arrowXPos = static_cast<float>(r.getRight() - 12);
+    float arrowYPos = static_cast<float>(r.getCentreY());
+    juce::Path arrow;
+    arrow.addTriangle(arrowXPos, arrowYPos - arrowH * 0.5f, arrowXPos,
+                      arrowYPos + arrowH * 0.5f, arrowXPos + 5.0f, arrowYPos);
+    g.setColour(juce::Colours::cyan.withAlpha(0.5f));
+    g.fillPath(arrow);
+  }
+}
+
+// ========== END CUSTOM LOOKANDFEEL ==========
+
+// ========== SID FILE PLAYER PANEL ==========
+
+SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
+  setSize(panelWidth, panelHeight);
+
+  // Load button
+  loadButton.setColour(juce::TextButton::buttonColourId, juce::Colour(60, 60, 70));
+  loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
+  loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  loadButton.onClick = [this]() {
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Load SID File", juce::File{}, "*.sid;*.psid;*.mus;*.prg");
+    fileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode |
+            juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser &fc) {
+          auto file = fc.getResult();
+          if (file.existsAsFile()) {
+            auto &player = processor.getSidFilePlayer();
+            if (player.loadFile(file.getFullPathName().toStdString())) {
+              tuneInfoLabel.setText(
+                  "Loaded: " + file.getFileName(), juce::dontSendNotification);
+              titleLabel.setText(
+                  "Title: " + juce::String(player.getTitle()),
+                  juce::dontSendNotification);
+              authorLabel.setText(
+                  "Author: " + juce::String(player.getAuthor()),
+                  juce::dontSendNotification);
+              releasedLabel.setText(
+                  "Released: " + juce::String(player.getReleased()),
+                  juce::dontSendNotification);
+              // Populate subtune selector
+              subtuneSelector.clear();
+              int numSubs = player.getNumSubtunes();
+              for (int i = 1; i <= numSubs; ++i)
+                subtuneSelector.addItem("Sub-tune " + juce::String(i), i);
+              subtuneSelector.setSelectedId(player.getCurrentSubtune(),
+                                            juce::dontSendNotification);
+            } else {
+              tuneInfoLabel.setText(
+                  "Failed to load file", juce::dontSendNotification);
+            }
+          }
+        });
+  };
+  addAndMakeVisible(loadButton);
+
+  // Transport buttons
+  auto setupTransport = [this](juce::TextButton &btn, const juce::String &text,
+                               juce::Colour col) {
+    btn.setButtonText(text);
+    btn.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 55));
+    btn.setColour(juce::TextButton::textColourOnId, col);
+    btn.setColour(juce::TextButton::textColourOffId, col);
+    addAndMakeVisible(btn);
+  };
+  setupTransport(playButton, "Play", juce::Colours::lime);
+  setupTransport(pauseButton, "Pause", juce::Colours::yellow);
+  setupTransport(stopButton, "Stop", juce::Colours::red);
+
+  playButton.onClick = [this]() { processor.getSidFilePlayer().play(); };
+  pauseButton.onClick = [this]() { processor.getSidFilePlayer().pause(); };
+  stopButton.onClick = [this]() { processor.getSidFilePlayer().stop(); };
+
+  // Snapshot button (accent red)
+  snapshotButton.setColour(juce::TextButton::buttonColourId,
+                           juce::Colour(120, 40, 40));
+  snapshotButton.setColour(juce::TextButton::textColourOnId,
+                           juce::Colours::white);
+  snapshotButton.setColour(juce::TextButton::textColourOffId,
+                           juce::Colours::white);
+  snapshotButton.onClick = [this]() {
+    processor.snapshotSidPlayerToAPVTS();
+  };
+  addAndMakeVisible(snapshotButton);
+
+  // Tune info labels
+  auto setupLabel = [this](juce::Label &lbl, const juce::String &text) {
+    lbl.setText(text, juce::dontSendNotification);
+    lbl.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(lbl);
+  };
+  setupLabel(tuneInfoLabel, "No file loaded");
+  setupLabel(titleLabel, "Title: ---");
+  setupLabel(authorLabel, "Author: ---");
+  setupLabel(releasedLabel, "Released: ---");
+
+  // Subtune selector
+  subtuneLabel.setText("Sub-tune:", juce::dontSendNotification);
+  subtuneLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+  addAndMakeVisible(subtuneLabel);
+  subtuneSelector.onChange = [this]() {
+    int sel = subtuneSelector.getSelectedId();
+    if (sel > 0)
+      processor.getSidFilePlayer().selectSubtune(sel);
+  };
+  addAndMakeVisible(subtuneSelector);
+
+  // Volume slider
+  volumeLabel.setText("Vol:", juce::dontSendNotification);
+  volumeLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
+  addAndMakeVisible(volumeLabel);
+  volumeSlider.setRange(0.0, 1.0, 0.01);
+  volumeSlider.setValue(0.7);
+  volumeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  volumeSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+  volumeSlider.onValueChange = [this]() {
+    processor.getSidFilePlayer().setVolume(
+        static_cast<float>(volumeSlider.getValue()));
+  };
+  addAndMakeVisible(volumeSlider);
+
+  // Register display (read-only text editor with monospace font)
+  registerDisplay.setMultiLine(true);
+  registerDisplay.setReadOnly(true);
+  registerDisplay.setColour(juce::TextEditor::backgroundColourId,
+                            juce::Colour(20, 20, 25));
+  registerDisplay.setColour(juce::TextEditor::textColourId,
+                            juce::Colours::cyan);
+  registerDisplay.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 12.0f, 0));
+  registerDisplay.setText("Registers will appear during playback...");
+  addAndMakeVisible(registerDisplay);
+
+  startTimerHz(30); // 30Hz register display updates
+}
+
+void SidPlayerPanel::resized() {
+  auto bounds = getLocalBounds().reduced(10);
+
+  // Row 1: Load button + tune info
+  auto row1 = bounds.removeFromTop(24);
+  loadButton.setBounds(row1.removeFromLeft(100));
+  row1.removeFromLeft(8);
+  tuneInfoLabel.setBounds(row1);
+
+  bounds.removeFromTop(4);
+
+  // Row 2: Title, Author, Released
+  titleLabel.setBounds(bounds.removeFromTop(20));
+  authorLabel.setBounds(bounds.removeFromTop(20));
+  releasedLabel.setBounds(bounds.removeFromTop(20));
+
+  bounds.removeFromTop(4);
+
+  // Row 3: Transport + subtune + volume
+  auto row3 = bounds.removeFromTop(26);
+  playButton.setBounds(row3.removeFromLeft(55));
+  row3.removeFromLeft(4);
+  pauseButton.setBounds(row3.removeFromLeft(55));
+  row3.removeFromLeft(4);
+  stopButton.setBounds(row3.removeFromLeft(55));
+  row3.removeFromLeft(12);
+  subtuneLabel.setBounds(row3.removeFromLeft(60));
+  subtuneSelector.setBounds(row3.removeFromLeft(100));
+
+  bounds.removeFromTop(4);
+
+  // Row 4: Volume + Snapshot
+  auto row4 = bounds.removeFromTop(26);
+  volumeLabel.setBounds(row4.removeFromLeft(30));
+  volumeSlider.setBounds(row4.removeFromLeft(200));
+  row4.removeFromLeft(12);
+  snapshotButton.setBounds(row4);
+
+  bounds.removeFromTop(6);
+
+  // Remaining: Register display
+  registerDisplay.setBounds(bounds);
+}
+
+void SidPlayerPanel::paint(juce::Graphics &g) {
+  g.fillAll(juce::Colour(30, 30, 35));
+}
+
+void SidPlayerPanel::timerCallback() {
+  updateRegisterDisplay();
+}
+
+void SidPlayerPanel::updateRegisterDisplay() {
+  auto &player = processor.getSidFilePlayer();
+  if (!player.isPlaying() && !player.isPaused())
+    return;
+
+  auto snapshot = player.getRegisterSnapshot();
+  if (!snapshot.valid)
+    return;
+
+  juce::String text;
+
+  // Voice registers
+  const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P", "S+P", "TSP",
+                             "NOI", "T+N", "S+N", "TSN", "P+N", "TPN", "SPN", "ALL"};
+  for (int v = 0; v < 3; ++v) {
+    int base = v * 7;
+    int freq = snapshot.regs[base] | (snapshot.regs[base + 1] << 8);
+    int pw = snapshot.regs[base + 2] | ((snapshot.regs[base + 3] & 0x0F) << 8);
+    uint8_t ctrl = snapshot.regs[base + 4];
+    int waveIdx = (ctrl >> 4) & 0x0F;
+    int attack = (snapshot.regs[base + 5] >> 4) & 0x0F;
+    int decay = snapshot.regs[base + 5] & 0x0F;
+    int sustain = (snapshot.regs[base + 6] >> 4) & 0x0F;
+    int release = snapshot.regs[base + 6] & 0x0F;
+    bool gate = ctrl & 0x01;
+    bool sync = ctrl & 0x02;
+    bool ring = ctrl & 0x04;
+
+    text += "V" + juce::String(v + 1) + ": " + waveNames[waveIdx];
+    text += " F:" + juce::String::toHexString(freq).paddedLeft('0', 4).toUpperCase();
+    text += " PW:" + juce::String(pw).paddedLeft(' ', 4);
+    text += " A:" + juce::String(attack);
+    text += " D:" + juce::String(decay);
+    text += " S:" + juce::String(sustain);
+    text += " R:" + juce::String(release);
+    if (gate) text += " GATE";
+    if (sync) text += " SYNC";
+    if (ring) text += " RING";
+    text += "\n";
+  }
+
+  // Filter registers
+  int cutoff = (snapshot.regs[0x15] & 0x07) | (snapshot.regs[0x16] << 3);
+  int resonance = (snapshot.regs[0x17] >> 4) & 0x0F;
+  uint8_t routing = snapshot.regs[0x17] & 0x07;
+  uint8_t mode = snapshot.regs[0x18];
+  int volume = mode & 0x0F;
+
+  text += "Filter: Cut=" + juce::String(cutoff);
+  text += " Res=" + juce::String(resonance);
+  if (mode & 0x10) text += " LP";
+  if (mode & 0x20) text += " BP";
+  if (mode & 0x40) text += " HP";
+  text += " Route=" + juce::String(static_cast<int>(routing));
+  text += " Vol=" + juce::String(volume);
+
+  // Time display
+  text += "\nTime: " + juce::String(player.getPlayTimeMs() / 1000) + "s";
+
+  registerDisplay.setText(text);
+}
+
+// ========== END SID FILE PLAYER PANEL ==========
+
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
     : juce::AudioProcessorEditor(&p), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
@@ -210,6 +812,51 @@ void BreadbinEditor::timerCallback() {
   // Preset dirty indicator
   presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
                            juce::dontSendNotification);
+
+  // SID Player register overlay
+  if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
+    auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
+    if (snapshot.valid) {
+      const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P", "S+P", "TSP",
+                                 "NOI", "T+N", "S+N", "TSN", "P+N", "TPN", "SPN", "ALL"};
+      // Decode voice 0 registers for overlay on current voice controls
+      int v = selectedVoice % 3; // map to SID voice 0-2
+      int base = v * 7;
+      uint8_t ctrl = snapshot.regs[base + 4];
+      int waveIdx = (ctrl >> 4) & 0x0F;
+      int pw = snapshot.regs[base + 2] | ((snapshot.regs[base + 3] & 0x0F) << 8);
+
+      sidOverlayWave.setText(waveNames[waveIdx], juce::dontSendNotification);
+      sidOverlayPW.setText("PW:" + juce::String(pw), juce::dontSendNotification);
+      sidOverlayAttack.setText("A:" + juce::String((snapshot.regs[base + 5] >> 4) & 0x0F), juce::dontSendNotification);
+      sidOverlayDecay.setText("D:" + juce::String(snapshot.regs[base + 5] & 0x0F), juce::dontSendNotification);
+      sidOverlaySustain.setText("S:" + juce::String((snapshot.regs[base + 6] >> 4) & 0x0F), juce::dontSendNotification);
+      sidOverlayRelease.setText("R:" + juce::String(snapshot.regs[base + 6] & 0x0F), juce::dontSendNotification);
+
+      int cutoff = (snapshot.regs[0x15] & 0x07) | (snapshot.regs[0x16] << 3);
+      int res = (snapshot.regs[0x17] >> 4) & 0x0F;
+      sidOverlayCutoff.setText("Cut:" + juce::String(cutoff), juce::dontSendNotification);
+      sidOverlayRes.setText("Res:" + juce::String(res), juce::dontSendNotification);
+
+      sidOverlayWave.setVisible(true);
+      sidOverlayPW.setVisible(true);
+      sidOverlayAttack.setVisible(true);
+      sidOverlayDecay.setVisible(true);
+      sidOverlaySustain.setVisible(true);
+      sidOverlayRelease.setVisible(true);
+      sidOverlayCutoff.setVisible(true);
+      sidOverlayRes.setVisible(true);
+    }
+  } else {
+    sidOverlayWave.setVisible(false);
+    sidOverlayPW.setVisible(false);
+    sidOverlayAttack.setVisible(false);
+    sidOverlayDecay.setVisible(false);
+    sidOverlaySustain.setVisible(false);
+    sidOverlayRelease.setVisible(false);
+    sidOverlayCutoff.setVisible(false);
+    sidOverlayRes.setVisible(false);
+  }
 }
 
 // ========== ModMatrixPanel Implementation ==========
@@ -287,6 +934,11 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   setupLfoSlider(lfo2DepthPitchSlider, lfo2DepthPitchLabel, "Vib", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+
+  // LFO2 accent colour: orange
+  lfo2DepthFilterSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
+  lfo2DepthPWSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
+  lfo2DepthPitchSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
 
   // ========== PITCH BEND RANGE ==========
   pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
@@ -479,26 +1131,46 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 void ModMatrixPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
 
-  // Section labels
-  g.setColour(juce::Colours::cyan);
-  g.setFont(11.0f);
-  g.drawText("LFO 1", 4, 2, 50, 14, juce::Justification::centredLeft);
+  // Dark recessed section backgrounds
+  auto drawSectionBg = [&](int y, int h) {
+    g.setColour(juce::Colour(22, 22, 27));
+    g.fillRoundedRectangle(2.0f, static_cast<float>(y),
+                           static_cast<float>(panelWidth - 4),
+                           static_cast<float>(h), 4.0f);
+  };
+  drawSectionBg(0, 54);   // LFO1
+  drawSectionBg(55, 54);  // LFO2
+  drawSectionBg(112, 28); // PWM
 
-  g.setColour(juce::Colours::orange);
-  g.drawText("LFO 2", 4, 57, 50, 14, juce::Justification::centredLeft);
+  // Section labels with glow pill
+  auto drawGlowLabel = [&](const juce::String &text, int x, int y,
+                           juce::Colour colour) {
+    int pillW = text.length() * 7 + 10;
+    g.setColour(colour.withAlpha(0.15f));
+    g.fillRoundedRectangle(static_cast<float>(x), static_cast<float>(y),
+                           static_cast<float>(pillW), 14.0f, 3.0f);
+    g.setColour(colour);
+    g.setFont(11.0f);
+    g.drawText(text, x + 4, y, pillW, 14, juce::Justification::centredLeft);
+  };
+  drawGlowLabel("LFO 1", 4, 2, juce::Colours::cyan);
+  drawGlowLabel("LFO 2", 4, 57, juce::Colours::orange);
+  drawGlowLabel("PWM Sweep", 4, 112, juce::Colours::greenyellow);
 
-  // PWM Sweep label
-  g.setColour(juce::Colours::greenyellow);
-  g.drawText("PWM Sweep", 4, 112, 70, 14, juce::Justification::centredLeft);
-
-  // Separator after PWM row
-  g.setColour(juce::Colours::grey.withAlpha(0.3f));
-  g.drawHorizontalLine(140, 4.0f, static_cast<float>(panelWidth - 4));
-
-  // PB Range label drawn via component
-
-  // Separator after PB row
-  g.drawHorizontalLine(168, 4.0f, static_cast<float>(panelWidth - 4));
+  // Gradient fade separator bars
+  auto drawSeparator = [&](int y) {
+    float pw = static_cast<float>(panelWidth);
+    juce::ColourGradient grad(juce::Colours::transparentBlack, 4.0f,
+                              static_cast<float>(y),
+                              juce::Colours::transparentBlack, pw - 4.0f,
+                              static_cast<float>(y), false);
+    grad.addColour(0.2, juce::Colours::grey.withAlpha(0.3f));
+    grad.addColour(0.8, juce::Colours::grey.withAlpha(0.3f));
+    g.setGradientFill(grad);
+    g.fillRect(4, y, static_cast<int>(pw) - 8, 1);
+  };
+  drawSeparator(140);
+  drawSeparator(168);
 
   // Mod matrix column headers
   const int mmTop = 172;
@@ -648,33 +1320,43 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
               processor.apvts, id, slider);
     }
   }
+
+  setSize(panelWidth, panelHeight);
 }
 
 void ChordMemoryPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
 
+  // Title with glow pill
+  g.setColour(juce::Colours::cyan.withAlpha(0.15f));
+  g.fillRoundedRectangle(8.0f, 8.0f, 130.0f, 22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
   g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
-  g.drawText("CHORD MEMORY", 10, 10, 120, 20, juce::Justification::centredLeft);
+  g.drawText("CHORD MEMORY", 14, 10, 120, 20, juce::Justification::centredLeft);
+
+  // Dark recessed background behind slot rows
+  g.setColour(juce::Colour(22, 22, 27));
+  g.fillRoundedRectangle(4.0f, 46.0f, static_cast<float>(panelWidth - 8),
+                         static_cast<float>(panelHeight - 50), 4.0f);
 
   // Column headers
   g.setColour(juce::Colours::lightgrey);
-  g.setFont(juce::Font(juce::FontOptions(10.0f)));
+  g.setFont(juce::Font(juce::FontOptions(11.0f)));
   for (int i = 0; i < 5; ++i)
-    g.drawText("Int " + juce::String(i + 1), 100 + i * 70, 35, 60, 14,
+    g.drawText("Int " + juce::String(i + 1), 102 + i * 76, 35, 66, 14,
                juce::Justification::centred);
 }
 
 void ChordMemoryPanel::resized() {
   enableButton.setBounds(140, 8, 80, 24);
   for (int s = 0; s < 4; ++s)
-    slotButtons[s].setBounds(230 + s * 50, 10, 40, 20);
+    slotButtons[s].setBounds(240 + s * 55, 10, 44, 22);
 
   for (int s = 0; s < 4; ++s) {
-    int y = 50 + s * 40;
-    slots[s].label.setBounds(10, y + 5, 60, 20);
+    int y = 50 + s * 58;
+    slots[s].label.setBounds(10, y + 12, 65, 20);
     for (int i = 0; i < 5; ++i)
-      slots[s].sliders[i].setBounds(80 + i * 70, y, 60, 36);
+      slots[s].sliders[i].setBounds(82 + i * 76, y, 66, 52);
   }
 }
 
@@ -763,7 +1445,10 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
 void WavetablePanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
 
-  // Title
+  // Title with glow background
+  g.setColour(juce::Colours::cyan.withAlpha(0.15f));
+  g.fillRoundedRectangle(10.0f, 2.0f, static_cast<float>(panelWidth - 20),
+                         22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
   g.setFont(16.0f);
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
@@ -772,55 +1457,68 @@ void WavetablePanel::paint(juce::Graphics &g) {
   // Row labels
   g.setColour(juce::Colours::lightgrey);
   g.setFont(11.0f);
-  g.drawText("Wave", 4, 62, 48, 16, juce::Justification::centredRight);
-  g.drawText("Pitch", 4, 120, 48, 16, juce::Justification::centredRight);
-  g.drawText("PW", 4, 225, 48, 16, juce::Justification::centredRight);
+  g.drawText("Wave", 4, 64, 48, 16, juce::Justification::centredRight);
+  g.drawText("Pitch", 4, 140, 48, 16, juce::Justification::centredRight);
+  g.drawText("PW", 4, 260, 48, 16, juce::Justification::centredRight);
 
-  // Step number headers
+  // Step number headers and column glow
   int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
   auto &wt = processor.getWavetable();
   int currentStep = wt.enabled ? wt.currentStep : -1;
 
-  g.setFont(10.0f);
+  const int leftMargin = 55;
+  const int colW = 47;
+
   for (int i = 0; i < 16; ++i) {
-    int x = 55 + i * 40;
+    int x = leftMargin + i * colW;
     bool isActive = i < numActiveSteps;
     bool isCurrent = (i == currentStep) && wt.enabled;
 
+    // Full column glow for current step
+    if (isCurrent) {
+      g.setColour(juce::Colours::cyan.withAlpha(0.08f));
+      g.fillRoundedRectangle(static_cast<float>(x - 1), 44.0f,
+                             static_cast<float>(colW), 300.0f, 4.0f);
+    }
+
+    // Step number header
+    g.setFont(10.0f);
     if (isCurrent) {
       g.setColour(juce::Colours::cyan);
-      g.fillRoundedRectangle(static_cast<float>(x), 44.0f, 38.0f, 14.0f, 3.0f);
+      g.fillRoundedRectangle(static_cast<float>(x), 44.0f,
+                             static_cast<float>(colW - 3), 14.0f, 3.0f);
       g.setColour(juce::Colours::black);
     } else if (isActive) {
       g.setColour(juce::Colours::white);
     } else {
       g.setColour(juce::Colour(70, 70, 80));
     }
-    g.drawText(juce::String(i + 1), x, 44, 38, 14, juce::Justification::centred);
+    g.drawText(juce::String(i + 1), x, 44, colW - 3, 14,
+               juce::Justification::centred);
   }
 }
 
 void WavetablePanel::resized() {
-  // Header row (y=24..42)
+  // Header row (y=24..42) — wider layout for 820px panel
   enableButton.setBounds(10, 24, 65, 20);
   stepsLabel.setBounds(80, 24, 40, 18);
-  numStepsSlider.setBounds(122, 22, 80, 34);
-  rateLabel.setBounds(210, 24, 50, 18);
-  rateSlider.setBounds(262, 22, 130, 34);
-  loopButton.setBounds(400, 24, 55, 20);
+  numStepsSlider.setBounds(122, 22, 100, 34);
+  rateLabel.setBounds(230, 24, 50, 18);
+  rateSlider.setBounds(282, 22, 150, 34);
+  loopButton.setBounds(445, 24, 55, 20);
 
-  // Per-step columns
+  // Per-step columns — wider
   const int leftMargin = 55;
-  const int colW = 40;
-  const int ctrlW = 38;
+  const int colW = 47;
+  const int ctrlW = 44;
 
   for (int i = 0; i < 16; ++i) {
     int x = leftMargin + i * colW;
     auto &step = steps[i];
 
-    step.waveBox.setBounds(x, 60, ctrlW, 22);
-    step.pitchSlider.setBounds(x, 84, ctrlW, 110);
-    step.pwSlider.setBounds(x, 196, ctrlW, 110);
+    step.waveBox.setBounds(x, 62, ctrlW, 22);
+    step.pitchSlider.setBounds(x, 86, ctrlW, 120);
+    step.pwSlider.setBounds(x, 210, ctrlW, 120);
   }
 }
 
@@ -849,6 +1547,7 @@ void BreadbinEditor::showChordMemoryPopup() {
   }
 
   auto *panel = new ChordMemoryPanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
 
   juce::DialogWindow::LaunchOptions opts;
   opts.content.setOwned(panel);
@@ -860,6 +1559,31 @@ void BreadbinEditor::showChordMemoryPopup() {
   opts.componentToCentreAround = this;
 
   chordMemoryWindow = opts.launchAsync();
+  if (chordMemoryWindow != nullptr)
+    chordMemoryWindow->setLookAndFeel(&customLookAndFeel);
+}
+
+void BreadbinEditor::showSidPlayerPopup() {
+  if (sidPlayerWindow != nullptr) {
+    sidPlayerWindow->toFront(true);
+    return;
+  }
+
+  auto *panel = new SidPlayerPanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
+
+  juce::DialogWindow::LaunchOptions opts;
+  opts.content.setOwned(panel);
+  opts.dialogTitle = "SID File Player";
+  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
+  opts.escapeKeyTriggersCloseButton = true;
+  opts.useNativeTitleBar = true;
+  opts.resizable = false;
+  opts.componentToCentreAround = this;
+
+  sidPlayerWindow = opts.launchAsync();
+  if (sidPlayerWindow != nullptr)
+    sidPlayerWindow->setLookAndFeel(&customLookAndFeel);
 }
 
 void BreadbinEditor::showModMatrixPopup() {
@@ -869,6 +1593,7 @@ void BreadbinEditor::showModMatrixPopup() {
   }
 
   auto *panel = new ModMatrixPanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
 
   juce::DialogWindow::LaunchOptions opts;
   opts.content.setOwned(panel);
@@ -880,6 +1605,8 @@ void BreadbinEditor::showModMatrixPopup() {
   opts.componentToCentreAround = this;
 
   modMatrixWindow = opts.launchAsync();
+  if (modMatrixWindow != nullptr)
+    modMatrixWindow->setLookAndFeel(&customLookAndFeel);
 }
 
 void BreadbinEditor::showWavetablePopup() {
@@ -889,6 +1616,7 @@ void BreadbinEditor::showWavetablePopup() {
   }
 
   auto *panel = new WavetablePanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
 
   juce::DialogWindow::LaunchOptions opts;
   opts.content.setOwned(panel);
@@ -900,6 +1628,8 @@ void BreadbinEditor::showWavetablePopup() {
   opts.componentToCentreAround = this;
 
   wavetableWindow = opts.launchAsync();
+  if (wavetableWindow != nullptr)
+    wavetableWindow->setLookAndFeel(&customLookAndFeel);
 }
 
 void BreadbinEditor::setupControls() {
@@ -1163,6 +1893,8 @@ void BreadbinEditor::setupControls() {
 
   setupFXSlider(chorusRateSlider, chorusRateLabel, "Rate", 0.1f, 10.0f, 1.5f,
                 0.1f, "Chorus Rate (Hz)");
+  chorusRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 38, 18);
+  chorusRateSlider.setNumDecimalPlacesToDisplay(1);
   setupFXSlider(chorusDepthSlider, chorusDepthLabel, "Depth", 0.0f, 1.0f,
                 0.3f, 0.01f, "Chorus Depth");
   setupFXSlider(chorusMixSlider, chorusMixLabel, "Mix", 0.0f, 1.0f, 0.5f,
@@ -1174,8 +1906,12 @@ void BreadbinEditor::setupControls() {
 
   setupFXSlider(delayTimeLSlider, delayTimeLLabel, "L ms", 1.0f, 1000.0f,
                 375.0f, 1.0f, "Delay Time Left (ms)");
+  delayTimeLSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 42, 18);
+  delayTimeLSlider.setNumDecimalPlacesToDisplay(0);
   setupFXSlider(delayTimeRSlider, delayTimeRLabel, "R ms", 1.0f, 1000.0f,
                 500.0f, 1.0f, "Delay Time Right (ms)");
+  delayTimeRSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 42, 18);
+  delayTimeRSlider.setNumDecimalPlacesToDisplay(0);
   setupFXSlider(delayFeedbackSlider, delayFBLabel, "FB", 0.0f, 0.95f, 0.3f,
                 0.01f, "Delay Feedback");
   setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f,
@@ -1213,6 +1949,17 @@ void BreadbinEditor::setupControls() {
                               juce::Colours::cyan);
   chordMemoryButton.onClick = [this]() { showChordMemoryPopup(); };
   addAndMakeVisible(chordMemoryButton);
+
+  // ===== SID PLAYER BUTTON =====
+  sidPlayerButton.setTooltip("SID Player: Load and play .SID files, snapshot registers to synth");
+  sidPlayerButton.setColour(juce::TextButton::buttonColourId,
+                            juce::Colour(70, 50, 50));
+  sidPlayerButton.setColour(juce::TextButton::textColourOnId,
+                            juce::Colours::orange);
+  sidPlayerButton.setColour(juce::TextButton::textColourOffId,
+                            juce::Colours::orange);
+  sidPlayerButton.onClick = [this]() { showSidPlayerPopup(); };
+  addAndMakeVisible(sidPlayerButton);
 
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
@@ -1257,6 +2004,7 @@ void BreadbinEditor::setupControls() {
   filterEnvAmountSlider.setValue(0.5);
   filterEnvAmountSlider.setSliderStyle(
       juce::Slider::RotaryHorizontalVerticalDrag);
+  filterEnvAmountSlider.setColour(juce::Slider::trackColourId, juce::Colours::green);
   filterEnvAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40,
                                         12);
   filterEnvAmountSlider.setColour(juce::Slider::textBoxTextColourId,
@@ -1266,6 +2014,25 @@ void BreadbinEditor::setupControls() {
   filterEnvAmountSlider.setTooltip(
       "Filter Env Amount: Bipolar (-1 to +1). Positive opens filter on attack.");
   addAndMakeVisible(filterEnvAmountSlider);
+
+  // SID Player register overlay labels (hidden by default)
+  auto setupOverlay = [this](juce::Label &lbl) {
+    lbl.setColour(juce::Label::textColourId, juce::Colours::cyan);
+    lbl.setColour(juce::Label::backgroundColourId,
+                  juce::Colours::black.withAlpha(0.7f));
+    lbl.setFont(juce::Font(juce::FontOptions(9.0f)));
+    lbl.setJustificationType(juce::Justification::centred);
+    lbl.setVisible(false);
+    addAndMakeVisible(lbl);
+  };
+  setupOverlay(sidOverlayWave);
+  setupOverlay(sidOverlayPW);
+  setupOverlay(sidOverlayAttack);
+  setupOverlay(sidOverlayDecay);
+  setupOverlay(sidOverlaySustain);
+  setupOverlay(sidOverlayRelease);
+  setupOverlay(sidOverlayCutoff);
+  setupOverlay(sidOverlayRes);
 
   // Keyboard
   keyboard.setKeyWidth(16.0f);
@@ -1322,6 +2089,7 @@ void BreadbinEditor::setupLeftSID() {
   leftCutoffSlider.setValue(1024);
   leftCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  leftCutoffSlider.setColour(juce::Slider::trackColourId, juce::Colours::cyan);
   leftCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   leftCutoffSlider.onValueChange = [this]() {
     int val = static_cast<int>(leftCutoffSlider.getValue());
@@ -1340,6 +2108,7 @@ void BreadbinEditor::setupLeftSID() {
   leftResonanceSlider.setValue(0);
   leftResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  leftResonanceSlider.setColour(juce::Slider::trackColourId, juce::Colours::cyan);
   leftResonanceSlider.setTooltip("Filter Resonance (0-15)");
   leftResonanceSlider.onValueChange = [this]() {
     int val = static_cast<int>(leftResonanceSlider.getValue());
@@ -1456,6 +2225,7 @@ void BreadbinEditor::setupRightSID() {
   rightCutoffSlider.setValue(1024);
   rightCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  rightCutoffSlider.setColour(juce::Slider::trackColourId, juce::Colours::orange);
   rightCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   rightCutoffSlider.onValueChange = [this]() {
     int val = static_cast<int>(rightCutoffSlider.getValue());
@@ -1474,6 +2244,7 @@ void BreadbinEditor::setupRightSID() {
   rightResonanceSlider.setValue(0);
   rightResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+  rightResonanceSlider.setColour(juce::Slider::trackColourId, juce::Colours::orange);
   rightResonanceSlider.setTooltip("Filter Resonance (0-15)");
   rightResonanceSlider.onValueChange = [this]() {
     int val = static_cast<int>(rightResonanceSlider.getValue());
@@ -1770,6 +2541,18 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   } else {
     g.fillAll(juce::Colour(30, 30, 35));
   }
+
+  // Subtle glow underlines under SID panel headers
+  auto drawHeaderGlow = [&](juce::Label &label, juce::Colour colour) {
+    auto b = label.getBounds().toFloat();
+    float glowY = b.getBottom();
+    g.setColour(colour.withAlpha(0.3f));
+    g.fillRect(b.getX() + 10.0f, glowY, b.getWidth() - 20.0f, 2.0f);
+    g.setColour(colour.withAlpha(0.1f));
+    g.fillRect(b.getX() + 5.0f, glowY + 1.0f, b.getWidth() - 10.0f, 3.0f);
+  };
+  drawHeaderGlow(leftSIDLabel, juce::Colours::cyan);
+  drawHeaderGlow(rightSIDLabel, juce::Colours::orange);
 }
 
 void BreadbinEditor::resized() {
@@ -1780,8 +2563,8 @@ void BreadbinEditor::resized() {
 
   // ===== TOP ROW: Mode, Patch (Global), Ext In =====
   auto topRow = bounds.removeFromTop(rowH);
-  modeLabel.setBounds(topRow.removeFromLeft(35));
-  dualModeSelector.setBounds(topRow.removeFromLeft(100));
+  modeLabel.setBounds(topRow.removeFromLeft(45));
+  dualModeSelector.setBounds(topRow.removeFromLeft(105));
   topRow.removeFromLeft(pad * 2);
 
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
@@ -1793,9 +2576,9 @@ void BreadbinEditor::resized() {
   loadPatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
   topRow.removeFromLeft(pad * 2);
 
-  // Master Volume in header
+  // Master Volume in header (wider slider for better resolution)
   masterVolLabel.setBounds(topRow.removeFromLeft(45));
-  masterVolSlider.setBounds(topRow.removeFromLeft(90));
+  masterVolSlider.setBounds(topRow.removeFromLeft(160));
 
   // Ext In on the right of header
   extInputLevelSlider.setBounds(topRow.removeFromRight(80));
@@ -1806,7 +2589,7 @@ void BreadbinEditor::resized() {
   bounds.removeFromTop(pad * 2);
 
   // ===== SID PANELS: Left and Right side by side =====
-  auto sidRow = bounds.removeFromTop(180);
+  auto sidRow = bounds.removeFromTop(200);
   const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
 
   // ----- LEFT SID -----
@@ -1816,21 +2599,22 @@ void BreadbinEditor::resized() {
   leftChipSelector.setBounds(leftChipRow.removeFromLeft(100));
 
   // Voice buttons with enable checkboxes
-  auto leftVoicesRow = leftPanel.removeFromTop(30);
+  auto leftVoicesRow = leftPanel.removeFromTop(28);
   for (int i = 0; i < 3; ++i) {
     leftVoiceEnables[i].setBounds(leftVoicesRow.removeFromLeft(20));
-    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(40));
+    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(44));
     leftVoicesRow.removeFromLeft(pad);
   }
 
   // Filter
   leftPanel.removeFromTop(pad);
-  auto leftFilterRow = leftPanel.removeFromTop(50);
+  auto leftFilterRow = leftPanel.removeFromTop(60);
   leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(40));
-  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(40));
+  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(55));
   cutoffMeterL.setBounds(leftFilterRow.removeFromLeft(6));
-  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(28));
-  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(40));
+  leftFilterRow.removeFromLeft(4);
+  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(32));
+  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(55));
   resMeterL.setBounds(leftFilterRow.removeFromLeft(6));
 
   auto leftModesRow = leftPanel.removeFromTop(22);
@@ -1842,12 +2626,12 @@ void BreadbinEditor::resized() {
   // Detune
   auto leftDetuneRow = leftPanel.removeFromTop(20);
   leftDetuneLabel.setBounds(leftDetuneRow.removeFromLeft(45));
-  leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(130));
+  leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(150));
 
   // Pan
   auto leftPanRow = leftPanel.removeFromTop(20);
   leftPanLabel.setBounds(leftPanRow.removeFromLeft(45));
-  leftPanSlider.setBounds(leftPanRow.removeFromLeft(130));
+  leftPanSlider.setBounds(leftPanRow.removeFromLeft(150));
 
   sidRow.removeFromLeft(pad * 2);
 
@@ -1858,21 +2642,22 @@ void BreadbinEditor::resized() {
   rightChipSelector.setBounds(rightChipRow.removeFromRight(100));
 
   // Voice buttons with enable checkboxes (right-justified)
-  auto rightVoicesRow = rightPanel.removeFromTop(30);
+  auto rightVoicesRow = rightPanel.removeFromTop(28);
   for (int i = 2; i >= 0; --i) {
     rightVoicesRow.removeFromRight(pad);
-    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromRight(40));
+    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromRight(44));
     rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromRight(20));
   }
 
   // Filter (right-justified)
   rightPanel.removeFromTop(pad);
-  auto rightFilterRow = rightPanel.removeFromTop(50);
+  auto rightFilterRow = rightPanel.removeFromTop(60);
   resMeterR.setBounds(rightFilterRow.removeFromRight(6));
-  rightResonanceSlider.setBounds(rightFilterRow.removeFromRight(40));
-  rightResonanceLabel.setBounds(rightFilterRow.removeFromRight(28));
+  rightResonanceSlider.setBounds(rightFilterRow.removeFromRight(55));
+  rightResonanceLabel.setBounds(rightFilterRow.removeFromRight(32));
+  rightFilterRow.removeFromRight(4);
   cutoffMeterR.setBounds(rightFilterRow.removeFromRight(6));
-  rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(40));
+  rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(55));
   rightCutoffLabel.setBounds(rightFilterRow.removeFromRight(40));
 
   auto rightModesRow = rightPanel.removeFromTop(22);
@@ -1883,49 +2668,51 @@ void BreadbinEditor::resized() {
 
   // Detune (right-justified)
   auto rightDetuneRow = rightPanel.removeFromTop(20);
-  rightDetuneSlider.setBounds(rightDetuneRow.removeFromRight(130));
+  rightDetuneSlider.setBounds(rightDetuneRow.removeFromRight(150));
   rightDetuneLabel.setBounds(rightDetuneRow.removeFromRight(45));
 
   // Pan (right-justified)
   auto rightPanRow = rightPanel.removeFromTop(20);
-  rightPanSlider.setBounds(rightPanRow.removeFromRight(130));
+  rightPanSlider.setBounds(rightPanRow.removeFromRight(150));
   rightPanLabel.setBounds(rightPanRow.removeFromRight(45));
 
   bounds.removeFromTop(pad * 2);
 
   // ===== VOICE EDITOR =====
-  auto editorArea = bounds.removeFromTop(120);
+  auto editorArea = bounds.removeFromTop(174);
   voiceEditorLabel.setBounds(editorArea.removeFromTop(18));
 
-  // Row 1: Voice Select, Save/Load Voice, Waveform, Pulse Width, ADSR, GLOBAL
-  // LFO
-  auto row1 = editorArea.removeFromTop(65);
+  // Row 1: Voice Select, Save/Load, Waveform
+  auto row1 = editorArea.removeFromTop(26);
 
-  // Voice Presets selector and Save/Load moved here
   presetLabel.setBounds(row1.removeFromLeft(40));
   presetSelector.setBounds(
-      row1.removeFromLeft(100).withHeight(20).translated(0, 22));
+      row1.removeFromLeft(110).withHeight(22).translated(0, 2));
   row1.removeFromLeft(pad);
-  saveVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 20));
+  saveVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 1));
   row1.removeFromLeft(pad);
-  loadVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 20));
-  row1.removeFromLeft(pad * 2);
+  loadVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 1));
+  row1.removeFromLeft(pad * 3);
 
-  waveformLabel.setBounds(row1.removeFromLeft(40));
+  waveformLabel.setBounds(row1.removeFromLeft(42));
   waveformSelector.setBounds(
-      row1.removeFromLeft(90).withHeight(20).translated(0, 22));
-  row1.removeFromLeft(pad);
-  pwLabel.setBounds(row1.removeFromLeft(30));
-  pulseWidthSlider.setBounds(row1.removeFromLeft(82));
-  pwMeter.setBounds(row1.removeFromLeft(6));
-  row1.removeFromLeft(pad);
-  pitchMeter.setBounds(row1.removeFromLeft(6));
-  row1.removeFromLeft(pad);
+      row1.removeFromLeft(100).withHeight(22).translated(0, 2));
+
+  // Row 2: Pulse Width + ADSR sliders
+  editorArea.removeFromTop(pad);
+  auto row1b = editorArea.removeFromTop(68);
+
+  pwLabel.setBounds(row1b.removeFromLeft(30));
+  pulseWidthSlider.setBounds(row1b.removeFromLeft(160).reduced(0, 2));
+  pwMeter.setBounds(row1b.removeFromLeft(6));
+  row1b.removeFromLeft(pad * 2);
+  pitchMeter.setBounds(row1b.removeFromLeft(6));
+  row1b.removeFromLeft(pad * 3);
 
   // ADSR sliders
-  const int adsrW = 35;
-  const int adsrH = 50;
-  auto adsrArea = row1.removeFromLeft(adsrW * 4);
+  const int adsrW = 44;
+  const int adsrH = 52;
+  auto adsrArea = row1b.removeFromLeft(adsrW * 4);
   int adsrY = adsrArea.getY();
   attackLabel.setBounds(adsrArea.getX(), adsrY, adsrW, 14);
   attackSlider.setBounds(adsrArea.getX(), adsrY + 14, adsrW, adsrH);
@@ -1938,30 +2725,40 @@ void BreadbinEditor::resized() {
   releaseSlider.setBounds(adsrArea.getX() + adsrW * 3, adsrY + 14, adsrW,
                           adsrH);
 
-  row1.removeFromLeft(pad * 2);
+  // Row 3: Ring Mod, Sync, Filter toggles
+  editorArea.removeFromTop(pad);
+  auto modRow = editorArea.removeFromTop(22);
+  ringModButton.setBounds(modRow.removeFromLeft(55));
+  modRow.removeFromLeft(pad);
+  syncButton.setBounds(modRow.removeFromLeft(55));
+  modRow.removeFromLeft(pad);
+  voiceFilterButton.setBounds(modRow.removeFromLeft(45));
 
-  // LFO moved to global stack below
-
-  // Row 2: Glide, Ring Mod, Sync (per-voice pan removed)
+  // Row 4: Glide
   editorArea.removeFromTop(pad);
   auto row2 = editorArea.removeFromTop(28);
-  glideTimeLabel.setBounds(row2.removeFromLeft(35));
-  glideTimeSlider.setBounds(row2.removeFromLeft(120));
-  row2.removeFromLeft(pad * 3);
-  ringModButton.setBounds(row2.removeFromLeft(55));
-  row2.removeFromLeft(pad);
-  syncButton.setBounds(row2.removeFromLeft(55));
-  row2.removeFromLeft(pad);
-  voiceFilterButton.setBounds(row2.removeFromLeft(45));
-  row2.removeFromLeft(pad * 2);
-  row2.removeFromLeft(pad * 2);
-  // Ext input removed from here (now in header)
+  glideTimeLabel.setBounds(row2.removeFromLeft(40));
+  glideTimeSlider.setBounds(row2.removeFromLeft(180));
 
   bounds.removeFromTop(pad);
 
   // ===== KEYBOARD =====
   keyboard.setBounds(bounds.removeFromBottom(60));
   bounds.removeFromBottom(pad);
+
+  // SID Player register overlay positions (overlapping bottom of each control)
+  auto overlayAt = [](juce::Label &lbl, juce::Component &target) {
+    auto b = target.getBounds();
+    lbl.setBounds(b.getX(), b.getBottom() - 14, b.getWidth(), 14);
+  };
+  overlayAt(sidOverlayWave, waveformSelector);
+  overlayAt(sidOverlayPW, pulseWidthSlider);
+  overlayAt(sidOverlayAttack, attackSlider);
+  overlayAt(sidOverlayDecay, decaySlider);
+  overlayAt(sidOverlaySustain, sustainSlider);
+  overlayAt(sidOverlayRelease, releaseSlider);
+  overlayAt(sidOverlayCutoff, leftCutoffSlider);
+  overlayAt(sidOverlayRes, leftResonanceSlider);
 
   // ===== BOTTOM GLOBAL CONTROLS (Right-justified Stack) =====
   const int globalRowW = 500;
@@ -1984,7 +2781,7 @@ void BreadbinEditor::resized() {
 
   // 2. Middle Row: Arpeggiator (Right-justified, Toggle on Left)
   auto middleRow = bounds.removeFromBottom(globalRowH);
-  auto arpStack = middleRow.removeFromRight(408); // Exact width for content
+  auto arpStack = middleRow.removeFromRight(420); // Exact width for content
 
   arpEnableButton.setBounds(
       arpStack.removeFromLeft(50).withSize(50, 20).translated(0, 5));
@@ -2007,104 +2804,104 @@ void BreadbinEditor::resized() {
   arpOctaveLabel.setBounds(
       arpStack.removeFromLeft(30).withSize(30, 20).translated(0, 5));
   arpOctaveSelector.setBounds(
-      arpStack.removeFromLeft(50).withSize(50, 20).translated(0, 5));
+      arpStack.removeFromLeft(60).withSize(60, 20).translated(0, 5));
 
   bounds.removeFromBottom(10); // Separation from LFO
 
   // 3. FX: Chorus + Delay (Left-justified, two rows)
-  auto fxArea = bounds.removeFromBottom(50);
-  auto chorusRow = fxArea.removeFromTop(25);
+  auto fxArea = bounds.removeFromBottom(58);
+  auto chorusRow = fxArea.removeFromTop(29);
   auto delayRow = fxArea;
 
-  // Chorus row
-  auto chorusStack = chorusRow.removeFromLeft(420);
+  // Chorus row (right-justified to clear logo)
+  auto chorusStack = chorusRow.removeFromRight(500);
   chorusEnableButton.setBounds(
-      chorusStack.removeFromLeft(60).withSize(60, 20).translated(0, 2));
-  chorusStack.removeFromLeft(6);
-  chorusRateLabel.setBounds(chorusStack.removeFromLeft(30).withHeight(12));
+      chorusStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
+  chorusStack.removeFromLeft(4);
+  chorusRateLabel.setBounds(chorusStack.removeFromLeft(32).withHeight(14));
   chorusRateSlider.setBounds(
-      chorusStack.removeFromLeft(90).withHeight(18).translated(0, 3));
+      chorusStack.removeFromLeft(138).withHeight(22).translated(0, 3));
   chorusStack.removeFromLeft(4);
-  chorusDepthLabel.setBounds(chorusStack.removeFromLeft(35).withHeight(12));
+  chorusDepthLabel.setBounds(chorusStack.removeFromLeft(38).withHeight(14));
   chorusDepthSlider.setBounds(
-      chorusStack.removeFromLeft(80).withHeight(18).translated(0, 3));
+      chorusStack.removeFromLeft(121).withHeight(22).translated(0, 3));
   chorusStack.removeFromLeft(4);
-  chorusMixLabel.setBounds(chorusStack.removeFromLeft(25).withHeight(12));
+  chorusMixLabel.setBounds(chorusStack.removeFromLeft(28).withHeight(14));
   chorusMixSlider.setBounds(
-      chorusStack.removeFromLeft(80).withHeight(18).translated(0, 3));
+      chorusStack.removeFromLeft(66).withHeight(22).translated(0, 3));
 
-  // Delay row
-  auto delayStack = delayRow.removeFromLeft(420);
+  // Delay row (right-justified to clear logo)
+  auto delayStack = delayRow.removeFromRight(500);
   delayEnableButton.setBounds(
-      delayStack.removeFromLeft(60).withSize(60, 20).translated(0, 2));
-  delayStack.removeFromLeft(6);
-  delayTimeLLabel.setBounds(delayStack.removeFromLeft(30).withHeight(12));
+      delayStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
+  delayStack.removeFromLeft(4);
+  delayTimeLLabel.setBounds(delayStack.removeFromLeft(32).withHeight(14));
   delayTimeLSlider.setBounds(
-      delayStack.removeFromLeft(65).withHeight(18).translated(0, 3));
+      delayStack.removeFromLeft(92).withHeight(22).translated(0, 3));
   delayStack.removeFromLeft(4);
-  delayTimeRLabel.setBounds(delayStack.removeFromLeft(30).withHeight(12));
+  delayTimeRLabel.setBounds(delayStack.removeFromLeft(32).withHeight(14));
   delayTimeRSlider.setBounds(
-      delayStack.removeFromLeft(65).withHeight(18).translated(0, 3));
+      delayStack.removeFromLeft(92).withHeight(22).translated(0, 3));
   delayStack.removeFromLeft(4);
-  delayFBLabel.setBounds(delayStack.removeFromLeft(20).withHeight(12));
+  delayFBLabel.setBounds(delayStack.removeFromLeft(22).withHeight(14));
   delayFeedbackSlider.setBounds(
-      delayStack.removeFromLeft(50).withHeight(18).translated(0, 3));
+      delayStack.removeFromLeft(55).withHeight(22).translated(0, 3));
   delayStack.removeFromLeft(4);
-  delayMixLabel.setBounds(delayStack.removeFromLeft(25).withHeight(12));
+  delayMixLabel.setBounds(delayStack.removeFromLeft(28).withHeight(14));
   delayMixSlider.setBounds(
-      delayStack.removeFromLeft(50).withHeight(18).translated(0, 3));
+      delayStack.removeFromLeft(66).withHeight(22).translated(0, 3));
 
   bounds.removeFromBottom(4);
 
-  // 3b. Popup buttons row (Wavetable, Chord, Modulation)
-  auto wtRow = bounds.removeFromBottom(25);
-  wavetableButton.setBounds(
-      wtRow.removeFromLeft(80).withSize(80, 20).translated(0, 2));
-
-  // Chord Memory button (right side)
-  chordMemoryButton.setBounds(
-      wtRow.removeFromRight(70).withSize(70, 20).translated(0, 2));
-  wtRow.removeFromRight(4); // spacing
-
-  // Modulation button (right side)
-  modMatrixButton.setBounds(
-      wtRow.removeFromRight(90).withSize(90, 20).translated(0, 2));
-
-  bounds.removeFromBottom(4);
-
-  // 4. Filter Envelope (Left-justified)
-  auto filterEnvRow = bounds.removeFromBottom(60);
-  auto filterEnvStack = filterEnvRow.removeFromLeft(310);
+  // 4. Filter Envelope (right-justified to clear logo)
+  auto filterEnvRow = bounds.removeFromBottom(72);
+  auto filterEnvStack = filterEnvRow.removeFromRight(370);
 
   filterEnvEnableButton.setBounds(
-      filterEnvStack.removeFromLeft(60).withSize(60, 20).translated(0, 8));
+      filterEnvStack.removeFromLeft(75).withSize(75, 20).translated(0, 12));
   filterEnvStack.removeFromLeft(8);
 
   // ADSR mini-sliders (vertical)
-  const int feW = 30;
+  const int feW = 48;
   auto feAArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW, 12);
-  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW, 14);
+  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 16, feW, 54);
 
   filterEnvStack.removeFromLeft(2);
   auto feDArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW, 12);
-  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW, 14);
+  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 16, feW, 54);
 
   filterEnvStack.removeFromLeft(2);
   auto feSArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW, 12);
-  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW, 14);
+  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 16, feW, 54);
 
   filterEnvStack.removeFromLeft(2);
   auto feRArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW, 12);
-  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 14, feW, 44);
+  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW, 14);
+  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 16, feW, 54);
 
   filterEnvStack.removeFromLeft(8);
-  auto feAmtArea = filterEnvStack.removeFromLeft(50);
-  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 50, 12);
-  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 14, 50, 44);
+  auto feAmtArea = filterEnvStack.removeFromLeft(70);
+  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 70, 14);
+  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 16, 70, 54);
+
+  bounds.removeFromBottom(4);
+
+  // 5. Popup buttons row (right-justified, top of bottom grouping)
+  auto wtRow = bounds.removeFromBottom(25);
+  sidPlayerButton.setBounds(
+      wtRow.removeFromRight(85).withSize(85, 20).translated(0, 2));
+  wtRow.removeFromRight(4);
+  chordMemoryButton.setBounds(
+      wtRow.removeFromRight(70).withSize(70, 20).translated(0, 2));
+  wtRow.removeFromRight(4);
+  modMatrixButton.setBounds(
+      wtRow.removeFromRight(90).withSize(90, 20).translated(0, 2));
+  wtRow.removeFromRight(4);
+  wavetableButton.setBounds(
+      wtRow.removeFromRight(85).withSize(85, 20).translated(0, 2));
 
   // LFO1/LFO2 moved to Modulation popup (ModMatrixPanel)
 }

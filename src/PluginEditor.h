@@ -8,16 +8,49 @@
 
 class MappableSlider; // Forward declaration
 
-// Custom LookAndFeel for professional ComboBox fonts
+// Custom LookAndFeel: Synthwave/Neon + Retro Hardware aesthetic
 class BreadbinLookAndFeel : public juce::LookAndFeel_V4 {
 public:
+  BreadbinLookAndFeel();
   void setProFont(const juce::Font &font) { proFont = font; }
 
   juce::Font getComboBoxFont(juce::ComboBox &) override {
     return proFont.withHeight(14.0f);
   }
-
   juce::Font getPopupMenuFont() override { return proFont.withHeight(14.0f); }
+
+  void drawRotarySlider(juce::Graphics &, int x, int y, int width, int height,
+                        float sliderPosProportional, float rotaryStartAngle,
+                        float rotaryEndAngle, juce::Slider &) override;
+
+  void drawLinearSlider(juce::Graphics &, int x, int y, int width, int height,
+                        float sliderPos, float minSliderPos,
+                        float maxSliderPos, juce::Slider::SliderStyle,
+                        juce::Slider &) override;
+
+  void drawToggleButton(juce::Graphics &, juce::ToggleButton &,
+                        bool shouldDrawButtonAsHighlighted,
+                        bool shouldDrawButtonAsDown) override;
+
+  void drawButtonBackground(juce::Graphics &, juce::Button &,
+                            const juce::Colour &backgroundColour,
+                            bool shouldDrawButtonAsHighlighted,
+                            bool shouldDrawButtonAsDown) override;
+
+  void drawComboBox(juce::Graphics &, int width, int height, bool isButtonDown,
+                    int buttonX, int buttonY, int buttonW, int buttonH,
+                    juce::ComboBox &) override;
+
+  void drawPopupMenuBackground(juce::Graphics &, int width,
+                               int height) override;
+
+  void drawPopupMenuItem(juce::Graphics &, const juce::Rectangle<int> &area,
+                         bool isSeparator, bool isActive, bool isHighlighted,
+                         bool isTicked, bool hasSubMenu,
+                         const juce::String &text,
+                         const juce::String &shortcutKeyText,
+                         const juce::Drawable *icon,
+                         const juce::Colour *textColour) override;
 
 private:
   juce::Font proFont;
@@ -156,7 +189,7 @@ private:
 class ModMatrixPanel : public juce::Component, private juce::Timer {
 public:
   ModMatrixPanel(BreadbinProcessor &proc);
-  ~ModMatrixPanel() override { stopTimer(); }
+  ~ModMatrixPanel() override { stopTimer(); setLookAndFeel(nullptr); }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
@@ -218,10 +251,11 @@ private:
 class ChordMemoryPanel : public juce::Component {
 public:
   ChordMemoryPanel(BreadbinProcessor &proc);
+  ~ChordMemoryPanel() override { setLookAndFeel(nullptr); }
   void resized() override;
   void paint(juce::Graphics &g) override;
-  static constexpr int panelWidth = 460;
-  static constexpr int panelHeight = 210;
+  static constexpr int panelWidth = 480;
+  static constexpr int panelHeight = 290;
 
 private:
   BreadbinProcessor &processor;
@@ -240,12 +274,12 @@ private:
 class WavetablePanel : public juce::Component, private juce::Timer {
 public:
   WavetablePanel(BreadbinProcessor &proc);
-  ~WavetablePanel() override { stopTimer(); }
+  ~WavetablePanel() override { stopTimer(); setLookAndFeel(nullptr); }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
-  static constexpr int panelWidth = 700;
-  static constexpr int panelHeight = 340;
+  static constexpr int panelWidth = 820;
+  static constexpr int panelHeight = 380;
 private:
   BreadbinProcessor &processor;
 
@@ -268,6 +302,42 @@ private:
   std::array<StepColumn, 16> steps;
 
   int lastHighlightedStep = -1;
+};
+
+// SID file player popup panel
+class SidPlayerPanel : public juce::Component, private juce::Timer {
+public:
+  SidPlayerPanel(BreadbinProcessor &proc);
+  ~SidPlayerPanel() override { stopTimer(); setLookAndFeel(nullptr); }
+  void resized() override;
+  void paint(juce::Graphics &g) override;
+  void timerCallback() override;
+  static constexpr int panelWidth = 520;
+  static constexpr int panelHeight = 370;
+
+private:
+  BreadbinProcessor &processor;
+
+  juce::TextButton loadButton{"Load SID"};
+  juce::TextButton playButton{"Play"};
+  juce::TextButton stopButton{"Stop"};
+  juce::TextButton pauseButton{"Pause"};
+  juce::TextButton snapshotButton{"Snapshot to Synth"};
+
+  juce::Label titleLabel, authorLabel, releasedLabel;
+  juce::Label tuneInfoLabel;
+
+  juce::ComboBox subtuneSelector;
+  juce::Label subtuneLabel;
+
+  juce::Slider volumeSlider;
+  juce::Label volumeLabel;
+
+  juce::TextEditor registerDisplay;
+
+  std::unique_ptr<juce::FileChooser> fileChooser;
+
+  void updateRegisterDisplay();
 };
 
 class BreadbinEditor : public juce::AudioProcessorEditor,
@@ -537,11 +607,21 @@ private:
   juce::Component::SafePointer<juce::DialogWindow> chordMemoryWindow;
   void showChordMemoryPopup();
 
+  // ========== SID FILE PLAYER ==========
+  juce::TextButton sidPlayerButton{"SID Player"};
+  juce::Component::SafePointer<juce::DialogWindow> sidPlayerWindow;
+  void showSidPlayerPopup();
+
   // ========== MODULATION METERS ==========
   ModulationMeter cutoffMeterL, cutoffMeterR;
   ModulationMeter pwMeter;
   ModulationMeter resMeterL, resMeterR;
   ModulationMeter pitchMeter;
+
+  // ========== SID PLAYER REGISTER OVERLAY ==========
+  juce::Label sidOverlayWave, sidOverlayPW;
+  juce::Label sidOverlayAttack, sidOverlayDecay, sidOverlaySustain, sidOverlayRelease;
+  juce::Label sidOverlayCutoff, sidOverlayRes;
 
   // ========== PRESET DIRTY INDICATOR ==========
   juce::Label presetDirtyLabel;
@@ -554,6 +634,7 @@ private:
 
   // Background image
   juce::Image backgroundImage;
+  juce::TooltipWindow tooltipWindow{this, 500}; // 500ms delay before showing
 
   void setupControls();
   void setupLeftSID();

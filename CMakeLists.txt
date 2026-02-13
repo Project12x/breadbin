@@ -24,11 +24,13 @@ CPMAddPackage(
         "JUCE_BUILD_EXAMPLES OFF"
 )
 
-# libsidplayfp (for reSIDfp)
+# libsidplayfp (for reSIDfp + full player engine)
+# Use release tarball (not git) because it includes pre-built .bin files
+# (psiddrv.bin, sidplayer1.bin, sidplayer2.bin) generated from 6502 assembly
 CPMAddPackage(
     NAME libsidplayfp
-    GIT_TAG v2.16.0
-    GITHUB_REPOSITORY libsidplayfp/libsidplayfp
+    VERSION 2.16.0
+    URL https://github.com/libsidplayfp/libsidplayfp/releases/download/v2.16.0/libsidplayfp-2.16.0.tar.gz
     DOWNLOAD_ONLY YES
 )
 
@@ -43,6 +45,53 @@ file(GLOB RESIDFP_SOURCES
 # Exclude test file (uses deprecated std::auto_ptr)
 list(FILTER RESIDFP_SOURCES EXCLUDE REGEX "test\\.cpp$")
 
+# libsidplayfp player engine sources (C64 machine emulator, SID tune loader, player)
+set(SIDPLAYFP_SRC "${libsidplayfp_SOURCE_DIR}/src")
+set(SIDPLAYFP_SOURCES
+    # Core engine
+    ${SIDPLAYFP_SRC}/EventScheduler.cpp
+    ${SIDPLAYFP_SRC}/player.cpp
+    ${SIDPLAYFP_SRC}/mixer.cpp
+    ${SIDPLAYFP_SRC}/simpleMixer.cpp
+    ${SIDPLAYFP_SRC}/psiddrv.cpp
+    ${SIDPLAYFP_SRC}/reloc65.cpp
+    ${SIDPLAYFP_SRC}/sidemu.cpp
+    # Public API
+    ${SIDPLAYFP_SRC}/sidplayfp/sidplayfp.cpp
+    ${SIDPLAYFP_SRC}/sidplayfp/SidConfig.cpp
+    ${SIDPLAYFP_SRC}/sidplayfp/SidInfo.cpp
+    ${SIDPLAYFP_SRC}/sidplayfp/SidTune.cpp
+    ${SIDPLAYFP_SRC}/sidplayfp/SidTuneInfo.cpp
+    ${SIDPLAYFP_SRC}/sidplayfp/sidbuilder.cpp
+    # Builder bridge (reSIDfp)
+    ${SIDPLAYFP_SRC}/builders/residfp-builder/residfp-builder.cpp
+    ${SIDPLAYFP_SRC}/builders/residfp-builder/residfp-emu.cpp
+    # C64 machine
+    ${SIDPLAYFP_SRC}/c64/c64.cpp
+    ${SIDPLAYFP_SRC}/c64/mmu.cpp
+    # CPU (6502)
+    ${SIDPLAYFP_SRC}/c64/CPU/mos6510.cpp
+    ${SIDPLAYFP_SRC}/c64/CPU/mos6510debug.cpp
+    # CIA
+    ${SIDPLAYFP_SRC}/c64/CIA/SerialPort.cpp
+    ${SIDPLAYFP_SRC}/c64/CIA/interrupt.cpp
+    ${SIDPLAYFP_SRC}/c64/CIA/mos652x.cpp
+    ${SIDPLAYFP_SRC}/c64/CIA/timer.cpp
+    ${SIDPLAYFP_SRC}/c64/CIA/tod.cpp
+    # VIC-II
+    ${SIDPLAYFP_SRC}/c64/VIC_II/mos656x.cpp
+    # Tune loaders
+    ${SIDPLAYFP_SRC}/sidtune/MUS.cpp
+    ${SIDPLAYFP_SRC}/sidtune/PSID.cpp
+    ${SIDPLAYFP_SRC}/sidtune/SidTuneBase.cpp
+    ${SIDPLAYFP_SRC}/sidtune/SidTuneTools.cpp
+    ${SIDPLAYFP_SRC}/sidtune/p00.cpp
+    ${SIDPLAYFP_SRC}/sidtune/prg.cpp
+    # Utils
+    ${SIDPLAYFP_SRC}/utils/MD5/MD5.cpp
+    ${SIDPLAYFP_SRC}/utils/md5Factory.cpp
+)
+
 # Plugin sources
 set(PLUGIN_SOURCES
     src/PluginProcessor.cpp
@@ -51,6 +100,8 @@ set(PLUGIN_SOURCES
     src/PluginEditor.h
     src/SIDEngine.cpp
     src/SIDEngine.h
+    src/SidFilePlayer.cpp
+    src/SidFilePlayer.h
     src/residfp/version.cc
 )
 
@@ -77,6 +128,7 @@ juce_add_plugin(Breadbin
 target_sources(Breadbin PRIVATE
     ${PLUGIN_SOURCES}
     ${RESIDFP_SOURCES}
+    ${SIDPLAYFP_SOURCES}
 )
 
 target_include_directories(Breadbin PRIVATE
@@ -101,6 +153,11 @@ target_compile_definitions(Breadbin PUBLIC
     HB_MUTEX_IMPL_STD_MUTEX=1
     # Windows socket fix
     WIN32
+)
+
+# HAVE_CONFIG_H only for libsidplayfp sources (not JUCE, which has its own pnglib config.h)
+set_source_files_properties(${SIDPLAYFP_SOURCES}
+    PROPERTIES COMPILE_DEFINITIONS HAVE_CONFIG_H
 )
 
 # MSVC parallel build fix
@@ -141,6 +198,7 @@ add_executable(BreadbinIntegrationTests
     tests/IntegrationTests.cpp
     ${PLUGIN_SOURCES}
     ${RESIDFP_SOURCES}
+    ${SIDPLAYFP_SOURCES}
 )
 target_include_directories(BreadbinIntegrationTests PRIVATE
     src/residfp
@@ -169,6 +227,7 @@ target_compile_definitions(BreadbinIntegrationTests PRIVATE
     WIN32
 )
 target_compile_features(BreadbinIntegrationTests PRIVATE cxx_std_20)
+# HAVE_CONFIG_H scoped to sidplayfp sources only (already set via set_source_files_properties above)
 if(MSVC)
     target_compile_options(BreadbinIntegrationTests PRIVATE /FS)
 endif()

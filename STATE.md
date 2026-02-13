@@ -36,6 +36,7 @@
 - Modulation popup (LFO1/LFO2, PWM sweep, pitch bend range, mod matrix in single dialog)
 - PWM Sweep (dedicated triangle oscillator for pulse width automation)
 - Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
+- SID File Player (load .SID/.PSID files, background-thread playback mixed into output, register overlay on main UI, snapshot SID registers to APVTS presets)
 
 ### Known Issues
 
@@ -64,6 +65,7 @@ breadbin/
 │   ├── PluginProcessor.cpp/h    # Audio processing, dual SID
 │   ├── PluginEditor.cpp/h       # UI editor
 │   ├── SIDEngine.cpp/h          # reSIDfp wrapper
+│   ├── SidFilePlayer.cpp/h      # .SID file playback (libsidplayfp)
 │   └── SafetyLimiter.h          # Audio protection
 ├── tests/
 │   ├── LFOTests.cpp             # LFO waveform verification

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SIDEngine.h"
+#include "SidFilePlayer.h"
 #include <algorithm>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -294,6 +295,14 @@ private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
 
+  // SID file player (background thread + ring buffer)
+  std::unique_ptr<SidFilePlayer> sidFilePlayer;
+
+  // Resampler: SID player outputs at 44100, host may run at different rate
+  juce::LagrangeInterpolator sidResamplerL, sidResamplerR;
+  std::vector<float> sidResampleBufL, sidResampleBufR; // pre-allocated in prepareToPlay
+  double sidResampleRatio = 1.0; // ENGINE_RATE / hostRate
+
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
@@ -354,6 +363,11 @@ private:
   int selectedVoice = 0;
 
 public:
+  // SID file player
+  SidFilePlayer& getSidFilePlayer() { return *sidFilePlayer; }
+  std::atomic<bool> sidPlayerActive{false};
+  void snapshotSidPlayerToAPVTS();
+
   // State management - public for editor attachment access
   juce::AudioProcessorValueTreeState apvts;
 

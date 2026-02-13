@@ -32,7 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 3 new integration tests for PWM sweep (default off, modifies PW, state round-trip).
 - 3 new integration tests for Chord Memory (default off, triggers audio, state round-trip).
 - 2 new integration tests for Wavetable (step params editable, step sequencer produces variation).
-  Total integration assertions: 347.
+- **SID File Player**: Load and play .SID/.PSID files from the HVSC (50,000+ C64 tunes) using
+  the full libsidplayfp engine (6502 CPU, CIA, VIC, MMU). Background thread produces audio via
+  lock-free ring buffer, mixed additively into plugin output alongside synth voices.
+  - Popup UI panel with file browser, transport (play/stop/pause), tune metadata (title, author,
+    released), sub-tune selector, volume slider, and real-time hex register display
+  - Register overlay on main editor: cyan labels on corresponding controls (waveform, PW, ADSR,
+    cutoff, resonance) show live SID register values during playback at 30Hz
+  - Snapshot button maps all 32 SID registers to APVTS parameters (waveform, PW, ADSR, filter
+    cutoff/resonance/mode, master volume) for instant preset creation from any .SID tune
+  - New files: `SidFilePlayer.h/cpp`, `src/residfp/config.h` (libsidplayfp stub),
+    `src/residfp/sidplayfp/sidversion.h`
+  - CMake: compiles ~30 additional libsidplayfp sources (C64 machine, CPU, CIA, VIC, tune loaders,
+    player engine) from release tarball (includes pre-built .bin files)
 
 ## [0.9.2] - 2026-02-11
 
