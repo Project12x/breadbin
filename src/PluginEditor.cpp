@@ -359,6 +359,19 @@ void BreadbinLookAndFeel::drawPopupMenuItem(
   }
 }
 
+void BreadbinLookAndFeel::drawPopupMenuSectionHeaderWithOptions(
+    juce::Graphics &g, const juce::Rectangle<int> &area,
+    const juce::String &sectionName, const juce::PopupMenu::Options &) {
+  g.setColour(juce::Colours::cyan);
+  g.setFont(proFont.withHeight(13.0f).boldened());
+  g.drawFittedText(sectionName, area.reduced(10, 0),
+                   juce::Justification::centredLeft, 1);
+  // Subtle underline
+  g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+  g.drawHorizontalLine(area.getBottom() - 1, static_cast<float>(area.getX() + 8),
+                        static_cast<float>(area.getRight() - 8));
+}
+
 // ========== END CUSTOM LOOKANDFEEL ==========
 
 // ========== SID FILE PLAYER PANEL ==========
@@ -1658,15 +1671,51 @@ void BreadbinEditor::setupControls() {
                               juce::Colours::lightgrey);
   addAndMakeVisible(globalPresetLabel);
 
+  // -- Classic C64 (era-accurate, no modern FX) --
+  globalPresetSelector.addSectionHeading("Classic C64");
+  globalPresetSelector.addItem("Commando", 10);
+  globalPresetSelector.addItem("Ninja Bass", 11);
+  globalPresetSelector.addItem("Ocean Loader", 12);
+  globalPresetSelector.addItem("Cybernoid", 16);
+  globalPresetSelector.addItem("Wizball", 17);
+  globalPresetSelector.addItem("Thing Bounce", 18);
+
+  // -- Leads --
+  globalPresetSelector.addSectionHeading("Leads");
   globalPresetSelector.addItem("Dual Lead", 1);
-  globalPresetSelector.addItem("Pad Stack", 2);
-  globalPresetSelector.addItem("Arpeggiated", 3);
-  globalPresetSelector.addItem("Fat Unison", 4);
   globalPresetSelector.addItem("Retro Synth", 5);
+  globalPresetSelector.addItem("SID Brass", 15);
+  globalPresetSelector.addItem("Sync Lead", 19);
+  globalPresetSelector.addItem("Acid Squelch", 20);
+
+  // -- Bass --
+  globalPresetSelector.addSectionHeading("Bass");
+  globalPresetSelector.addItem("Sub Bass", 21);
+  globalPresetSelector.addItem("Growl Bass", 22);
+
+  // -- Pads & Keys --
+  globalPresetSelector.addSectionHeading("Pads & Keys");
+  globalPresetSelector.addItem("Pad Stack", 2);
   globalPresetSelector.addItem("Chord Stab", 6);
-  globalPresetSelector.addItem("Mod Madness", 7);
+  globalPresetSelector.addItem("Ice Pad", 23);
+  globalPresetSelector.addItem("PWM Strings", 24);
+
+  // -- Arps & Sequences --
+  globalPresetSelector.addSectionHeading("Arps & Sequences");
+  globalPresetSelector.addItem("Arpeggiated", 3);
   globalPresetSelector.addItem("WT Arpeggio", 8);
   globalPresetSelector.addItem("WT Morph", 9);
+  globalPresetSelector.addItem("Hubbard Arp", 13);
+  globalPresetSelector.addItem("Chip Sequence", 25);
+
+  // -- FX & Modulation --
+  globalPresetSelector.addSectionHeading("FX & Modulation");
+  globalPresetSelector.addItem("Fat Unison", 4);
+  globalPresetSelector.addItem("Galway Sweep", 14);
+  globalPresetSelector.addItem("Mod Madness", 7);
+  globalPresetSelector.addItem("S&H Glitch", 26);
+  globalPresetSelector.addItem("Ring Bell", 27);
+
   globalPresetSelector.setSelectedId(1);
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
@@ -1927,6 +1976,25 @@ void BreadbinEditor::setupControls() {
                             juce::Colours::cyan);
   wavetableButton.onClick = [this]() { showWavetablePopup(); };
   addAndMakeVisible(wavetableButton);
+
+  // ===== INLINE ENABLE TOGGLES (above popup buttons) =====
+  wtEnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
+  wtEnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(wtEnableToggle);
+  wtEnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "wtEnable", wtEnableToggle);
+
+  lfo1EnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
+  lfo1EnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(lfo1EnableToggle);
+  lfo1EnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "lfoEnable", lfo1EnableToggle);
+
+  lfo2EnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
+  lfo2EnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(lfo2EnableToggle);
+  lfo2EnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "lfo2Enable", lfo2EnableToggle);
 
   // ===== MOD MATRIX BUTTON =====
   modMatrixButton.setTooltip("Modulation: LFO, pitch bend range, mod matrix");
@@ -2891,19 +2959,25 @@ void BreadbinEditor::resized() {
 
   // 5. Popup buttons row (right-justified, top of bottom grouping)
   auto wtRow = bounds.removeFromBottom(25);
+  auto wtRowCopy = wtRow; // save for toggle alignment
   sidPlayerButton.setBounds(
       wtRow.removeFromRight(85).withSize(85, 20).translated(0, 2));
   wtRow.removeFromRight(4);
   chordMemoryButton.setBounds(
       wtRow.removeFromRight(70).withSize(70, 20).translated(0, 2));
   wtRow.removeFromRight(4);
-  modMatrixButton.setBounds(
-      wtRow.removeFromRight(90).withSize(90, 20).translated(0, 2));
+  auto modBtnBounds = wtRow.removeFromRight(90);
+  modMatrixButton.setBounds(modBtnBounds.withSize(90, 20).translated(0, 2));
   wtRow.removeFromRight(4);
-  wavetableButton.setBounds(
-      wtRow.removeFromRight(85).withSize(85, 20).translated(0, 2));
+  auto wtBtnBounds = wtRow.removeFromRight(85);
+  wavetableButton.setBounds(wtBtnBounds.withSize(85, 20).translated(0, 2));
 
-  // LFO1/LFO2 moved to Modulation popup (ModMatrixPanel)
+  // 5b. Enable toggles row (above popup buttons, right-justified)
+  auto toggleRow = bounds.removeFromBottom(18);
+  // Align toggles above their corresponding buttons
+  wtEnableToggle.setBounds(wtBtnBounds.getX(), toggleRow.getY(), 52, 18);
+  lfo1EnableToggle.setBounds(modBtnBounds.getX(), toggleRow.getY(), 55, 18);
+  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, toggleRow.getY(), 55, 18);
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
@@ -3440,6 +3514,464 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("lfoWave", 0.0f);      // Triangle
     setParam("lfoRate", 0.3f);
     setParam("lfoDepthFilt", 0.3f);
+    break;
+  }
+
+  // ---- ERA-ACCURATE C64 PRESETS ----
+  // Pure SID sound, no modern FX. Authentic register values from iconic tunes.
+
+  case 10: { // Commando - Rob Hubbard's iconic pulse lead
+    // Hubbard signature: narrow pulse, fast pluck envelope, LP filter
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 6, 0, 6, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(900, 7);
+    // No FX, no LFO, no detune - pure C64
+    break;
+  }
+
+  case 11: { // Ninja Bass - Punchy saw bass (Ben Daglish / Rob Hubbard style)
+    // Classic C64 bass: sawtooth, instant attack, fast decay, no sustain
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 9, 0, 0, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(350, 4);
+    // No FX - raw SID punch
+    break;
+  }
+
+  case 12: { // Ocean Loader - Martin Galway's clean sustained pulse lead
+    // Galway signature: clean pulse, full sustain, gentle release
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 4, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1200, 2);
+    // No FX - authentic Galway clarity
+    break;
+  }
+
+  // ---- MODERN STEREO PRESETS ----
+  // Inspired by C64 techniques but enhanced with our extended features.
+
+  case 13: { // Hubbard Arp - Classic WT arpeggio with stereo treatment
+    // Hubbard technique: wavetable chord arpeggiation at frame rate
+    // Enhanced with stereo delay, detune, and per-SID pan
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 0, 15, 3, 2);
+    setFilters(1000, 5);
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    // Wavetable: minor triad arp at 50Hz (frame rate speed)
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 4.0f);
+    setParam("wtRate", 50.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 1536.0f);    // Root
+      setWTStep(1, 2.0f, 3.0f, 1536.0f);    // Minor 3rd
+      setWTStep(2, 2.0f, 7.0f, 1536.0f);    // 5th
+      setWTStep(3, 2.0f, 12.0f, 1536.0f);   // Octave
+    }
+    // Stereo delay: ping-pong feel
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 125.0f);
+    setParam("delayTimeR", 187.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.25f);
+    // Subtle filter envelope for pluck definition
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.1f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.3f);
+    setParam("filterEnvAmount", 0.4f);
+    break;
+  }
+
+  case 14: { // Galway Sweep - Filter sweeps with LFO + filter env
+    // Galway was known for elaborate filter sweeps; we add LFO and mod matrix
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 2, 6, 10, 6, 2);
+    setFilters(400, 9);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    // PWM sweep for evolving pulse width
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.4f);
+    setParam("pwmSweepDepth", 0.35f);
+    // Filter envelope: slow dramatic sweep
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 1.5f);
+    setParam("filterEnvDecay", 2.0f);
+    setParam("filterEnvSustain", 0.4f);
+    setParam("filterEnvRelease", 2.5f);
+    setParam("filterEnvAmount", 0.7f);
+    // LFO1: slow triangle on filter for additional movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.25f);
+    setParam("lfoDepthFilt", 0.2f);
+    // Mod matrix: Velocity -> Filter amount for expressive playing
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.5f);
+    }
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    break;
+  }
+
+  case 15: { // SID Brass - Hard sync brass with chorus and filter env
+    // Hard sync gives harmonically rich brass-like timbre
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 2, 4, 12, 4, 3);
+      setParam("v" + juce::String(v) + "_sync", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1400, 5);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // Filter envelope: brass attack burst
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.01f);
+    setParam("filterEnvDecay", 0.3f);
+    setParam("filterEnvSustain", 0.5f);
+    setParam("filterEnvRelease", 0.6f);
+    setParam("filterEnvAmount", 0.5f);
+    // LFO2: subtle vibrato (classic brass technique)
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 5.5f);
+    setParam("lfo2DepthPitch", 0.06f);
+    // Chorus for stereo spread
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.3f);
+    // Pitch bend range: wide for expressive brass
+    setParam("pitchBendRange", 5.0f);
+    break;
+  }
+
+  // ---- MORE CLASSIC C64 ----
+
+  case 16: { // Cybernoid - Jeroen Tel aggressive saw lead
+    // Tel signature: raw sawtooth, punchy envelope, moderate filter
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 8, 2, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1100, 6);
+    // No FX - pure Tel aggression
+    break;
+  }
+
+  case 17: { // Wizball - Martin Galway triangle + pulse mix
+    // Galway mixed waveforms across voices for richer timbre
+    // Left SID: triangle voices, Right SID: pulse voices
+    configVoice(0, SIDEngine::Waveform::Triangle, 0, 0, 2, 12, 6, 6);
+    configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 4, 10, 4, 2);
+    configVoice(2, SIDEngine::Waveform::Triangle, 0, 0, 2, 12, 6, 6);
+    configVoice(3, SIDEngine::Waveform::Pulse, 2048, 0, 4, 10, 4, 2);
+    configVoice(4, SIDEngine::Waveform::Triangle, 0, 0, 2, 12, 6, 6);
+    configVoice(5, SIDEngine::Waveform::Pulse, 2048, 0, 4, 10, 4, 2);
+    for (int v = 0; v < 6; ++v)
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    setFilters(1000, 3);
+    // No FX - authentic Galway layering
+    break;
+  }
+
+  case 18: { // Thing Bounce - Bouncy short pulse (Jeroen Tel / game SFX style)
+    // Short punchy notes, great for chiptune melodies
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 3, 0, 2, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1400, 5);
+    // No FX - tight C64 pluck
+    break;
+  }
+
+  // ---- MORE LEADS ----
+
+  case 19: { // Sync Lead - Hard sync sawtooth, biting harmonics
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 3, 3);
+      setParam("v" + juce::String(v) + "_sync", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1600, 4);
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    // Filter envelope: sharp bite on attack
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.2f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 0.4f);
+    setParam("filterEnvAmount", 0.5f);
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    break;
+  }
+
+  case 20: { // Acid Squelch - Resonant saw with filter env pluck
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 0, 15, 2, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(200, 12);  // Low cutoff, high resonance for squelch
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // Filter envelope: fast pluck sweep
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.15f);
+    setParam("filterEnvSustain", 0.05f);
+    setParam("filterEnvRelease", 0.2f);
+    setParam("filterEnvAmount", 0.85f);
+    // Mod matrix: Velocity -> Filter for dynamics
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.4f);
+    }
+    // Stereo delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 166.0f);
+    setParam("delayTimeR", 250.0f);
+    setParam("delayFeedback", 0.3f);
+    setParam("delayMix", 0.2f);
+    setParam("glide", 80.0f);  // Slight portamento for acid feel
+    break;
+  }
+
+  // ---- BASS ----
+
+  case 21: { // Sub Bass - Deep triangle, minimal filtering
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 12, 4, 6);
+      setParam("v" + juce::String(v) + "_filter", 0.0f); // No filter for clean sub
+    }
+    setFilters(600, 0);
+    setParam("dualMode", 1.0f); // Unison for mono-compatible sub
+    setParam("leftPan", 0.0f);  // Center both SIDs for mono sub
+    setParam("rightPan", 0.0f);
+    break;
+  }
+
+  case 22: { // Growl Bass - Pulse + ring mod + filter env attack
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 5, 6, 2, 2);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(500, 8);
+    setParam("leftDetune", -7.0f);
+    setParam("rightDetune", 7.0f);
+    // Filter envelope: aggressive growl
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.25f);
+    setParam("filterEnvSustain", 0.15f);
+    setParam("filterEnvRelease", 0.3f);
+    setParam("filterEnvAmount", 0.65f);
+    // LFO1: slow saw on filter for movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 1.0f);   // Sawtooth
+    setParam("lfoRate", 0.5f);
+    setParam("lfoDepthFilt", 0.15f);
+    break;
+  }
+
+  // ---- PADS & KEYS ----
+
+  case 23: { // Ice Pad - Triangle voices, slow attack, spacious FX
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 10, 4, 14, 10, 6);
+    setFilters(700, 4);
+    setParam("leftDetune", -10.0f);
+    setParam("rightDetune", 10.0f);
+    // Chorus for shimmer
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.6f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.4f);
+    // Long stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 400.0f);
+    setParam("delayTimeR", 600.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.35f);
+    // Slow LFO on filter for glacial sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);   // Triangle
+    setParam("lfoRate", 0.15f);
+    setParam("lfoDepthFilt", 0.25f);
+    // Filter env: very slow swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 3.0f);
+    setParam("filterEnvDecay", 2.0f);
+    setParam("filterEnvSustain", 0.6f);
+    setParam("filterEnvRelease", 4.0f);
+    setParam("filterEnvAmount", 0.3f);
+    break;
+  }
+
+  case 24: { // PWM Strings - Slow attack pulse with PWM sweep, lush
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 6, 4, 13, 8, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(900, 3);
+    setParam("leftDetune", -8.0f);
+    setParam("rightDetune", 8.0f);
+    // PWM sweep: the core of the string sound
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.35f);
+    setParam("pwmSweepDepth", 0.5f);
+    // LFO2: gentle pitch vibrato (string-like)
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 4.5f);
+    setParam("lfo2DepthPitch", 0.05f);
+    // Chorus for ensemble width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.9f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    break;
+  }
+
+  // ---- ARPS & SEQUENCES ----
+
+  case 25: { // Chip Sequence - 8-step WT with mixed waveforms and pitch jumps
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 3, 2);
+    setFilters(1100, 4);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // Wavetable: 8-step melodic/timbral sequence
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 8.0f);
+    setParam("wtRate", 25.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);    // Pulse, root
+      setWTStep(1, 1.0f, 7.0f, 2048.0f);    // Saw, 5th
+      setWTStep(2, 2.0f, 12.0f, 1536.0f);   // Pulse, octave, narrow
+      setWTStep(3, 0.0f, 0.0f, 2048.0f);    // Triangle, root
+      setWTStep(4, 2.0f, 4.0f, 2800.0f);    // Pulse, 3rd, thin
+      setWTStep(5, 1.0f, -5.0f, 2048.0f);   // Saw, 4th below
+      setWTStep(6, 2.0f, 7.0f, 1024.0f);    // Pulse, 5th, very narrow
+      setWTStep(7, 3.0f, 12.0f, 2048.0f);   // Noise hit, octave
+    }
+    // Stereo delay for rhythmic interest
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 150.0f);
+    setParam("delayTimeR", 225.0f);
+    setParam("delayFeedback", 0.3f);
+    setParam("delayMix", 0.25f);
+    // Filter env for pluck on each step
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.08f);
+    setParam("filterEnvSustain", 0.15f);
+    setParam("filterEnvRelease", 0.2f);
+    setParam("filterEnvAmount", 0.45f);
+    break;
+  }
+
+  // ---- FX & MODULATION ----
+
+  case 26: { // S&H Glitch - Sample & hold chaos on everything
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 2, 8, 4, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(800, 7);
+    setParam("leftDetune", -15.0f);
+    setParam("rightDetune", 15.0f);
+    // LFO1: S&H on filter (random stepping)
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 3.0f);    // Sample & Hold
+    setParam("lfoRate", 8.0f);
+    setParam("lfoDepthFilt", 0.6f);
+    // LFO2: S&H on PW (random width changes)
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 3.0f);   // Sample & Hold
+    setParam("lfo2Rate", 12.0f);
+    setParam("lfo2DepthPW", 0.5f);
+    // Mod matrix: LFO1->Pitch (random pitch wobble), LFO2->Resonance
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
+      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(3.0f)); // Pitch
+      setParam("mod0_amt", 0.15f);
+      auto *s1src = processor.apvts.getParameter("mod1_src");
+      auto *s1dst = processor.apvts.getParameter("mod1_dst");
+      if (s1src) s1src->setValueNotifyingHost(s1src->convertTo0to1(2.0f)); // LFO2
+      if (s1dst) s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
+      setParam("mod1_amt", 0.4f);
+    }
+    // Delay: short slapback for stuttery feel
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 100.0f);
+    setParam("delayTimeR", 133.0f);
+    setParam("delayFeedback", 0.45f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 27: { // Ring Bell - Ring mod triangle for metallic bell tones
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 8, 0, 10, 6);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1600, 2);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    // Chorus for spatial shimmer
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.5f);
+    setParam("chorusDepth", 0.35f);
+    setParam("chorusMix", 0.4f);
+    // Long stereo delay for bell-like reverberance
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 350.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.55f);
+    setParam("delayMix", 0.35f);
+    // LFO1: very slow triangle on pitch for slight detuning shimmer
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.2f);
+    setParam("lfoDepthPitch", 0.04f);
     break;
   }
   }

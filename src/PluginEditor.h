@@ -52,6 +52,11 @@ public:
                          const juce::Drawable *icon,
                          const juce::Colour *textColour) override;
 
+  void drawPopupMenuSectionHeaderWithOptions(
+      juce::Graphics &, const juce::Rectangle<int> &area,
+      const juce::String &sectionName,
+      const juce::PopupMenu::Options &) override;
+
 private:
   juce::Font proFont;
 };
@@ -572,6 +577,13 @@ private:
   juce::TextButton wavetableButton{"Wavetable"};
   juce::Component::SafePointer<juce::DialogWindow> wavetableWindow;
   void showWavetablePopup();
+
+  // ========== INLINE ENABLE TOGGLES (above popup buttons) ==========
+  juce::ToggleButton wtEnableToggle{"WT"};
+  juce::ToggleButton lfo1EnableToggle{"LFO1"};
+  juce::ToggleButton lfo2EnableToggle{"LFO2"};
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      wtEnableToggleAttach, lfo1EnableToggleAttach, lfo2EnableToggleAttach;
 
   // ========== FILTER ENVELOPE ==========
   juce::ToggleButton filterEnvEnableButton{"Filt Env"};
