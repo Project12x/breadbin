@@ -75,8 +75,41 @@ public:
     setInterceptsMouseClicks(false, false); // Don't block UI
   }
 
+  // Call from editor timerCallback every frame
+  void tick() {
+    bool currentlyLearning = processor.isLearning();
+
+    // Detect transition: was learning -> no longer learning = success
+    if (wasLearning && !currentlyLearning) {
+      successParamName = lastLearningParamName;
+      successFrames = 30; // ~1 second at 30Hz
+    }
+
+    // Track current state for next tick
+    wasLearning = currentlyLearning;
+    if (currentlyLearning) {
+      lastLearningParamName =
+          processor.getParamName(processor.getLearningParam());
+    }
+
+    // Decrement success flash counter
+    if (successFrames > 0)
+      --successFrames;
+
+    // Repaint if there's anything to show
+    if (currentlyLearning || successFrames > 0)
+      repaint();
+  }
+
+  bool isShowingAnything() const {
+    return processor.isLearning() || successFrames > 0;
+  }
+
   void paint(juce::Graphics &g) override {
-    if (!processor.isLearning())
+    bool learning = processor.isLearning();
+    bool showingSuccess = successFrames > 0 && !learning;
+
+    if (!learning && !showingSuccess)
       return;
 
     auto bounds = getLocalBounds().reduced(20);
@@ -89,32 +122,59 @@ public:
     g.setColour(juce::Colours::black.withAlpha(0.85f));
     g.fillRoundedRectangle(popupRect.toFloat(), 6.0f);
 
-    // Gold border
-    g.setColour(juce::Colours::gold);
-    g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
+    if (learning) {
+      // Gold border for learning state
+      g.setColour(juce::Colours::gold);
+      g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
 
-    // Text
-    g.setColour(juce::Colours::white);
-    auto font = g.getCurrentFont();
-    font.setHeight(16.0f);
-    font.setBold(true);
-    g.setFont(font);
+      g.setColour(juce::Colours::white);
+      auto font = g.getCurrentFont();
+      font.setHeight(16.0f);
+      font.setBold(true);
+      g.setFont(font);
 
-    juce::String paramName =
-        processor.getParamName(processor.getLearningParam());
-    g.drawText("LEARNING: " + paramName,
-               popupRect.removeFromTop(35).reduced(10, 0),
-               juce::Justification::centred);
+      juce::String paramName =
+          processor.getParamName(processor.getLearningParam());
+      g.drawText("LEARNING: " + paramName,
+                 popupRect.removeFromTop(35).reduced(10, 0),
+                 juce::Justification::centred);
 
-    font.setHeight(12.0f);
-    font.setBold(false);
-    g.setFont(font);
-    g.drawText("Move any MIDI hardware control to map...",
-               popupRect.reduced(10, 0), juce::Justification::centred);
+      font.setHeight(12.0f);
+      font.setBold(false);
+      g.setFont(font);
+      g.drawText("Move any MIDI hardware control to map...",
+                 popupRect.reduced(10, 0), juce::Justification::centred);
+    } else {
+      // Green border for success state
+      float alpha = static_cast<float>(successFrames) / 30.0f;
+      g.setColour(juce::Colours::limegreen.withAlpha(alpha));
+      g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
+
+      g.setColour(juce::Colours::limegreen.withAlpha(alpha));
+      auto font = g.getCurrentFont();
+      font.setHeight(16.0f);
+      font.setBold(true);
+      g.setFont(font);
+
+      g.drawText("MAPPED: " + successParamName,
+                 popupRect.removeFromTop(35).reduced(10, 0),
+                 juce::Justification::centred);
+
+      font.setHeight(12.0f);
+      font.setBold(false);
+      g.setFont(font);
+      g.setColour(juce::Colours::white.withAlpha(alpha));
+      g.drawText("MIDI mapping saved successfully", popupRect.reduced(10, 0),
+                 juce::Justification::centred);
+    }
   }
 
 private:
   BreadbinProcessor &processor;
+  bool wasLearning = false;
+  juce::String lastLearningParamName;
+  juce::String successParamName;
+  int successFrames = 0; // countdown for success flash
 };
 
 class MappableSlider : public juce::Slider {

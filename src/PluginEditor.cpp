@@ -26,15 +26,13 @@ BreadbinLookAndFeel::BreadbinLookAndFeel() {
 }
 
 void BreadbinLookAndFeel::drawRotarySlider(
-    juce::Graphics &g, int x, int y, int width, int height,
-    float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-    juce::Slider &slider) {
+    juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
+    float rotaryStartAngle, float rotaryEndAngle, juce::Slider &slider) {
 
-  auto bounds =
-      juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
-                              static_cast<float>(width),
-                              static_cast<float>(height))
-          .reduced(2.0f);
+  auto bounds = juce::Rectangle<float>(
+                    static_cast<float>(x), static_cast<float>(y),
+                    static_cast<float>(width), static_cast<float>(height))
+                    .reduced(2.0f);
   float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
   float centreX = bounds.getCentreX();
   float centreY = bounds.getCentreY();
@@ -52,10 +50,10 @@ void BreadbinLookAndFeel::drawRotarySlider(
   g.fillEllipse(rx, ry, rw, rw);
 
   // Inner shadow gradient
-  juce::ColourGradient innerShadow(
-      juce::Colours::black.withAlpha(0.4f), centreX - radius,
-      centreY - radius, juce::Colours::white.withAlpha(0.05f),
-      centreX + radius, centreY + radius, true);
+  juce::ColourGradient innerShadow(juce::Colours::black.withAlpha(0.4f),
+                                   centreX - radius, centreY - radius,
+                                   juce::Colours::white.withAlpha(0.05f),
+                                   centreX + radius, centreY + radius, true);
   g.setGradientFill(innerShadow);
   g.fillEllipse(rx + 1.0f, ry + 1.0f, rw - 2.0f, rw - 2.0f);
 
@@ -72,14 +70,13 @@ void BreadbinLookAndFeel::drawRotarySlider(
   // Value arc with glow
   if (sliderPos > 0.0f) {
     juce::Path valueArc;
-    valueArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f,
-                           0.0f, rotaryStartAngle, angle, true);
+    valueArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f, 0.0f,
+                           rotaryStartAngle, angle, true);
     // Glow (wider, lower alpha)
     g.setColour(accentColour.withAlpha(0.15f));
-    g.strokePath(valueArc,
-                 juce::PathStrokeType(trackWidth + 4.0f,
-                                      juce::PathStrokeType::curved,
-                                      juce::PathStrokeType::rounded));
+    g.strokePath(valueArc, juce::PathStrokeType(trackWidth + 4.0f,
+                                                juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
     // Solid arc
     g.setColour(accentColour);
     g.strokePath(valueArc,
@@ -90,8 +87,10 @@ void BreadbinLookAndFeel::drawRotarySlider(
   // Pointer dot
   float dotRadius = 3.0f;
   float dotDist = radius - 4.0f;
-  float dotX = centreX + dotDist * std::cos(angle - juce::MathConstants<float>::halfPi);
-  float dotY = centreY + dotDist * std::sin(angle - juce::MathConstants<float>::halfPi);
+  float dotX =
+      centreX + dotDist * std::cos(angle - juce::MathConstants<float>::halfPi);
+  float dotY =
+      centreY + dotDist * std::sin(angle - juce::MathConstants<float>::halfPi);
   g.setColour(juce::Colours::white);
   g.fillEllipse(dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f,
                 dotRadius * 2.0f);
@@ -233,10 +232,10 @@ void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
   float textW = bounds.getWidth() - (textX - bounds.getX());
   g.setColour(isOn ? juce::Colours::white : juce::Colours::lightgrey);
   g.setFont(proFont.withHeight(12.0f));
-  g.drawText(button.getButtonText(),
-             juce::Rectangle<float>(textX, bounds.getY(), textW,
-                                    bounds.getHeight()),
-             juce::Justification::centredLeft);
+  g.drawText(
+      button.getButtonText(),
+      juce::Rectangle<float>(textX, bounds.getY(), textW, bounds.getHeight()),
+      juce::Justification::centredLeft);
 }
 
 void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
@@ -273,11 +272,10 @@ void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
   g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
 }
 
-void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width,
-                                       int height, bool isButtonDown,
-                                       int buttonX, int /*buttonY*/,
-                                       int buttonW, int /*buttonH*/,
-                                       juce::ComboBox &box) {
+void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
+                                       bool isButtonDown, int buttonX,
+                                       int /*buttonY*/, int buttonW,
+                                       int /*buttonH*/, juce::ComboBox &box) {
   auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width),
                                        static_cast<float>(height));
   float corner = 4.0f;
@@ -292,7 +290,8 @@ void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width,
   g.drawRoundedRectangle(bounds.reduced(0.5f), corner, 1.0f);
 
   // Arrow indicator
-  float arrowX = static_cast<float>(buttonX) + static_cast<float>(buttonW) * 0.5f;
+  float arrowX =
+      static_cast<float>(buttonX) + static_cast<float>(buttonW) * 0.5f;
   float arrowY = static_cast<float>(height) * 0.5f;
   float arrowSize = 5.0f;
   juce::Path arrow;
@@ -303,8 +302,8 @@ void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width,
   g.fillPath(arrow);
 }
 
-void BreadbinLookAndFeel::drawPopupMenuBackground(juce::Graphics &g,
-                                                   int width, int height) {
+void BreadbinLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
+                                                  int height) {
   g.fillAll(juce::Colour(25, 25, 30));
   g.setColour(juce::Colours::cyan.withAlpha(0.2f));
   g.drawRect(0, 0, width, height, 1);
@@ -368,8 +367,9 @@ void BreadbinLookAndFeel::drawPopupMenuSectionHeaderWithOptions(
                    juce::Justification::centredLeft, 1);
   // Subtle underline
   g.setColour(juce::Colours::cyan.withAlpha(0.3f));
-  g.drawHorizontalLine(area.getBottom() - 1, static_cast<float>(area.getX() + 8),
-                        static_cast<float>(area.getRight() - 8));
+  g.drawHorizontalLine(area.getBottom() - 1,
+                       static_cast<float>(area.getX() + 8),
+                       static_cast<float>(area.getRight() - 8));
 }
 
 // ========== END CUSTOM LOOKANDFEEL ==========
@@ -380,7 +380,8 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   setSize(panelWidth, panelHeight);
 
   // Load button
-  loadButton.setColour(juce::TextButton::buttonColourId, juce::Colour(60, 60, 70));
+  loadButton.setColour(juce::TextButton::buttonColourId,
+                       juce::Colour(60, 60, 70));
   loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
   loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
   loadButton.onClick = [this]() {
@@ -394,17 +395,15 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
           if (file.existsAsFile()) {
             auto &player = processor.getSidFilePlayer();
             if (player.loadFile(file.getFullPathName().toStdString())) {
-              tuneInfoLabel.setText(
-                  "Loaded: " + file.getFileName(), juce::dontSendNotification);
-              titleLabel.setText(
-                  "Title: " + juce::String(player.getTitle()),
-                  juce::dontSendNotification);
-              authorLabel.setText(
-                  "Author: " + juce::String(player.getAuthor()),
-                  juce::dontSendNotification);
-              releasedLabel.setText(
-                  "Released: " + juce::String(player.getReleased()),
-                  juce::dontSendNotification);
+              tuneInfoLabel.setText("Loaded: " + file.getFileName(),
+                                    juce::dontSendNotification);
+              titleLabel.setText("Title: " + juce::String(player.getTitle()),
+                                 juce::dontSendNotification);
+              authorLabel.setText("Author: " + juce::String(player.getAuthor()),
+                                  juce::dontSendNotification);
+              releasedLabel.setText("Released: " +
+                                        juce::String(player.getReleased()),
+                                    juce::dontSendNotification);
               // Populate subtune selector
               subtuneSelector.clear();
               int numSubs = player.getNumSubtunes();
@@ -413,8 +412,8 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
               subtuneSelector.setSelectedId(player.getCurrentSubtune(),
                                             juce::dontSendNotification);
             } else {
-              tuneInfoLabel.setText(
-                  "Failed to load file", juce::dontSendNotification);
+              tuneInfoLabel.setText("Failed to load file",
+                                    juce::dontSendNotification);
             }
           }
         });
@@ -445,9 +444,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                            juce::Colours::white);
   snapshotButton.setColour(juce::TextButton::textColourOffId,
                            juce::Colours::white);
-  snapshotButton.onClick = [this]() {
-    processor.snapshotSidPlayerToAPVTS();
-  };
+  snapshotButton.onClick = [this]() { processor.snapshotSidPlayerToAPVTS(); };
   addAndMakeVisible(snapshotButton);
 
   // Tune info labels
@@ -493,7 +490,8 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                             juce::Colour(20, 20, 25));
   registerDisplay.setColour(juce::TextEditor::textColourId,
                             juce::Colours::cyan);
-  registerDisplay.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 12.0f, 0));
+  registerDisplay.setFont(
+      juce::Font(juce::Font::getDefaultMonospacedFontName(), 12.0f, 0));
   registerDisplay.setText("Registers will appear during playback...");
   addAndMakeVisible(registerDisplay);
 
@@ -548,9 +546,7 @@ void SidPlayerPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
 }
 
-void SidPlayerPanel::timerCallback() {
-  updateRegisterDisplay();
-}
+void SidPlayerPanel::timerCallback() { updateRegisterDisplay(); }
 
 void SidPlayerPanel::updateRegisterDisplay() {
   auto &player = processor.getSidFilePlayer();
@@ -564,8 +560,9 @@ void SidPlayerPanel::updateRegisterDisplay() {
   juce::String text;
 
   // Voice registers
-  const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P", "S+P", "TSP",
-                             "NOI", "T+N", "S+N", "TSN", "P+N", "TPN", "SPN", "ALL"};
+  const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P",
+                             "S+P", "TSP", "NOI", "T+N", "S+N", "TSN",
+                             "P+N", "TPN", "SPN", "ALL"};
   for (int v = 0; v < 3; ++v) {
     int base = v * 7;
     int freq = snapshot.regs[base] | (snapshot.regs[base + 1] << 8);
@@ -581,15 +578,19 @@ void SidPlayerPanel::updateRegisterDisplay() {
     bool ring = ctrl & 0x04;
 
     text += "V" + juce::String(v + 1) + ": " + waveNames[waveIdx];
-    text += " F:" + juce::String::toHexString(freq).paddedLeft('0', 4).toUpperCase();
+    text += " F:" +
+            juce::String::toHexString(freq).paddedLeft('0', 4).toUpperCase();
     text += " PW:" + juce::String(pw).paddedLeft(' ', 4);
     text += " A:" + juce::String(attack);
     text += " D:" + juce::String(decay);
     text += " S:" + juce::String(sustain);
     text += " R:" + juce::String(release);
-    if (gate) text += " GATE";
-    if (sync) text += " SYNC";
-    if (ring) text += " RING";
+    if (gate)
+      text += " GATE";
+    if (sync)
+      text += " SYNC";
+    if (ring)
+      text += " RING";
     text += "\n";
   }
 
@@ -602,9 +603,12 @@ void SidPlayerPanel::updateRegisterDisplay() {
 
   text += "Filter: Cut=" + juce::String(cutoff);
   text += " Res=" + juce::String(resonance);
-  if (mode & 0x10) text += " LP";
-  if (mode & 0x20) text += " BP";
-  if (mode & 0x40) text += " HP";
+  if (mode & 0x10)
+    text += " LP";
+  if (mode & 0x20)
+    text += " BP";
+  if (mode & 0x40)
+    text += " HP";
   text += " Route=" + juce::String(static_cast<int>(routing));
   text += " Vol=" + juce::String(volume);
 
@@ -646,7 +650,8 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupRightSID();
   setupVoiceEditor();
 
-  // On first-ever launch, apply Dual Lead. On restart, sync from saved APVTS state.
+  // On first-ever launch, apply Dual Lead. On restart, sync from saved APVTS
+  // state.
   if (!processor.wasStateRestored()) {
     applyGlobalPreset(1);
   } else {
@@ -793,33 +798,38 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
 }
 
 void BreadbinEditor::timerCallback() {
-  if (processor.isLearning()) {
-    midiLearnOverlay.repaint();
+  midiLearnOverlay.tick();
+  if (midiLearnOverlay.isShowingAnything()) {
     repaint();
   }
 
   // Update modulation meters
-  cutoffMeterL.setValues(static_cast<float>(processor.getBaseFilterCutoff(true)),
-                         static_cast<float>(processor.getLastAppliedCutoffLeft()));
+  cutoffMeterL.setValues(
+      static_cast<float>(processor.getBaseFilterCutoff(true)),
+      static_cast<float>(processor.getLastAppliedCutoffLeft()));
   cutoffMeterL.repaint();
 
-  cutoffMeterR.setValues(static_cast<float>(processor.getBaseFilterCutoff(false)),
-                         static_cast<float>(processor.getLastAppliedCutoffRight()));
+  cutoffMeterR.setValues(
+      static_cast<float>(processor.getBaseFilterCutoff(false)),
+      static_cast<float>(processor.getLastAppliedCutoffRight()));
   cutoffMeterR.repaint();
 
-  pwMeter.setValues(static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
-                    static_cast<float>(processor.getLastAppliedPW()));
+  pwMeter.setValues(
+      static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
+      static_cast<float>(processor.getLastAppliedPW()));
   pwMeter.repaint();
 
   pitchMeter.setValues(0.0f, processor.getLastAppliedPitchOffset());
   pitchMeter.repaint();
 
-  resMeterL.setValues(static_cast<float>(processor.getBaseFilterResonance(true)),
-                      static_cast<float>(processor.getLastAppliedResLeft()));
+  resMeterL.setValues(
+      static_cast<float>(processor.getBaseFilterResonance(true)),
+      static_cast<float>(processor.getLastAppliedResLeft()));
   resMeterL.repaint();
 
-  resMeterR.setValues(static_cast<float>(processor.getBaseFilterResonance(false)),
-                      static_cast<float>(processor.getLastAppliedResRight()));
+  resMeterR.setValues(
+      static_cast<float>(processor.getBaseFilterResonance(false)),
+      static_cast<float>(processor.getLastAppliedResRight()));
   resMeterR.repaint();
 
   // Preset dirty indicator
@@ -830,26 +840,39 @@ void BreadbinEditor::timerCallback() {
   if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
     auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
     if (snapshot.valid) {
-      const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P", "S+P", "TSP",
-                                 "NOI", "T+N", "S+N", "TSN", "P+N", "TPN", "SPN", "ALL"};
+      const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P",
+                                 "S+P", "TSP", "NOI", "T+N", "S+N", "TSN",
+                                 "P+N", "TPN", "SPN", "ALL"};
       // Decode voice 0 registers for overlay on current voice controls
       int v = selectedVoice % 3; // map to SID voice 0-2
       int base = v * 7;
       uint8_t ctrl = snapshot.regs[base + 4];
       int waveIdx = (ctrl >> 4) & 0x0F;
-      int pw = snapshot.regs[base + 2] | ((snapshot.regs[base + 3] & 0x0F) << 8);
+      int pw =
+          snapshot.regs[base + 2] | ((snapshot.regs[base + 3] & 0x0F) << 8);
 
       sidOverlayWave.setText(waveNames[waveIdx], juce::dontSendNotification);
-      sidOverlayPW.setText("PW:" + juce::String(pw), juce::dontSendNotification);
-      sidOverlayAttack.setText("A:" + juce::String((snapshot.regs[base + 5] >> 4) & 0x0F), juce::dontSendNotification);
-      sidOverlayDecay.setText("D:" + juce::String(snapshot.regs[base + 5] & 0x0F), juce::dontSendNotification);
-      sidOverlaySustain.setText("S:" + juce::String((snapshot.regs[base + 6] >> 4) & 0x0F), juce::dontSendNotification);
-      sidOverlayRelease.setText("R:" + juce::String(snapshot.regs[base + 6] & 0x0F), juce::dontSendNotification);
+      sidOverlayPW.setText("PW:" + juce::String(pw),
+                           juce::dontSendNotification);
+      sidOverlayAttack.setText(
+          "A:" + juce::String((snapshot.regs[base + 5] >> 4) & 0x0F),
+          juce::dontSendNotification);
+      sidOverlayDecay.setText("D:" +
+                                  juce::String(snapshot.regs[base + 5] & 0x0F),
+                              juce::dontSendNotification);
+      sidOverlaySustain.setText(
+          "S:" + juce::String((snapshot.regs[base + 6] >> 4) & 0x0F),
+          juce::dontSendNotification);
+      sidOverlayRelease.setText(
+          "R:" + juce::String(snapshot.regs[base + 6] & 0x0F),
+          juce::dontSendNotification);
 
       int cutoff = (snapshot.regs[0x15] & 0x07) | (snapshot.regs[0x16] << 3);
       int res = (snapshot.regs[0x17] >> 4) & 0x0F;
-      sidOverlayCutoff.setText("Cut:" + juce::String(cutoff), juce::dontSendNotification);
-      sidOverlayRes.setText("Res:" + juce::String(res), juce::dontSendNotification);
+      sidOverlayCutoff.setText("Cut:" + juce::String(cutoff),
+                               juce::dontSendNotification);
+      sidOverlayRes.setText("Res:" + juce::String(res),
+                            juce::dontSendNotification);
 
       sidOverlayWave.setVisible(true);
       sidOverlayPW.setVisible(true);
@@ -910,8 +933,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   };
 
   setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 20.0f, 2.0f,
-                 juce::Slider::LinearHorizontal,
-                 juce::Slider::TextBoxBelow);
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
   setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -936,10 +958,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(lfo2WaveformSelector);
 
   setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 20.0f, 3.0f,
-                 juce::Slider::LinearHorizontal,
-                 juce::Slider::TextBoxBelow);
-  setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f,
-                 1.0f, 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
+  setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f, 1.0f,
+                 0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
   setupLfoSlider(lfo2DepthPWSlider, lfo2DepthPWLabel, "PW", 0.0f, 1.0f, 0.0f,
                  juce::Slider::RotaryHorizontalVerticalDrag,
@@ -949,9 +970,12 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
                  juce::Slider::NoTextBox);
 
   // LFO2 accent colour: orange
-  lfo2DepthFilterSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
-  lfo2DepthPWSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
-  lfo2DepthPitchSlider->setColour(juce::Slider::trackColourId, juce::Colours::orange);
+  lfo2DepthFilterSlider->setColour(juce::Slider::trackColourId,
+                                   juce::Colours::orange);
+  lfo2DepthPWSlider->setColour(juce::Slider::trackColourId,
+                               juce::Colours::orange);
+  lfo2DepthPitchSlider->setColour(juce::Slider::trackColourId,
+                                  juce::Colours::orange);
 
   // ========== PITCH BEND RANGE ==========
   pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
@@ -989,7 +1013,8 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     if (idx >= 0 && idx < 5) {
       auto *p = processor.apvts.getParameter("pitchBendRange");
       if (p)
-        p->setValueNotifyingHost(p->convertTo0to1(static_cast<float>(vals[idx])));
+        p->setValueNotifyingHost(
+            p->convertTo0to1(static_cast<float>(vals[idx])));
     }
   };
 
@@ -1040,12 +1065,12 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.contributionLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.contributionLabel);
 
-    s.srcAttach =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-            processor.apvts, prefix + "src", s.srcBox);
-    s.dstAttach =
-        std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-            processor.apvts, prefix + "dst", s.dstBox);
+    s.srcAttach = std::make_unique<
+        juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        processor.apvts, prefix + "src", s.srcBox);
+    s.dstAttach = std::make_unique<
+        juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        processor.apvts, prefix + "dst", s.dstBox);
     s.amtAttach =
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             processor.apvts, prefix + "amt", s.amtSlider);
@@ -1053,7 +1078,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 
   // ========== PWM SWEEP SETUP ==========
   pwmSweepEnableButton.setColour(juce::ToggleButton::tickColourId,
-                                  juce::Colours::greenyellow);
+                                 juce::Colours::greenyellow);
   pwmSweepEnableButton.setTooltip("Enable dedicated PWM sweep oscillator");
   addAndMakeVisible(pwmSweepEnableButton);
 
@@ -1061,29 +1086,30 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
   pwmSweepRateSlider.setRange(0.05, 10.0, 0.01);
   pwmSweepRateSlider.setColour(juce::Slider::textBoxTextColourId,
-                                juce::Colours::greenyellow);
+                               juce::Colours::greenyellow);
   pwmSweepRateSlider.setColour(juce::Slider::textBoxOutlineColourId,
-                                juce::Colours::transparentBlack);
+                               juce::Colours::transparentBlack);
   addAndMakeVisible(pwmSweepRateSlider);
 
   pwmSweepRateLabel.setText("Rate", juce::dontSendNotification);
   pwmSweepRateLabel.setColour(juce::Label::textColourId,
-                               juce::Colours::greenyellow);
+                              juce::Colours::greenyellow);
   pwmSweepRateLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(pwmSweepRateLabel);
 
   pwmSweepDepthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  pwmSweepDepthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+  pwmSweepDepthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40,
+                                      18);
   pwmSweepDepthSlider.setRange(0.0, 1.0, 0.01);
   pwmSweepDepthSlider.setColour(juce::Slider::textBoxTextColourId,
-                                 juce::Colours::greenyellow);
+                                juce::Colours::greenyellow);
   pwmSweepDepthSlider.setColour(juce::Slider::textBoxOutlineColourId,
-                                 juce::Colours::transparentBlack);
+                                juce::Colours::transparentBlack);
   addAndMakeVisible(pwmSweepDepthSlider);
 
   pwmSweepDepthLabel.setText("Depth", juce::dontSendNotification);
   pwmSweepDepthLabel.setColour(juce::Label::textColourId,
-                                juce::Colours::greenyellow);
+                               juce::Colours::greenyellow);
   pwmSweepDepthLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(pwmSweepDepthLabel);
 
@@ -1199,13 +1225,12 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
 
 void ModMatrixPanel::resized() {
   // LFO row layout helper
-  auto layoutLfoRow = [this](int y,
-                             juce::ToggleButton &enableBtn,
-                             juce::ComboBox &waveBox,
-                             MappableSlider &rateSldr, juce::Label &rateLbl,
-                             MappableSlider &fltSldr, juce::Label &fltLbl,
-                             MappableSlider &pwSldr, juce::Label &pwLbl,
-                             MappableSlider &vibSldr, juce::Label &vibLbl) {
+  auto layoutLfoRow = [this](int y, juce::ToggleButton &enableBtn,
+                             juce::ComboBox &waveBox, MappableSlider &rateSldr,
+                             juce::Label &rateLbl, MappableSlider &fltSldr,
+                             juce::Label &fltLbl, MappableSlider &pwSldr,
+                             juce::Label &pwLbl, MappableSlider &vibSldr,
+                             juce::Label &vibLbl) {
     int x = 4;
     enableBtn.setBounds(x, y + 14, 50, 20);
     x += 54;
@@ -1226,18 +1251,16 @@ void ModMatrixPanel::resized() {
   };
 
   // LFO1 row: y=0..54
-  layoutLfoRow(0, lfoEnableButton, lfoWaveformSelector,
-               *lfoRateSlider, lfoRateLabel,
-               *lfoDepthFilterSlider, lfoDepthFilterLabel,
-               *lfoDepthPWSlider, lfoDepthPWLabel,
-               *lfoDepthPitchSlider, lfoDepthPitchLabel);
+  layoutLfoRow(0, lfoEnableButton, lfoWaveformSelector, *lfoRateSlider,
+               lfoRateLabel, *lfoDepthFilterSlider, lfoDepthFilterLabel,
+               *lfoDepthPWSlider, lfoDepthPWLabel, *lfoDepthPitchSlider,
+               lfoDepthPitchLabel);
 
   // LFO2 row: y=55..109
-  layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector,
-               *lfo2RateSlider, lfo2RateLabel,
-               *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
-               *lfo2DepthPWSlider, lfo2DepthPWLabel,
-               *lfo2DepthPitchSlider, lfo2DepthPitchLabel);
+  layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector, *lfo2RateSlider,
+               lfo2RateLabel, *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
+               *lfo2DepthPWSlider, lfo2DepthPWLabel, *lfo2DepthPitchSlider,
+               lfo2DepthPitchLabel);
 
   // PWM Sweep row: y=112..139
   {
@@ -1287,36 +1310,46 @@ void ModMatrixPanel::timerCallback() {
 ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   // Enable toggle
   enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
-  enableButton.setTooltip("Enable chord memory (mutually exclusive with arpeggiator)");
+  enableButton.setTooltip(
+      "Enable chord memory (mutually exclusive with arpeggiator)");
   addAndMakeVisible(enableButton);
-  enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "chordEnable", enableButton);
+  enableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "chordEnable", enableButton);
 
   // 4 slot radio buttons
-  int currentSlot = static_cast<int>(processor.apvts.getRawParameterValue("chordSlot")->load());
+  int currentSlot = static_cast<int>(
+      processor.apvts.getRawParameterValue("chordSlot")->load());
   for (int s = 0; s < 4; ++s) {
     slotButtons[s].setButtonText("Slot " + juce::String(s + 1));
     slotButtons[s].setColour(juce::TextButton::buttonColourId,
-                              s == currentSlot ? juce::Colours::cyan.withAlpha(0.3f)
-                                               : juce::Colour(50, 50, 60));
-    slotButtons[s].setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
-    slotButtons[s].setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+                             s == currentSlot
+                                 ? juce::Colours::cyan.withAlpha(0.3f)
+                                 : juce::Colour(50, 50, 60));
+    slotButtons[s].setColour(juce::TextButton::textColourOnId,
+                             juce::Colours::cyan);
+    slotButtons[s].setColour(juce::TextButton::textColourOffId,
+                             juce::Colours::lightgrey);
     slotButtons[s].setTooltip("Select chord slot " + juce::String(s + 1));
     slotButtons[s].onClick = [this, s]() {
       if (auto *param = processor.apvts.getParameter("chordSlot"))
-        param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(s)));
+        param->setValueNotifyingHost(
+            param->convertTo0to1(static_cast<float>(s)));
       for (int j = 0; j < 4; ++j)
         slotButtons[j].setColour(juce::TextButton::buttonColourId,
-                                  j == s ? juce::Colours::cyan.withAlpha(0.3f)
-                                         : juce::Colour(50, 50, 60));
+                                 j == s ? juce::Colours::cyan.withAlpha(0.3f)
+                                        : juce::Colour(50, 50, 60));
     };
     addAndMakeVisible(slotButtons[s]);
 
     // Learn button per slot
     learnButtons[s].setButtonText("Learn");
-    learnButtons[s].setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
-    learnButtons[s].setColour(juce::TextButton::textColourOnId, juce::Colours::white);
-    learnButtons[s].setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    learnButtons[s].setColour(juce::TextButton::buttonColourId,
+                              juce::Colour(50, 50, 60));
+    learnButtons[s].setColour(juce::TextButton::textColourOnId,
+                              juce::Colours::white);
+    learnButtons[s].setColour(juce::TextButton::textColourOffId,
+                              juce::Colours::lightgrey);
     learnButtons[s].setTooltip("Play a chord, then click to capture intervals");
     learnButtons[s].onClick = [this, s]() {
       if (processor.isChordLearning() && processor.getChordLearnSlot() == s) {
@@ -1335,7 +1368,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
 
   // 4 rows x 5 interval sliders
   for (int s = 0; s < 4; ++s) {
-    slots[s].label.setText("Slot " + juce::String(s + 1), juce::dontSendNotification);
+    slots[s].label.setText("Slot " + juce::String(s + 1),
+                           juce::dontSendNotification);
     slots[s].label.setColour(juce::Label::textColourId, juce::Colours::cyan);
     slots[s].label.setFont(juce::Font(juce::FontOptions(11.0f)));
     addAndMakeVisible(slots[s].label);
@@ -1345,16 +1379,18 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
       slider.setSliderStyle(juce::Slider::LinearVertical);
       slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
       slider.setRange(-24, 24, 1);
-      slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::lightgrey);
-      slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+      slider.setColour(juce::Slider::textBoxTextColourId,
+                       juce::Colours::lightgrey);
+      slider.setColour(juce::Slider::textBoxOutlineColourId,
+                       juce::Colours::transparentBlack);
       slider.setTextValueSuffix(" st");
       slider.setTooltip("Semitone offset from root (0 = unused)");
       addAndMakeVisible(slider);
 
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
-      slots[s].attachments[i] =
-          std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-              processor.apvts, id, slider);
+      slots[s].attachments[i] = std::make_unique<
+          juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts,
+                                                                id, slider);
     }
   }
 
@@ -1362,7 +1398,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   setSize(panelWidth, panelHeight);
 }
 
-void ChordMemoryPanel::applyLearnedChord(int slot, const std::vector<int> &notes) {
+void ChordMemoryPanel::applyLearnedChord(int slot,
+                                         const std::vector<int> &notes) {
   // Sort notes ascending, root = lowest
   auto sorted = notes;
   std::sort(sorted.begin(), sorted.end());
@@ -1376,7 +1413,8 @@ void ChordMemoryPanel::applyLearnedChord(int slot, const std::vector<int> &notes
 
     auto id = "chord_s" + juce::String(slot) + "_i" + juce::String(i);
     if (auto *param = processor.apvts.getParameter(id))
-      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(interval)));
+      param->setValueNotifyingHost(
+          param->convertTo0to1(static_cast<float>(interval)));
   }
 }
 
@@ -1387,11 +1425,12 @@ void ChordMemoryPanel::timerCallback() {
   for (int s = 0; s < 4; ++s) {
     bool isLearning = learning && learnSlot == s;
     learnButtons[s].setColour(juce::TextButton::buttonColourId,
-                               isLearning ? juce::Colours::gold.withAlpha(0.4f)
-                                          : juce::Colour(50, 50, 60));
+                              isLearning ? juce::Colours::gold.withAlpha(0.4f)
+                                         : juce::Colour(50, 50, 60));
     if (isLearning) {
       auto notes = processor.getChordLearnNotes();
-      learnButtons[s].setButtonText("Done (" + juce::String(notes.size()) + ")");
+      learnButtons[s].setButtonText("Done (" + juce::String(notes.size()) +
+                                    ")");
     } else {
       learnButtons[s].setButtonText("Learn");
     }
@@ -1411,8 +1450,9 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   // Subtitle
   g.setColour(juce::Colour(120, 120, 135));
   g.setFont(juce::Font(juce::FontOptions(10.0f)));
-  g.drawText("Play a chord and click Learn to capture, or set intervals manually",
-             10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
+  g.drawText(
+      "Play a chord and click Learn to capture, or set intervals manually", 10,
+      28, panelWidth - 20, 14, juce::Justification::centredLeft);
 
   // Divider below header
   g.setColour(juce::Colour(55, 55, 65));
@@ -1460,8 +1500,9 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
   enableButton.setTooltip("Enable wavetable sequencer");
   addAndMakeVisible(enableButton);
-  enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "wtEnable", enableButton);
+  enableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "wtEnable", enableButton);
 
   // Steps slider
   stepsLabel.setText("Steps", juce::dontSendNotification);
@@ -1472,11 +1513,13 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   numStepsSlider.setRange(1.0, 16.0, 1.0);
   numStepsSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   numStepsSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 14);
-  numStepsSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+  numStepsSlider.setColour(juce::Slider::textBoxTextColourId,
+                           juce::Colours::white);
   numStepsSlider.setTooltip("Number of active steps (1-16)");
   addAndMakeVisible(numStepsSlider);
-  stepsAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-      processor.apvts, "wtNumSteps", numStepsSlider);
+  stepsAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "wtNumSteps", numStepsSlider);
 
   // Step rate slider
   rateLabel.setText("Step Rate", juce::dontSendNotification);
@@ -1491,15 +1534,17 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   rateSlider.setTextValueSuffix(" Hz");
   rateSlider.setTooltip("How fast the sequencer advances (steps per second)");
   addAndMakeVisible(rateSlider);
-  rateAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-      processor.apvts, "wtRate", rateSlider);
+  rateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "wtRate", rateSlider);
 
   // Loop toggle
   loopButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
   loopButton.setTooltip("Loop sequence or play once and stop");
   addAndMakeVisible(loopButton);
-  loopAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "wtLoop", loopButton);
+  loopAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "wtLoop", loopButton);
 
   // Per-step controls
   for (int i = 0; i < 16; ++i) {
@@ -1513,31 +1558,37 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
     step.waveBox.addItem("Noi", 4);
     step.waveBox.setTooltip("Waveform: Triangle, Sawtooth, Pulse, or Noise");
     addAndMakeVisible(step.waveBox);
-    step.waveAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+    step.waveAttach = std::make_unique<
+        juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         processor.apvts, prefix + "wave", step.waveBox);
 
     // Pitch slider (semitones relative to note)
     step.pitchSlider.setRange(-24.0, 24.0, 1.0);
     step.pitchSlider.setSliderStyle(juce::Slider::LinearVertical);
     step.pitchSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
-    step.pitchSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    step.pitchSlider.setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
+    step.pitchSlider.setColour(juce::Slider::textBoxTextColourId,
+                               juce::Colours::white);
+    step.pitchSlider.setColour(juce::Slider::thumbColourId,
+                               juce::Colours::cyan);
     step.pitchSlider.setTextValueSuffix(" st");
     step.pitchSlider.setTooltip("Pitch offset in semitones (-24 to +24)");
     addAndMakeVisible(step.pitchSlider);
-    step.pitchAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        processor.apvts, prefix + "pitch", step.pitchSlider);
+    step.pitchAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.apvts, prefix + "pitch", step.pitchSlider);
 
     // Pulse Width slider (SID register 0-4095, 50% = 2048)
     step.pwSlider.setRange(0.0, 4095.0, 1.0);
     step.pwSlider.setSliderStyle(juce::Slider::LinearVertical);
     step.pwSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
-    step.pwSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+    step.pwSlider.setColour(juce::Slider::textBoxTextColourId,
+                            juce::Colours::white);
     step.pwSlider.setColour(juce::Slider::thumbColourId, juce::Colours::orange);
     step.pwSlider.setTooltip("Pulse Width (0-4095, 2048 = 50% duty cycle)");
     addAndMakeVisible(step.pwSlider);
-    step.pwAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        processor.apvts, prefix + "pw", step.pwSlider);
+    step.pwAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.apvts, prefix + "pw", step.pwSlider);
   }
 
   startTimer(33);
@@ -1559,8 +1610,9 @@ void WavetablePanel::paint(juce::Graphics &g) {
   // Subtitle — brief explanation on the right side of header row
   g.setColour(juce::Colour(120, 120, 135));
   g.setFont(10.0f);
-  g.drawText("Each step sets waveform, pitch offset, and pulse width for all voices",
-             520, 28, 290, 14, juce::Justification::centredLeft);
+  g.drawText(
+      "Each step sets waveform, pitch offset, and pulse width for all voices",
+      520, 28, 290, 14, juce::Justification::centredLeft);
 
   // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
@@ -1580,9 +1632,12 @@ void WavetablePanel::paint(juce::Graphics &g) {
 
   // Horizontal dividers between sections
   g.setColour(juce::Colour(55, 55, 65));
-  g.drawHorizontalLine(43, 10.0f, static_cast<float>(panelWidth - 10));  // below header
-  g.drawHorizontalLine(84, 55.0f, static_cast<float>(panelWidth - 10));  // below waveform
-  g.drawHorizontalLine(208, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
+  g.drawHorizontalLine(43, 10.0f,
+                       static_cast<float>(panelWidth - 10)); // below header
+  g.drawHorizontalLine(84, 55.0f,
+                       static_cast<float>(panelWidth - 10)); // below waveform
+  g.drawHorizontalLine(
+      208, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
 
   // Step number headers and column glow
   int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
@@ -1676,7 +1731,8 @@ void BreadbinEditor::showChordMemoryPopup() {
   auto *panel = new ChordMemoryPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  auto *window = new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
+  auto *window =
+      new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(true);
   window->setResizable(false, false);
@@ -1700,7 +1756,8 @@ void BreadbinEditor::showSidPlayerPopup() {
   auto *panel = new SidPlayerPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  auto *window = new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
+  auto *window =
+      new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(true);
   window->setResizable(false, false);
@@ -1724,7 +1781,8 @@ void BreadbinEditor::showModMatrixPopup() {
   auto *panel = new ModMatrixPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  auto *window = new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
+  auto *window =
+      new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(true);
   window->setResizable(false, false);
@@ -1748,7 +1806,8 @@ void BreadbinEditor::showWavetablePopup() {
   auto *panel = new WavetablePanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  auto *window = new NonModalPopup("Wavetable Step Sequencer", juce::Colour(30, 30, 35), true);
+  auto *window = new NonModalPopup("Wavetable Step Sequencer",
+                                   juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(true);
   window->setResizable(false, false);
@@ -2058,10 +2117,10 @@ void BreadbinEditor::setupControls() {
                 0.1f, "Chorus Rate (Hz)");
   chorusRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 38, 18);
   chorusRateSlider.setNumDecimalPlacesToDisplay(1);
-  setupFXSlider(chorusDepthSlider, chorusDepthLabel, "Depth", 0.0f, 1.0f,
-                0.3f, 0.01f, "Chorus Depth");
-  setupFXSlider(chorusMixSlider, chorusMixLabel, "Mix", 0.0f, 1.0f, 0.5f,
-                0.01f, "Chorus Wet/Dry Mix");
+  setupFXSlider(chorusDepthSlider, chorusDepthLabel, "Depth", 0.0f, 1.0f, 0.3f,
+                0.01f, "Chorus Depth");
+  setupFXSlider(chorusMixSlider, chorusMixLabel, "Mix", 0.0f, 1.0f, 0.5f, 0.01f,
+                "Chorus Wet/Dry Mix");
 
   // ===== FX: DELAY =====
   delayEnableButton.setTooltip("Stereo Delay with independent L/R times");
@@ -2077,8 +2136,8 @@ void BreadbinEditor::setupControls() {
   delayTimeRSlider.setNumDecimalPlacesToDisplay(0);
   setupFXSlider(delayFeedbackSlider, delayFBLabel, "FB", 0.0f, 0.95f, 0.3f,
                 0.01f, "Delay Feedback");
-  setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f,
-                0.01f, "Delay Wet/Dry Mix");
+  setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f, 0.01f,
+                "Delay Wet/Dry Mix");
 
   // ===== WAVETABLE STEP SEQUENCER =====
   wavetableButton.setTooltip("Wavetable: C64-style step sequencer editor");
@@ -2092,23 +2151,32 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(wavetableButton);
 
   // ===== INLINE ENABLE TOGGLES (above popup buttons) =====
-  wtEnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
-  wtEnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  wtEnableToggle.setColour(juce::ToggleButton::textColourId,
+                           juce::Colours::cyan);
+  wtEnableToggle.setColour(juce::ToggleButton::tickColourId,
+                           juce::Colours::cyan);
   addAndMakeVisible(wtEnableToggle);
-  wtEnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "wtEnable", wtEnableToggle);
+  wtEnableToggleAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "wtEnable", wtEnableToggle);
 
-  lfo1EnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
-  lfo1EnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  lfo1EnableToggle.setColour(juce::ToggleButton::textColourId,
+                             juce::Colours::cyan);
+  lfo1EnableToggle.setColour(juce::ToggleButton::tickColourId,
+                             juce::Colours::cyan);
   addAndMakeVisible(lfo1EnableToggle);
-  lfo1EnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "lfoEnable", lfo1EnableToggle);
+  lfo1EnableToggleAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfoEnable", lfo1EnableToggle);
 
-  lfo2EnableToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
-  lfo2EnableToggle.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  lfo2EnableToggle.setColour(juce::ToggleButton::textColourId,
+                             juce::Colours::cyan);
+  lfo2EnableToggle.setColour(juce::ToggleButton::tickColourId,
+                             juce::Colours::cyan);
   addAndMakeVisible(lfo2EnableToggle);
-  lfo2EnableToggleAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "lfo2Enable", lfo2EnableToggle);
+  lfo2EnableToggleAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "lfo2Enable", lfo2EnableToggle);
 
   // ===== MOD MATRIX BUTTON =====
   modMatrixButton.setTooltip("Modulation: LFO, pitch bend range, mod matrix");
@@ -2133,7 +2201,8 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(chordMemoryButton);
 
   // ===== SID PLAYER BUTTON =====
-  sidPlayerButton.setTooltip("SID Player: Load and play .SID files, snapshot registers to synth");
+  sidPlayerButton.setTooltip(
+      "SID Player: Load and play .SID files, snapshot registers to synth");
   sidPlayerButton.setColour(juce::TextButton::buttonColourId,
                             juce::Colour(70, 50, 50));
   sidPlayerButton.setColour(juce::TextButton::textColourOnId,
@@ -2144,7 +2213,8 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(sidPlayerButton);
 
   // ===== FILTER ENVELOPE =====
-  filterEnvEnableButton.setTooltip("Filter Envelope: Dedicated ADSR for filter cutoff");
+  filterEnvEnableButton.setTooltip(
+      "Filter Envelope: Dedicated ADSR for filter cutoff");
   filterEnvEnableButton.setButtonText("Filt Env");
   addAndMakeVisible(filterEnvEnableButton);
 
@@ -2166,12 +2236,12 @@ void BreadbinEditor::setupControls() {
     addAndMakeVisible(slider);
   };
 
-  setupFilterEnvSlider(filterEnvAttackSlider, filterEnvAttackLabel, "A",
-                       0.001f, 10.0f, 0.01f, "Filter Env Attack (seconds)");
-  setupFilterEnvSlider(filterEnvDecaySlider, filterEnvDecayLabel, "D",
-                       0.001f, 10.0f, 0.3f, "Filter Env Decay (seconds)");
-  setupFilterEnvSlider(filterEnvSustainSlider, filterEnvSustainLabel, "S",
-                       0.0f, 1.0f, 0.5f, "Filter Env Sustain level");
+  setupFilterEnvSlider(filterEnvAttackSlider, filterEnvAttackLabel, "A", 0.001f,
+                       10.0f, 0.01f, "Filter Env Attack (seconds)");
+  setupFilterEnvSlider(filterEnvDecaySlider, filterEnvDecayLabel, "D", 0.001f,
+                       10.0f, 0.3f, "Filter Env Decay (seconds)");
+  setupFilterEnvSlider(filterEnvSustainSlider, filterEnvSustainLabel, "S", 0.0f,
+                       1.0f, 0.5f, "Filter Env Sustain level");
   setupFilterEnvSlider(filterEnvReleaseSlider, filterEnvReleaseLabel, "R",
                        0.001f, 10.0f, 0.5f, "Filter Env Release (seconds)");
 
@@ -2186,15 +2256,16 @@ void BreadbinEditor::setupControls() {
   filterEnvAmountSlider.setValue(0.5);
   filterEnvAmountSlider.setSliderStyle(
       juce::Slider::RotaryHorizontalVerticalDrag);
-  filterEnvAmountSlider.setColour(juce::Slider::trackColourId, juce::Colours::green);
+  filterEnvAmountSlider.setColour(juce::Slider::trackColourId,
+                                  juce::Colours::green);
   filterEnvAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40,
                                         12);
   filterEnvAmountSlider.setColour(juce::Slider::textBoxTextColourId,
                                   juce::Colours::green);
   filterEnvAmountSlider.setColour(juce::Slider::textBoxOutlineColourId,
                                   juce::Colours::transparentBlack);
-  filterEnvAmountSlider.setTooltip(
-      "Filter Env Amount: Bipolar (-1 to +1). Positive opens filter on attack.");
+  filterEnvAmountSlider.setTooltip("Filter Env Amount: Bipolar (-1 to +1). "
+                                   "Positive opens filter on attack.");
   addAndMakeVisible(filterEnvAmountSlider);
 
   // SID Player register overlay labels (hidden by default)
@@ -2290,7 +2361,8 @@ void BreadbinEditor::setupLeftSID() {
   leftResonanceSlider.setValue(0);
   leftResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  leftResonanceSlider.setColour(juce::Slider::trackColourId, juce::Colours::cyan);
+  leftResonanceSlider.setColour(juce::Slider::trackColourId,
+                                juce::Colours::cyan);
   leftResonanceSlider.setTooltip("Filter Resonance (0-15)");
   leftResonanceSlider.onValueChange = [this]() {
     int val = static_cast<int>(leftResonanceSlider.getValue());
@@ -2407,7 +2479,8 @@ void BreadbinEditor::setupRightSID() {
   rightCutoffSlider.setValue(1024);
   rightCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  rightCutoffSlider.setColour(juce::Slider::trackColourId, juce::Colours::orange);
+  rightCutoffSlider.setColour(juce::Slider::trackColourId,
+                              juce::Colours::orange);
   rightCutoffSlider.setTooltip("Filter Cutoff Frequency (0-2047)");
   rightCutoffSlider.onValueChange = [this]() {
     int val = static_cast<int>(rightCutoffSlider.getValue());
@@ -2426,7 +2499,8 @@ void BreadbinEditor::setupRightSID() {
   rightResonanceSlider.setValue(0);
   rightResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  rightResonanceSlider.setColour(juce::Slider::trackColourId, juce::Colours::orange);
+  rightResonanceSlider.setColour(juce::Slider::trackColourId,
+                                 juce::Colours::orange);
   rightResonanceSlider.setTooltip("Filter Resonance (0-15)");
   rightResonanceSlider.onValueChange = [this]() {
     int val = static_cast<int>(rightResonanceSlider.getValue());
@@ -3046,28 +3120,38 @@ void BreadbinEditor::resized() {
   // ADSR mini-sliders (vertical)
   const int feW = 48;
   auto feAArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW, 14);
-  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 16, feW, 54);
+  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW,
+                                 14);
+  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 16, feW,
+                                  54);
 
   filterEnvStack.removeFromLeft(2);
   auto feDArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW, 14);
-  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 16, feW, 54);
+  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW,
+                                14);
+  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 16, feW,
+                                 54);
 
   filterEnvStack.removeFromLeft(2);
   auto feSArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW, 14);
-  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 16, feW, 54);
+  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW,
+                                  14);
+  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 16,
+                                   feW, 54);
 
   filterEnvStack.removeFromLeft(2);
   auto feRArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW, 14);
-  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 16, feW, 54);
+  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW,
+                                  14);
+  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 16,
+                                   feW, 54);
 
   filterEnvStack.removeFromLeft(8);
   auto feAmtArea = filterEnvStack.removeFromLeft(70);
-  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 70, 14);
-  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 16, 70, 54);
+  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 70,
+                                 14);
+  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 16,
+                                  70, 54);
 
   bounds.removeFromBottom(4);
 
@@ -3091,24 +3175,30 @@ void BreadbinEditor::resized() {
   // Align toggles above their corresponding buttons
   wtEnableToggle.setBounds(wtBtnBounds.getX(), toggleRow.getY(), 52, 18);
   lfo1EnableToggle.setBounds(modBtnBounds.getX(), toggleRow.getY(), 55, 18);
-  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, toggleRow.getY(), 55, 18);
+  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, toggleRow.getY(), 55,
+                             18);
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
   // Convert SIDEngine::Waveform to APVTS choice index
   auto waveToIndex = [](SIDEngine::Waveform w) -> float {
     switch (w) {
-    case SIDEngine::Waveform::Triangle: return 0.0f;
-    case SIDEngine::Waveform::Sawtooth: return 1.0f;
-    case SIDEngine::Waveform::Pulse:    return 2.0f;
-    case SIDEngine::Waveform::Noise:    return 3.0f;
-    default: return 0.0f;
+    case SIDEngine::Waveform::Triangle:
+      return 0.0f;
+    case SIDEngine::Waveform::Sawtooth:
+      return 1.0f;
+    case SIDEngine::Waveform::Pulse:
+      return 2.0f;
+    case SIDEngine::Waveform::Noise:
+      return 3.0f;
+    default:
+      return 0.0f;
     }
   };
 
-  auto configureVoice = [this, presetId, &waveToIndex](
-                             int voice, SIDEngine::Waveform wave, int pw,
-                             int a, int d, int s, int r) {
+  auto configureVoice = [this, presetId,
+                         &waveToIndex](int voice, SIDEngine::Waveform wave,
+                                       int pw, int a, int d, int s, int r) {
     juce::String prefix = "v" + juce::String(voice) + "_";
     auto setParam = [&](const juce::String &id, float val) {
       auto *p = processor.apvts.getParameter(id);
@@ -3142,7 +3232,8 @@ void BreadbinEditor::applyPreset(int presetId) {
     configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 8, 0, 4);
     break;
   case 6: // Retro Triangle - Soft triangle with slow attack
-    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6);
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 2, 4, 10,
+                   6);
     break;
   }
 
@@ -3160,11 +3251,16 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   // Convert SIDEngine::Waveform to APVTS choice index
   auto waveToIndex = [](SIDEngine::Waveform w) -> float {
     switch (w) {
-    case SIDEngine::Waveform::Triangle: return 0.0f;
-    case SIDEngine::Waveform::Sawtooth: return 1.0f;
-    case SIDEngine::Waveform::Pulse:    return 2.0f;
-    case SIDEngine::Waveform::Noise:    return 3.0f;
-    default: return 0.0f;
+    case SIDEngine::Waveform::Triangle:
+      return 0.0f;
+    case SIDEngine::Waveform::Sawtooth:
+      return 1.0f;
+    case SIDEngine::Waveform::Pulse:
+      return 2.0f;
+    case SIDEngine::Waveform::Noise:
+      return 3.0f;
+    default:
+      return 0.0f;
     }
   };
 
@@ -3176,7 +3272,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   for (int v = 0; v < 6; ++v) {
     juce::String vp = "v" + juce::String(v) + "_";
     setParam(vp + "enable", 1.0f);
-    setParam(vp + "waveform", 2.0f);   // Pulse
+    setParam(vp + "waveform", 2.0f); // Pulse
     setParam(vp + "pw", 2048.0f);
     setParam(vp + "attack", 0.0f);
     setParam(vp + "decay", 0.0f);
@@ -3221,13 +3317,13 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   // Arpeggiator: off, defaults
   setParam("arpEnable", 0.0f);
-  setParam("arpPattern", 0.0f);   // Up
+  setParam("arpPattern", 0.0f); // Up
   setParam("arpRate", 50.0f);
   setParam("arpOctaves", 1.0f);
 
   // LFO1: off, defaults
   setParam("lfoEnable", 0.0f);
-  setParam("lfoWave", 0.0f);      // Triangle
+  setParam("lfoWave", 0.0f); // Triangle
   setParam("lfoRate", 1.0f);
   setParam("lfoDepthFilt", 0.0f);
   setParam("lfoDepthPW", 0.0f);
@@ -3235,7 +3331,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   // LFO2: off, defaults
   setParam("lfo2Enable", 0.0f);
-  setParam("lfo2Wave", 0.0f);     // Triangle
+  setParam("lfo2Wave", 0.0f); // Triangle
   setParam("lfo2Rate", 3.0f);
   setParam("lfo2DepthFilt", 0.0f);
   setParam("lfo2DepthPW", 0.0f);
@@ -3269,7 +3365,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   setParam("wtLoop", 1.0f);
   for (int i = 0; i < 16; ++i) {
     auto wp = "wt_s" + juce::String(i) + "_";
-    setParam(wp + "wave", 2.0f);   // Pulse
+    setParam(wp + "wave", 2.0f); // Pulse
     setParam(wp + "pitch", 0.0f);
     setParam(wp + "pw", 2048.0f);
   }
@@ -3277,8 +3373,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   // Mod Matrix: all slots cleared
   for (int i = 0; i < 4; ++i) {
     auto mp = "mod" + juce::String(i) + "_";
-    setParam(mp + "src", 0.0f);   // None
-    setParam(mp + "dst", 0.0f);   // None
+    setParam(mp + "src", 0.0f); // None
+    setParam(mp + "dst", 0.0f); // None
     setParam(mp + "amt", 0.0f);
   }
 
@@ -3297,13 +3393,14 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     for (int i = 0; i < 5; ++i)
       setParam("chord_s" + juce::String(s) + "_i" + juce::String(i), 0.0f);
 
-  // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user preference)
+  // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
+  // preference)
 
   // ---- VOICE CONFIGURATION HELPER ----
   // Sets voice waveform/ADSR via APVTS, assigns voice preset ID, syncs engine
-  auto configVoice = [this, &setParam, &waveToIndex](
-                         int v, SIDEngine::Waveform wave, int pw,
-                         int a, int d, int s, int r, int vpId = 1) {
+  auto configVoice = [this, &setParam,
+                      &waveToIndex](int v, SIDEngine::Waveform wave, int pw,
+                                    int a, int d, int s, int r, int vpId = 1) {
     juce::String vp = "v" + juce::String(v) + "_";
     setParam(vp + "enable", 1.0f);
     setParam(vp + "waveform", waveToIndex(wave));
@@ -3326,10 +3423,14 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     processor.setBaseFilterCutoff(false, cutoff);
     processor.setBaseFilterResonance(true, resonance);
     processor.setBaseFilterResonance(false, resonance);
-    leftCutoffSlider.setValue(static_cast<double>(cutoff), juce::dontSendNotification);
-    leftResonanceSlider.setValue(static_cast<double>(resonance), juce::dontSendNotification);
-    rightCutoffSlider.setValue(static_cast<double>(cutoff), juce::dontSendNotification);
-    rightResonanceSlider.setValue(static_cast<double>(resonance), juce::dontSendNotification);
+    leftCutoffSlider.setValue(static_cast<double>(cutoff),
+                              juce::dontSendNotification);
+    leftResonanceSlider.setValue(static_cast<double>(resonance),
+                                 juce::dontSendNotification);
+    rightCutoffSlider.setValue(static_cast<double>(cutoff),
+                               juce::dontSendNotification);
+    rightResonanceSlider.setValue(static_cast<double>(resonance),
+                                  juce::dontSendNotification);
   };
 
   // ---- PER-PRESET OVERRIDES ----
@@ -3420,8 +3521,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     {
       auto *s0src = processor.apvts.getParameter("mod0_src");
       auto *s0dst = processor.apvts.getParameter("mod0_dst");
-      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
-      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(4.0f)); // Resonance
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(4.0f)); // Resonance
       setParam("mod0_amt", 0.3f);
     }
     break;
@@ -3452,17 +3555,17 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // Chord memory: major 7th voicing (+4, +7, +11)
     setParam("chordEnable", 1.0f);
     setParam("chordSlot", 0.0f);
-    setParam("chord_s0_i0", 4.0f);   // major 3rd
-    setParam("chord_s0_i1", 7.0f);   // perfect 5th
+    setParam("chord_s0_i0", 4.0f); // major 3rd
+    setParam("chord_s0_i1", 7.0f); // perfect 5th
     // Slot 1: minor chord (-3, -7)
-    setParam("chord_s1_i0", 3.0f);   // minor 3rd
-    setParam("chord_s1_i1", 7.0f);   // perfect 5th
+    setParam("chord_s1_i0", 3.0f); // minor 3rd
+    setParam("chord_s1_i1", 7.0f); // perfect 5th
     // Slot 2: sus4 (+5, +7)
-    setParam("chord_s2_i0", 5.0f);   // perfect 4th
-    setParam("chord_s2_i1", 7.0f);   // perfect 5th
+    setParam("chord_s2_i0", 5.0f); // perfect 4th
+    setParam("chord_s2_i1", 7.0f); // perfect 5th
     // Slot 3: power chord (+7, +12)
-    setParam("chord_s3_i0", 7.0f);   // perfect 5th
-    setParam("chord_s3_i1", 12.0f);  // octave
+    setParam("chord_s3_i0", 7.0f);  // perfect 5th
+    setParam("chord_s3_i1", 12.0f); // octave
     // Punchy filter envelope
     setParam("filterEnvEnable", 1.0f);
     setParam("filterEnvAttack", 0.001f);
@@ -3492,12 +3595,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setFilters(1000, 6);
     // LFO1: S&H on filter for glitchy movement
     setParam("lfoEnable", 1.0f);
-    setParam("lfoWave", 3.0f);       // S&H
+    setParam("lfoWave", 3.0f); // S&H
     setParam("lfoRate", 6.0f);
     setParam("lfoDepthFilt", 0.5f);
     // LFO2: Triangle on pitch for wobble
     setParam("lfo2Enable", 1.0f);
-    setParam("lfo2Wave", 0.0f);      // Triangle
+    setParam("lfo2Wave", 0.0f); // Triangle
     setParam("lfo2Rate", 1.5f);
     setParam("lfo2DepthPitch", 0.15f);
     // PWM sweep: fast and deep
@@ -3515,13 +3618,17 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     {
       auto *s0src = processor.apvts.getParameter("mod0_src");
       auto *s0dst = processor.apvts.getParameter("mod0_dst");
-      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(2.0f)); // LFO2
-      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(2.0f)); // PW
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(2.0f)); // LFO2
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(2.0f)); // PW
       setParam("mod0_amt", 0.6f);
       auto *s1src = processor.apvts.getParameter("mod1_src");
       auto *s1dst = processor.apvts.getParameter("mod1_dst");
-      if (s1src) s1src->setValueNotifyingHost(s1src->convertTo0to1(3.0f)); // FilterEnv
-      if (s1dst) s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
+      if (s1src)
+        s1src->setValueNotifyingHost(s1src->convertTo0to1(3.0f)); // FilterEnv
+      if (s1dst)
+        s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
       setParam("mod1_amt", 0.5f);
     }
     // Wavetable: 4-step cycling through waveforms
@@ -3529,16 +3636,17 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("wtNumSteps", 4.0f);
     setParam("wtRate", 12.0f);
     {
-      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
         auto sp = "wt_s" + juce::String(step) + "_";
         setParam(sp + "wave", wave);
         setParam(sp + "pitch", pitch);
         setParam(sp + "pw", pw);
       };
-      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Pulse, root
-      setWTStep(1, 1.0f, 0.0f, 2048.0f);   // Saw, root
-      setWTStep(2, 2.0f, 12.0f, 1024.0f);  // Pulse, +octave, narrow PW
-      setWTStep(3, 0.0f, 7.0f, 2048.0f);   // Triangle, +fifth
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);  // Pulse, root
+      setWTStep(1, 1.0f, 0.0f, 2048.0f);  // Saw, root
+      setWTStep(2, 2.0f, 12.0f, 1024.0f); // Pulse, +octave, narrow PW
+      setWTStep(3, 0.0f, 7.0f, 2048.0f);  // Triangle, +fifth
     }
     // Both FX
     setParam("chorusEnable", 1.0f);
@@ -3554,7 +3662,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  case 8: { // WT Arpeggio - Classic C64 wavetable arpeggio (Rob Hubbard technique)
+  case 8: { // WT Arpeggio - Classic C64 wavetable arpeggio (Rob Hubbard
+            // technique)
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 4, 2);
     setFilters(1200, 4);
@@ -3563,15 +3672,16 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("wtNumSteps", 3.0f);
     setParam("wtRate", 50.0f);
     {
-      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
         auto sp = "wt_s" + juce::String(step) + "_";
         setParam(sp + "wave", wave);
         setParam(sp + "pitch", pitch);
         setParam(sp + "pw", pw);
       };
-      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Pulse, root
-      setWTStep(1, 2.0f, 4.0f, 2048.0f);   // Pulse, major 3rd
-      setWTStep(2, 2.0f, 7.0f, 2048.0f);   // Pulse, 5th
+      setWTStep(0, 2.0f, 0.0f, 2048.0f); // Pulse, root
+      setWTStep(1, 2.0f, 4.0f, 2048.0f); // Pulse, major 3rd
+      setWTStep(2, 2.0f, 7.0f, 2048.0f); // Pulse, 5th
     }
     // Light chorus for stereo width
     setParam("chorusEnable", 1.0f);
@@ -3597,20 +3707,21 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("wtNumSteps", 8.0f);
     setParam("wtRate", 8.0f);
     {
-      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
         auto sp = "wt_s" + juce::String(step) + "_";
         setParam(sp + "wave", wave);
         setParam(sp + "pitch", pitch);
         setParam(sp + "pw", pw);
       };
-      setWTStep(0, 2.0f, 0.0f, 3500.0f);    // Pulse, thin
-      setWTStep(1, 1.0f, 0.0f, 2048.0f);    // Saw
-      setWTStep(2, 2.0f, 0.0f, 1024.0f);    // Pulse, narrow
-      setWTStep(3, 0.0f, 12.0f, 2048.0f);   // Triangle, octave up
-      setWTStep(4, 2.0f, 0.0f, 2800.0f);    // Pulse, medium-thin
-      setWTStep(5, 1.0f, -12.0f, 2048.0f);  // Saw, octave down
-      setWTStep(6, 3.0f, 0.0f, 2048.0f);    // Noise, percussive hit
-      setWTStep(7, 2.0f, 7.0f, 1500.0f);    // Pulse, 5th, medium PW
+      setWTStep(0, 2.0f, 0.0f, 3500.0f);   // Pulse, thin
+      setWTStep(1, 1.0f, 0.0f, 2048.0f);   // Saw
+      setWTStep(2, 2.0f, 0.0f, 1024.0f);   // Pulse, narrow
+      setWTStep(3, 0.0f, 12.0f, 2048.0f);  // Triangle, octave up
+      setWTStep(4, 2.0f, 0.0f, 2800.0f);   // Pulse, medium-thin
+      setWTStep(5, 1.0f, -12.0f, 2048.0f); // Saw, octave down
+      setWTStep(6, 3.0f, 0.0f, 2048.0f);   // Noise, percussive hit
+      setWTStep(7, 2.0f, 7.0f, 1500.0f);   // Pulse, 5th, medium PW
     }
     // Stereo delay
     setParam("delayEnable", 1.0f);
@@ -3625,14 +3736,15 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusMix", 0.3f);
     // LFO1: slow filter sweep
     setParam("lfoEnable", 1.0f);
-    setParam("lfoWave", 0.0f);      // Triangle
+    setParam("lfoWave", 0.0f); // Triangle
     setParam("lfoRate", 0.3f);
     setParam("lfoDepthFilt", 0.3f);
     break;
   }
 
-  // ---- ERA-ACCURATE C64 PRESETS ----
-  // Pure SID sound, no modern FX. Authentic register values from iconic tunes.
+    // ---- ERA-ACCURATE C64 PRESETS ----
+    // Pure SID sound, no modern FX. Authentic register values from iconic
+    // tunes.
 
   case 10: { // Commando - Rob Hubbard's iconic pulse lead
     // Hubbard signature: narrow pulse, fast pluck envelope, LP filter
@@ -3667,8 +3779,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  // ---- MODERN STEREO PRESETS ----
-  // Inspired by C64 techniques but enhanced with our extended features.
+    // ---- MODERN STEREO PRESETS ----
+    // Inspired by C64 techniques but enhanced with our extended features.
 
   case 13: { // Hubbard Arp - Classic WT arpeggio with stereo treatment
     // Hubbard technique: wavetable chord arpeggiation at frame rate
@@ -3683,16 +3795,17 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("wtNumSteps", 4.0f);
     setParam("wtRate", 50.0f);
     {
-      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
         auto sp = "wt_s" + juce::String(step) + "_";
         setParam(sp + "wave", wave);
         setParam(sp + "pitch", pitch);
         setParam(sp + "pw", pw);
       };
-      setWTStep(0, 2.0f, 0.0f, 1536.0f);    // Root
-      setWTStep(1, 2.0f, 3.0f, 1536.0f);    // Minor 3rd
-      setWTStep(2, 2.0f, 7.0f, 1536.0f);    // 5th
-      setWTStep(3, 2.0f, 12.0f, 1536.0f);   // Octave
+      setWTStep(0, 2.0f, 0.0f, 1536.0f);  // Root
+      setWTStep(1, 2.0f, 3.0f, 1536.0f);  // Minor 3rd
+      setWTStep(2, 2.0f, 7.0f, 1536.0f);  // 5th
+      setWTStep(3, 2.0f, 12.0f, 1536.0f); // Octave
     }
     // Stereo delay: ping-pong feel
     setParam("delayEnable", 1.0f);
@@ -3737,8 +3850,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     {
       auto *s0src = processor.apvts.getParameter("mod0_src");
       auto *s0dst = processor.apvts.getParameter("mod0_dst");
-      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
-      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
       setParam("mod0_amt", 0.5f);
     }
     // Chorus for stereo width
@@ -3780,7 +3895,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  // ---- MORE CLASSIC C64 ----
+    // ---- MORE CLASSIC C64 ----
 
   case 16: { // Cybernoid - Jeroen Tel aggressive saw lead
     // Tel signature: raw sawtooth, punchy envelope, moderate filter
@@ -3820,7 +3935,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  // ---- MORE LEADS ----
+    // ---- MORE LEADS ----
 
   case 19: { // Sync Lead - Hard sync sawtooth, biting harmonics
     for (int v = 0; v < 6; ++v) {
@@ -3851,7 +3966,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
       configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 0, 15, 2, 3);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
-    setFilters(200, 12);  // Low cutoff, high resonance for squelch
+    setFilters(200, 12); // Low cutoff, high resonance for squelch
     setParam("leftDetune", -3.0f);
     setParam("rightDetune", 3.0f);
     // Filter envelope: fast pluck sweep
@@ -3865,8 +3980,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     {
       auto *s0src = processor.apvts.getParameter("mod0_src");
       auto *s0dst = processor.apvts.getParameter("mod0_dst");
-      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
-      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
       setParam("mod0_amt", 0.4f);
     }
     // Stereo delay for space
@@ -3875,16 +3992,17 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayTimeR", 250.0f);
     setParam("delayFeedback", 0.3f);
     setParam("delayMix", 0.2f);
-    setParam("glide", 80.0f);  // Slight portamento for acid feel
+    setParam("glide", 80.0f); // Slight portamento for acid feel
     break;
   }
 
-  // ---- BASS ----
+    // ---- BASS ----
 
   case 21: { // Sub Bass - Deep triangle, minimal filtering
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 12, 4, 6);
-      setParam("v" + juce::String(v) + "_filter", 0.0f); // No filter for clean sub
+      setParam("v" + juce::String(v) + "_filter",
+               0.0f); // No filter for clean sub
     }
     setFilters(600, 0);
     setParam("dualMode", 1.0f); // Unison for mono-compatible sub
@@ -3911,13 +4029,13 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("filterEnvAmount", 0.65f);
     // LFO1: slow saw on filter for movement
     setParam("lfoEnable", 1.0f);
-    setParam("lfoWave", 1.0f);   // Sawtooth
+    setParam("lfoWave", 1.0f); // Sawtooth
     setParam("lfoRate", 0.5f);
     setParam("lfoDepthFilt", 0.15f);
     break;
   }
 
-  // ---- PADS & KEYS ----
+    // ---- PADS & KEYS ----
 
   case 23: { // Ice Pad - Triangle voices, slow attack, spacious FX
     for (int v = 0; v < 6; ++v)
@@ -3938,7 +4056,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayMix", 0.35f);
     // Slow LFO on filter for glacial sweep
     setParam("lfoEnable", 1.0f);
-    setParam("lfoWave", 0.0f);   // Triangle
+    setParam("lfoWave", 0.0f); // Triangle
     setParam("lfoRate", 0.15f);
     setParam("lfoDepthFilt", 0.25f);
     // Filter env: very slow swell
@@ -3975,7 +4093,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  // ---- ARPS & SEQUENCES ----
+    // ---- ARPS & SEQUENCES ----
 
   case 25: { // Chip Sequence - 8-step WT with mixed waveforms and pitch jumps
     for (int v = 0; v < 6; ++v)
@@ -3988,20 +4106,21 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("wtNumSteps", 8.0f);
     setParam("wtRate", 25.0f);
     {
-      auto setWTStep = [&setParam](int step, float wave, float pitch, float pw) {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
         auto sp = "wt_s" + juce::String(step) + "_";
         setParam(sp + "wave", wave);
         setParam(sp + "pitch", pitch);
         setParam(sp + "pw", pw);
       };
-      setWTStep(0, 2.0f, 0.0f, 2048.0f);    // Pulse, root
-      setWTStep(1, 1.0f, 7.0f, 2048.0f);    // Saw, 5th
-      setWTStep(2, 2.0f, 12.0f, 1536.0f);   // Pulse, octave, narrow
-      setWTStep(3, 0.0f, 0.0f, 2048.0f);    // Triangle, root
-      setWTStep(4, 2.0f, 4.0f, 2800.0f);    // Pulse, 3rd, thin
-      setWTStep(5, 1.0f, -5.0f, 2048.0f);   // Saw, 4th below
-      setWTStep(6, 2.0f, 7.0f, 1024.0f);    // Pulse, 5th, very narrow
-      setWTStep(7, 3.0f, 12.0f, 2048.0f);   // Noise hit, octave
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);  // Pulse, root
+      setWTStep(1, 1.0f, 7.0f, 2048.0f);  // Saw, 5th
+      setWTStep(2, 2.0f, 12.0f, 1536.0f); // Pulse, octave, narrow
+      setWTStep(3, 0.0f, 0.0f, 2048.0f);  // Triangle, root
+      setWTStep(4, 2.0f, 4.0f, 2800.0f);  // Pulse, 3rd, thin
+      setWTStep(5, 1.0f, -5.0f, 2048.0f); // Saw, 4th below
+      setWTStep(6, 2.0f, 7.0f, 1024.0f);  // Pulse, 5th, very narrow
+      setWTStep(7, 3.0f, 12.0f, 2048.0f); // Noise hit, octave
     }
     // Stereo delay for rhythmic interest
     setParam("delayEnable", 1.0f);
@@ -4019,7 +4138,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  // ---- FX & MODULATION ----
+    // ---- FX & MODULATION ----
 
   case 26: { // S&H Glitch - Sample & hold chaos on everything
     for (int v = 0; v < 6; ++v) {
@@ -4031,25 +4150,29 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("rightDetune", 15.0f);
     // LFO1: S&H on filter (random stepping)
     setParam("lfoEnable", 1.0f);
-    setParam("lfoWave", 3.0f);    // Sample & Hold
+    setParam("lfoWave", 3.0f); // Sample & Hold
     setParam("lfoRate", 8.0f);
     setParam("lfoDepthFilt", 0.6f);
     // LFO2: S&H on PW (random width changes)
     setParam("lfo2Enable", 1.0f);
-    setParam("lfo2Wave", 3.0f);   // Sample & Hold
+    setParam("lfo2Wave", 3.0f); // Sample & Hold
     setParam("lfo2Rate", 12.0f);
     setParam("lfo2DepthPW", 0.5f);
     // Mod matrix: LFO1->Pitch (random pitch wobble), LFO2->Resonance
     {
       auto *s0src = processor.apvts.getParameter("mod0_src");
       auto *s0dst = processor.apvts.getParameter("mod0_dst");
-      if (s0src) s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
-      if (s0dst) s0dst->setValueNotifyingHost(s0dst->convertTo0to1(3.0f)); // Pitch
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(1.0f)); // LFO1
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(3.0f)); // Pitch
       setParam("mod0_amt", 0.15f);
       auto *s1src = processor.apvts.getParameter("mod1_src");
       auto *s1dst = processor.apvts.getParameter("mod1_dst");
-      if (s1src) s1src->setValueNotifyingHost(s1src->convertTo0to1(2.0f)); // LFO2
-      if (s1dst) s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
+      if (s1src)
+        s1src->setValueNotifyingHost(s1src->convertTo0to1(2.0f)); // LFO2
+      if (s1dst)
+        s1dst->setValueNotifyingHost(s1dst->convertTo0to1(4.0f)); // Resonance
       setParam("mod1_amt", 0.4f);
     }
     // Delay: short slapback for stuttery feel
