@@ -650,14 +650,26 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   setupRightSID();
   setupVoiceEditor();
 
-  // On first-ever launch, apply Dual Lead. On restart, sync from saved APVTS
-  // state.
-  if (!processor.wasStateRestored()) {
+  // On first-ever launch (no saved state AND editor never opened), apply init
+  // preset. On subsequent editor opens (close/reopen in DAW) or state restore,
+  // sync non-APVTS controls from processor state.
+  if (!processor.wasStateRestored() && !processor.wasEditorOpened()) {
     applyGlobalPreset(1);
   } else {
     for (int v = 0; v < 6; ++v)
       processor.applyVoiceSettings(v);
+
+    // Sync non-APVTS filter sliders from processor state
+    leftCutoffSlider.setValue(processor.getBaseFilterCutoff(true),
+                              juce::dontSendNotification);
+    leftResonanceSlider.setValue(processor.getBaseFilterResonance(true),
+                                 juce::dontSendNotification);
+    rightCutoffSlider.setValue(processor.getBaseFilterCutoff(false),
+                               juce::dontSendNotification);
+    rightResonanceSlider.setValue(processor.getBaseFilterResonance(false),
+                                  juce::dontSendNotification);
   }
+  processor.markEditorOpened();
   selectVoice(processor.getSelectedVoice());
   setSize(1000, 800);
   setResizeLimits(900, 750, 1200, 1000);

@@ -266,6 +266,11 @@ public:
   // True after setStateInformation has been called (saved state exists)
   bool wasStateRestored() const { return stateRestored; }
 
+  // True after editor has been opened at least once (prevents preset reset on
+  // reopen)
+  bool wasEditorOpened() const { return editorWasOpened; }
+  void markEditorOpened() { editorWasOpened = true; }
+
   // Preset helpers for granular saving/loading
   juce::ValueTree getVoiceState(int voiceIndex) const;
   void setVoiceState(int voiceIndex, const juce::ValueTree &state);
@@ -358,6 +363,7 @@ private:
   SIDEngine::ClockMode clockMode = SIDEngine::ClockMode::PAL;
 
   bool stateRestored = false;
+  bool editorWasOpened = false;
 
   // Pitch bend and mod wheel
   float pitchBendValue = 0.0f;     // -1.0 to +1.0 (normalized)
