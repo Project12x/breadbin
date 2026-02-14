@@ -1287,6 +1287,7 @@ void ModMatrixPanel::timerCallback() {
 ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   // Enable toggle
   enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  enableButton.setTooltip("Enable chord memory (mutually exclusive with arpeggiator)");
   addAndMakeVisible(enableButton);
   enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processor.apvts, "chordEnable", enableButton);
@@ -1294,12 +1295,13 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   // 4 slot radio buttons
   int currentSlot = static_cast<int>(processor.apvts.getRawParameterValue("chordSlot")->load());
   for (int s = 0; s < 4; ++s) {
-    slotButtons[s].setButtonText(juce::String(s + 1));
+    slotButtons[s].setButtonText("Slot " + juce::String(s + 1));
     slotButtons[s].setColour(juce::TextButton::buttonColourId,
                               s == currentSlot ? juce::Colours::cyan.withAlpha(0.3f)
                                                : juce::Colour(50, 50, 60));
     slotButtons[s].setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
     slotButtons[s].setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    slotButtons[s].setTooltip("Select chord slot " + juce::String(s + 1));
     slotButtons[s].onClick = [this, s]() {
       if (auto *param = processor.apvts.getParameter("chordSlot"))
         param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(s)));
@@ -1309,6 +1311,26 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
                                          : juce::Colour(50, 50, 60));
     };
     addAndMakeVisible(slotButtons[s]);
+
+    // Learn button per slot
+    learnButtons[s].setButtonText("Learn");
+    learnButtons[s].setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
+    learnButtons[s].setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+    learnButtons[s].setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    learnButtons[s].setTooltip("Play a chord, then click to capture intervals");
+    learnButtons[s].onClick = [this, s]() {
+      if (processor.isChordLearning() && processor.getChordLearnSlot() == s) {
+        // Finish learning — apply captured notes
+        auto notes = processor.getChordLearnNotes();
+        processor.stopChordLearn();
+        if (notes.size() >= 2)
+          applyLearnedChord(s, notes);
+      } else {
+        // Start learning for this slot
+        processor.startChordLearn(s);
+      }
+    };
+    addAndMakeVisible(learnButtons[s]);
   }
 
   // 4 rows x 5 interval sliders
@@ -1325,6 +1347,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
       slider.setRange(-24, 24, 1);
       slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::lightgrey);
       slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+      slider.setTextValueSuffix(" st");
+      slider.setTooltip("Semitone offset from root (0 = unused)");
       addAndMakeVisible(slider);
 
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
@@ -1334,7 +1358,44 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     }
   }
 
+  startTimer(33);
   setSize(panelWidth, panelHeight);
+}
+
+void ChordMemoryPanel::applyLearnedChord(int slot, const std::vector<int> &notes) {
+  // Sort notes ascending, root = lowest
+  auto sorted = notes;
+  std::sort(sorted.begin(), sorted.end());
+  int root = sorted[0];
+
+  // Compute intervals from root, write to APVTS
+  for (int i = 0; i < 5; ++i) {
+    int interval = 0;
+    if (i + 1 < static_cast<int>(sorted.size()))
+      interval = sorted[i + 1] - root;
+
+    auto id = "chord_s" + juce::String(slot) + "_i" + juce::String(i);
+    if (auto *param = processor.apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(interval)));
+  }
+}
+
+void ChordMemoryPanel::timerCallback() {
+  bool learning = processor.isChordLearning();
+  int learnSlot = processor.getChordLearnSlot();
+
+  for (int s = 0; s < 4; ++s) {
+    bool isLearning = learning && learnSlot == s;
+    learnButtons[s].setColour(juce::TextButton::buttonColourId,
+                               isLearning ? juce::Colours::gold.withAlpha(0.4f)
+                                          : juce::Colour(50, 50, 60));
+    if (isLearning) {
+      auto notes = processor.getChordLearnNotes();
+      learnButtons[s].setButtonText("Done (" + juce::String(notes.size()) + ")");
+    } else {
+      learnButtons[s].setButtonText("Learn");
+    }
+  }
 }
 
 void ChordMemoryPanel::paint(juce::Graphics &g) {
@@ -1342,34 +1403,53 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
 
   // Title with glow pill
   g.setColour(juce::Colours::cyan.withAlpha(0.15f));
-  g.fillRoundedRectangle(8.0f, 8.0f, 130.0f, 22.0f, 4.0f);
+  g.fillRoundedRectangle(8.0f, 4.0f, 140.0f, 22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
   g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
-  g.drawText("CHORD MEMORY", 14, 10, 120, 20, juce::Justification::centredLeft);
+  g.drawText("CHORD MEMORY", 14, 6, 130, 20, juce::Justification::centredLeft);
+
+  // Subtitle
+  g.setColour(juce::Colour(120, 120, 135));
+  g.setFont(juce::Font(juce::FontOptions(10.0f)));
+  g.drawText("Play a chord and click Learn to capture, or set intervals manually",
+             10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
+
+  // Divider below header
+  g.setColour(juce::Colour(55, 55, 65));
+  g.drawHorizontalLine(58, 8.0f, static_cast<float>(panelWidth - 8));
 
   // Dark recessed background behind slot rows
   g.setColour(juce::Colour(22, 22, 27));
-  g.fillRoundedRectangle(4.0f, 46.0f, static_cast<float>(panelWidth - 8),
-                         static_cast<float>(panelHeight - 50), 4.0f);
+  g.fillRoundedRectangle(4.0f, 60.0f, static_cast<float>(panelWidth - 8),
+                         static_cast<float>(panelHeight - 64), 4.0f);
 
   // Column headers
   g.setColour(juce::Colours::lightgrey);
   g.setFont(juce::Font(juce::FontOptions(11.0f)));
   for (int i = 0; i < 5; ++i)
-    g.drawText("Int " + juce::String(i + 1), 102 + i * 76, 35, 66, 14,
+    g.drawText("Note " + juce::String(i + 2), 140 + i * 72, 62, 66, 14,
                juce::Justification::centred);
+
+  // Sub-header
+  g.setColour(juce::Colour(100, 100, 110));
+  g.setFont(juce::Font(juce::FontOptions(9.0f)));
+  g.drawText("(semitones from root)", 140, 74, 360, 12,
+             juce::Justification::centredLeft);
 }
 
 void ChordMemoryPanel::resized() {
-  enableButton.setBounds(140, 8, 80, 24);
+  // Header row
+  enableButton.setBounds(155, 4, 80, 24);
   for (int s = 0; s < 4; ++s)
-    slotButtons[s].setBounds(240 + s * 55, 10, 44, 22);
+    slotButtons[s].setBounds(250 + s * 65, 4, 56, 22);
 
+  // Slot rows
   for (int s = 0; s < 4; ++s) {
-    int y = 50 + s * 58;
-    slots[s].label.setBounds(10, y + 12, 65, 20);
+    int y = 88 + s * 62;
+    slots[s].label.setBounds(10, y + 10, 50, 20);
+    learnButtons[s].setBounds(60, y + 10, 50, 20);
     for (int i = 0; i < 5; ++i)
-      slots[s].sliders[i].setBounds(82 + i * 76, y, 66, 52);
+      slots[s].sliders[i].setBounds(120 + i * 72, y, 66, 56);
   }
 }
 
@@ -1378,6 +1458,7 @@ void ChordMemoryPanel::resized() {
 WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   // Enable toggle
   enableButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  enableButton.setTooltip("Enable wavetable sequencer");
   addAndMakeVisible(enableButton);
   enableAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processor.apvts, "wtEnable", enableButton);
@@ -1392,26 +1473,30 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   numStepsSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   numStepsSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 14);
   numStepsSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+  numStepsSlider.setTooltip("Number of active steps (1-16)");
   addAndMakeVisible(numStepsSlider);
   stepsAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
       processor.apvts, "wtNumSteps", numStepsSlider);
 
-  // Rate slider
-  rateLabel.setText("Rate Hz", juce::dontSendNotification);
+  // Step rate slider
+  rateLabel.setText("Step Rate", juce::dontSendNotification);
   rateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
   rateLabel.setJustificationType(juce::Justification::centredRight);
   addAndMakeVisible(rateLabel);
 
   rateSlider.setRange(1.0, 200.0, 1.0);
   rateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 14);
+  rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
   rateSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+  rateSlider.setTextValueSuffix(" Hz");
+  rateSlider.setTooltip("How fast the sequencer advances (steps per second)");
   addAndMakeVisible(rateSlider);
   rateAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
       processor.apvts, "wtRate", rateSlider);
 
   // Loop toggle
   loopButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  loopButton.setTooltip("Loop sequence or play once and stop");
   addAndMakeVisible(loopButton);
   loopAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processor.apvts, "wtLoop", loopButton);
@@ -1422,30 +1507,34 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
     auto &step = steps[i];
 
     // Waveform ComboBox
-    step.waveBox.addItem("T", 1);  // Triangle
-    step.waveBox.addItem("S", 2);  // Sawtooth
-    step.waveBox.addItem("P", 3);  // Pulse
-    step.waveBox.addItem("N", 4);  // Noise
+    step.waveBox.addItem("Tri", 1);
+    step.waveBox.addItem("Saw", 2);
+    step.waveBox.addItem("Pls", 3);
+    step.waveBox.addItem("Noi", 4);
+    step.waveBox.setTooltip("Waveform: Triangle, Sawtooth, Pulse, or Noise");
     addAndMakeVisible(step.waveBox);
     step.waveAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         processor.apvts, prefix + "wave", step.waveBox);
 
-    // Pitch slider
+    // Pitch slider (semitones relative to note)
     step.pitchSlider.setRange(-24.0, 24.0, 1.0);
     step.pitchSlider.setSliderStyle(juce::Slider::LinearVertical);
-    step.pitchSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 12);
+    step.pitchSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
     step.pitchSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
     step.pitchSlider.setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
+    step.pitchSlider.setTextValueSuffix(" st");
+    step.pitchSlider.setTooltip("Pitch offset in semitones (-24 to +24)");
     addAndMakeVisible(step.pitchSlider);
     step.pitchAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.apvts, prefix + "pitch", step.pitchSlider);
 
-    // PW slider
+    // Pulse Width slider (SID register 0-4095, 50% = 2048)
     step.pwSlider.setRange(0.0, 4095.0, 1.0);
     step.pwSlider.setSliderStyle(juce::Slider::LinearVertical);
-    step.pwSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 30, 12);
+    step.pwSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
     step.pwSlider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
     step.pwSlider.setColour(juce::Slider::thumbColourId, juce::Colours::orange);
+    step.pwSlider.setTooltip("Pulse Width (0-4095, 2048 = 50% duty cycle)");
     addAndMakeVisible(step.pwSlider);
     step.pwAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.apvts, prefix + "pw", step.pwSlider);
@@ -1467,12 +1556,33 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
              juce::Justification::centred);
 
-  // Row labels
+  // Subtitle — brief explanation on the right side of header row
+  g.setColour(juce::Colour(120, 120, 135));
+  g.setFont(10.0f);
+  g.drawText("Each step sets waveform, pitch offset, and pulse width for all voices",
+             520, 28, 290, 14, juce::Justification::centredLeft);
+
+  // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
   g.setFont(11.0f);
-  g.drawText("Wave", 4, 64, 48, 16, juce::Justification::centredRight);
-  g.drawText("Pitch", 4, 140, 48, 16, juce::Justification::centredRight);
-  g.drawText("PW", 4, 260, 48, 16, juce::Justification::centredRight);
+  g.drawText("Waveform", 2, 62, 50, 14, juce::Justification::centredRight);
+  g.drawText("Pitch", 2, 92, 50, 14, juce::Justification::centredRight);
+  g.setFont(9.0f);
+  g.setColour(juce::Colour(140, 140, 150));
+  g.drawText("(semitones)", 2, 104, 50, 12, juce::Justification::centredRight);
+  g.setFont(11.0f);
+  g.setColour(juce::Colours::lightgrey);
+  g.drawText("Pulse", 2, 216, 50, 14, juce::Justification::centredRight);
+  g.drawText("Width", 2, 228, 50, 14, juce::Justification::centredRight);
+  g.setFont(9.0f);
+  g.setColour(juce::Colour(140, 140, 150));
+  g.drawText("(0-4095)", 2, 242, 50, 12, juce::Justification::centredRight);
+
+  // Horizontal dividers between sections
+  g.setColour(juce::Colour(55, 55, 65));
+  g.drawHorizontalLine(43, 10.0f, static_cast<float>(panelWidth - 10));  // below header
+  g.drawHorizontalLine(84, 55.0f, static_cast<float>(panelWidth - 10));  // below waveform
+  g.drawHorizontalLine(208, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
 
   // Step number headers and column glow
   int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
@@ -1516,9 +1626,9 @@ void WavetablePanel::resized() {
   enableButton.setBounds(10, 24, 65, 20);
   stepsLabel.setBounds(80, 24, 40, 18);
   numStepsSlider.setBounds(122, 22, 100, 34);
-  rateLabel.setBounds(230, 24, 50, 18);
-  rateSlider.setBounds(282, 22, 150, 34);
-  loopButton.setBounds(445, 24, 55, 20);
+  rateLabel.setBounds(230, 24, 60, 18);
+  rateSlider.setBounds(292, 22, 150, 34);
+  loopButton.setBounds(455, 24, 55, 20);
 
   // Per-step columns — wider
   const int leftMargin = 55;
@@ -1555,94 +1665,98 @@ void WavetablePanel::timerCallback() {
 
 void BreadbinEditor::showChordMemoryPopup() {
   if (chordMemoryWindow != nullptr) {
-    chordMemoryWindow->toFront(true);
-    return;
+    if (!chordMemoryWindow->isVisible()) {
+      chordMemoryWindow.deleteAndZero();
+    } else {
+      chordMemoryWindow->toFront(true);
+      return;
+    }
   }
 
   auto *panel = new ChordMemoryPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  juce::DialogWindow::LaunchOptions opts;
-  opts.content.setOwned(panel);
-  opts.dialogTitle = "Chord Memory";
-  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
-  opts.escapeKeyTriggersCloseButton = true;
-  opts.useNativeTitleBar = true;
-  opts.resizable = false;
-  opts.componentToCentreAround = this;
-
-  chordMemoryWindow = opts.launchAsync();
-  if (chordMemoryWindow != nullptr)
-    chordMemoryWindow->setLookAndFeel(&customLookAndFeel);
+  auto *window = new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  chordMemoryWindow = window;
 }
 
 void BreadbinEditor::showSidPlayerPopup() {
   if (sidPlayerWindow != nullptr) {
-    sidPlayerWindow->toFront(true);
-    return;
+    if (!sidPlayerWindow->isVisible()) {
+      sidPlayerWindow.deleteAndZero();
+    } else {
+      sidPlayerWindow->toFront(true);
+      return;
+    }
   }
 
   auto *panel = new SidPlayerPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  juce::DialogWindow::LaunchOptions opts;
-  opts.content.setOwned(panel);
-  opts.dialogTitle = "SID File Player";
-  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
-  opts.escapeKeyTriggersCloseButton = true;
-  opts.useNativeTitleBar = true;
-  opts.resizable = false;
-  opts.componentToCentreAround = this;
-
-  sidPlayerWindow = opts.launchAsync();
-  if (sidPlayerWindow != nullptr)
-    sidPlayerWindow->setLookAndFeel(&customLookAndFeel);
+  auto *window = new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  sidPlayerWindow = window;
 }
 
 void BreadbinEditor::showModMatrixPopup() {
   if (modMatrixWindow != nullptr) {
-    modMatrixWindow->toFront(true);
-    return;
+    if (!modMatrixWindow->isVisible()) {
+      modMatrixWindow.deleteAndZero();
+    } else {
+      modMatrixWindow->toFront(true);
+      return;
+    }
   }
 
   auto *panel = new ModMatrixPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  juce::DialogWindow::LaunchOptions opts;
-  opts.content.setOwned(panel);
-  opts.dialogTitle = "Modulation";
-  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
-  opts.escapeKeyTriggersCloseButton = true;
-  opts.useNativeTitleBar = true;
-  opts.resizable = false;
-  opts.componentToCentreAround = this;
-
-  modMatrixWindow = opts.launchAsync();
-  if (modMatrixWindow != nullptr)
-    modMatrixWindow->setLookAndFeel(&customLookAndFeel);
+  auto *window = new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  modMatrixWindow = window;
 }
 
 void BreadbinEditor::showWavetablePopup() {
   if (wavetableWindow != nullptr) {
-    wavetableWindow->toFront(true);
-    return;
+    if (!wavetableWindow->isVisible()) {
+      wavetableWindow.deleteAndZero();
+    } else {
+      wavetableWindow->toFront(true);
+      return;
+    }
   }
 
   auto *panel = new WavetablePanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
 
-  juce::DialogWindow::LaunchOptions opts;
-  opts.content.setOwned(panel);
-  opts.dialogTitle = "Wavetable Step Sequencer";
-  opts.dialogBackgroundColour = juce::Colour(30, 30, 35);
-  opts.escapeKeyTriggersCloseButton = true;
-  opts.useNativeTitleBar = true;
-  opts.resizable = false;
-  opts.componentToCentreAround = this;
-
-  wavetableWindow = opts.launchAsync();
-  if (wavetableWindow != nullptr)
-    wavetableWindow->setLookAndFeel(&customLookAndFeel);
+  auto *window = new NonModalPopup("Wavetable Step Sequencer", juce::Colour(30, 30, 35), true);
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  wavetableWindow = window;
 }
 
 void BreadbinEditor::setupControls() {

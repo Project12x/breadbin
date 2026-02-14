@@ -24,9 +24,8 @@ public:
                         float rotaryEndAngle, juce::Slider &) override;
 
   void drawLinearSlider(juce::Graphics &, int x, int y, int width, int height,
-                        float sliderPos, float minSliderPos,
-                        float maxSliderPos, juce::Slider::SliderStyle,
-                        juce::Slider &) override;
+                        float sliderPos, float minSliderPos, float maxSliderPos,
+                        juce::Slider::SliderStyle, juce::Slider &) override;
 
   void drawToggleButton(juce::Graphics &, juce::ToggleButton &,
                         bool shouldDrawButtonAsHighlighted,
@@ -59,6 +58,13 @@ public:
 
 private:
   juce::Font proFont;
+};
+
+// Non-modal popup window that hides on close (instead of staying allocated)
+class NonModalPopup : public juce::DialogWindow {
+public:
+  using juce::DialogWindow::DialogWindow;
+  void closeButtonPressed() override { setVisible(false); }
 };
 
 // Custom Slider class for MIDI Learning
@@ -149,6 +155,73 @@ private:
   BreadbinProcessor::ControlParam controlParam;
 };
 
+// Custom ToggleButton class for MIDI Learning
+class MappableToggle : public juce::ToggleButton {
+public:
+  MappableToggle(const juce::String &name, BreadbinProcessor &p,
+                 BreadbinProcessor::ControlParam param)
+      : juce::ToggleButton(name), processor(p), controlParam(param) {}
+
+  void mouseDown(const juce::MouseEvent &e) override {
+    if (e.mods.isRightButtonDown()) {
+      juce::PopupMenu m;
+      m.addItem("MIDI Learn",
+                [this] { processor.startLearning(controlParam); });
+      m.addItem("Unlearn",
+                [this] { processor.clearMIDIMappingForParam(controlParam); });
+      m.showMenuAsync(juce::PopupMenu::Options{});
+    } else {
+      juce::ToggleButton::mouseDown(e);
+    }
+  }
+
+  void paint(juce::Graphics &g) override {
+    juce::ToggleButton::paint(g);
+    if (processor.isLearning() &&
+        processor.getLearningParam() == controlParam) {
+      g.setColour(juce::Colours::gold.withAlpha(0.4f));
+      g.drawRect(getLocalBounds(), 2);
+    }
+  }
+
+private:
+  BreadbinProcessor &processor;
+  BreadbinProcessor::ControlParam controlParam;
+};
+
+// Custom ComboBox class for MIDI Learning
+class MappableComboBox : public juce::ComboBox {
+public:
+  MappableComboBox(BreadbinProcessor &p, BreadbinProcessor::ControlParam param)
+      : juce::ComboBox(), processor(p), controlParam(param) {}
+
+  void mouseDown(const juce::MouseEvent &e) override {
+    if (e.mods.isRightButtonDown()) {
+      juce::PopupMenu m;
+      m.addItem("MIDI Learn",
+                [this] { processor.startLearning(controlParam); });
+      m.addItem("Unlearn",
+                [this] { processor.clearMIDIMappingForParam(controlParam); });
+      m.showMenuAsync(juce::PopupMenu::Options{});
+    } else {
+      juce::ComboBox::mouseDown(e);
+    }
+  }
+
+  void paint(juce::Graphics &g) override {
+    juce::ComboBox::paint(g);
+    if (processor.isLearning() &&
+        processor.getLearningParam() == controlParam) {
+      g.setColour(juce::Colours::gold.withAlpha(0.4f));
+      g.drawRect(getLocalBounds(), 2);
+    }
+  }
+
+private:
+  BreadbinProcessor &processor;
+  BreadbinProcessor::ControlParam controlParam;
+};
+
 // Lightweight modulation indicator (thin vertical bar next to a slider)
 class ModulationMeter : public juce::Component {
 public:
@@ -178,9 +251,8 @@ public:
     float modY = bounds.getBottom() - modNorm * bounds.getHeight();
     float top = std::min(baseY, modY);
     float bottom = std::max(baseY, modY);
-    g.setColour(modNorm > baseNorm
-                    ? juce::Colours::cyan.withAlpha(0.6f)
-                    : juce::Colours::orange.withAlpha(0.6f));
+    g.setColour(modNorm > baseNorm ? juce::Colours::cyan.withAlpha(0.6f)
+                                   : juce::Colours::orange.withAlpha(0.6f));
     g.fillRect(bounds.getX() + 1.0f, top, bounds.getWidth() - 2.0f,
                bottom - top);
   }
@@ -194,7 +266,10 @@ private:
 class ModMatrixPanel : public juce::Component, private juce::Timer {
 public:
   ModMatrixPanel(BreadbinProcessor &proc);
-  ~ModMatrixPanel() override { stopTimer(); setLookAndFeel(nullptr); }
+  ~ModMatrixPanel() override {
+    stopTimer();
+    setLookAndFeel(nullptr);
+  }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
@@ -205,33 +280,52 @@ private:
   BreadbinProcessor &processor;
 
   // ========== LFO1 ==========
-  juce::ToggleButton lfoEnableButton{"LFO"};
-  juce::ComboBox lfoWaveformSelector;
+  MappableToggle lfoEnableButton{"LFO", processor,
+                                 BreadbinProcessor::ControlParam::LfoEnable};
+  MappableComboBox lfoWaveformSelector{
+      processor, BreadbinProcessor::ControlParam::LfoWave};
   std::unique_ptr<MappableSlider> lfoRateSlider;
   juce::Label lfoRateLabel;
-  std::unique_ptr<MappableSlider> lfoDepthFilterSlider, lfoDepthPWSlider, lfoDepthPitchSlider;
+  std::unique_ptr<MappableSlider> lfoDepthFilterSlider, lfoDepthPWSlider,
+      lfoDepthPitchSlider;
   juce::Label lfoDepthFilterLabel, lfoDepthPWLabel, lfoDepthPitchLabel;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lfoEnableAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfoWaveAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoRateAttach, lfoDepthFiltAttach, lfoDepthPWAttach, lfoDepthPitchAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      lfoEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      lfoWaveAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfoRateAttach, lfoDepthFiltAttach, lfoDepthPWAttach, lfoDepthPitchAttach;
 
   // ========== LFO2 ==========
-  juce::ToggleButton lfo2EnableButton{"LFO2"};
-  juce::ComboBox lfo2WaveformSelector;
+  MappableToggle lfo2EnableButton{"LFO2", processor,
+                                  BreadbinProcessor::ControlParam::Lfo2Enable};
+  MappableComboBox lfo2WaveformSelector{
+      processor, BreadbinProcessor::ControlParam::Lfo2Wave};
   std::unique_ptr<MappableSlider> lfo2RateSlider;
   juce::Label lfo2RateLabel;
-  std::unique_ptr<MappableSlider> lfo2DepthFilterSlider, lfo2DepthPWSlider, lfo2DepthPitchSlider;
+  std::unique_ptr<MappableSlider> lfo2DepthFilterSlider, lfo2DepthPWSlider,
+      lfo2DepthPitchSlider;
   juce::Label lfo2DepthFilterLabel, lfo2DepthPWLabel, lfo2DepthPitchLabel;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lfo2EnableAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfo2WaveAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfo2RateAttach, lfo2DepthFiltAttach, lfo2DepthPWAttach, lfo2DepthPitchAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      lfo2EnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      lfo2WaveAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      lfo2RateAttach, lfo2DepthFiltAttach, lfo2DepthPWAttach,
+      lfo2DepthPitchAttach;
 
   // ========== PWM SWEEP ==========
-  juce::ToggleButton pwmSweepEnableButton{"PWM"};
-  juce::Slider pwmSweepRateSlider, pwmSweepDepthSlider;
+  MappableToggle pwmSweepEnableButton{
+      "PWM", processor, BreadbinProcessor::ControlParam::PwmSweepEnable};
+  MappableSlider pwmSweepRateSlider{
+      processor, BreadbinProcessor::ControlParam::PwmSweepRate};
+  MappableSlider pwmSweepDepthSlider{
+      processor, BreadbinProcessor::ControlParam::PwmSweepDepth};
   juce::Label pwmSweepRateLabel, pwmSweepDepthLabel;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pwmSweepEnableAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> pwmSweepRateAttach, pwmSweepDepthAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      pwmSweepEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      pwmSweepRateAttach, pwmSweepDepthAttach;
 
   // ========== PITCH BEND RANGE ==========
   juce::ComboBox pitchBendRangeSelector;
@@ -253,38 +347,52 @@ private:
 };
 
 // Chord Memory popup panel
-class ChordMemoryPanel : public juce::Component {
+class ChordMemoryPanel : public juce::Component, private juce::Timer {
 public:
   ChordMemoryPanel(BreadbinProcessor &proc);
-  ~ChordMemoryPanel() override { setLookAndFeel(nullptr); }
+  ~ChordMemoryPanel() override {
+    stopTimer();
+    setLookAndFeel(nullptr);
+  }
   void resized() override;
   void paint(juce::Graphics &g) override;
-  static constexpr int panelWidth = 480;
-  static constexpr int panelHeight = 290;
+  void timerCallback() override;
+  static constexpr int panelWidth = 520;
+  static constexpr int panelHeight = 340;
 
 private:
   BreadbinProcessor &processor;
   juce::ToggleButton enableButton{"Enable"};
   std::array<juce::TextButton, 4> slotButtons;
+  std::array<juce::TextButton, 4> learnButtons;
   struct SlotRow {
     juce::Label label;
     std::array<juce::Slider, 5> sliders;
-    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, 5> attachments;
+    std::array<
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,
+        5>
+        attachments;
   };
   std::array<SlotRow, 4> slots;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      enableAttach;
+  void applyLearnedChord(int slot, const std::vector<int> &notes);
 };
 
 // Wavetable step editor popup
 class WavetablePanel : public juce::Component, private juce::Timer {
 public:
   WavetablePanel(BreadbinProcessor &proc);
-  ~WavetablePanel() override { stopTimer(); setLookAndFeel(nullptr); }
+  ~WavetablePanel() override {
+    stopTimer();
+    setLookAndFeel(nullptr);
+  }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
   static constexpr int panelWidth = 820;
   static constexpr int panelHeight = 380;
+
 private:
   BreadbinProcessor &processor;
 
@@ -293,16 +401,20 @@ private:
   juce::Slider numStepsSlider, rateSlider;
   juce::ToggleButton loopButton{"Loop"};
   juce::Label stepsLabel, rateLabel;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttach, loopAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> stepsAttach, rateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      enableAttach, loopAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      stepsAttach, rateAttach;
 
   // Per-step controls (16 steps)
   struct StepColumn {
     juce::ComboBox waveBox;
     juce::Slider pitchSlider;
     juce::Slider pwSlider;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> waveAttach;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> pitchAttach, pwAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        waveAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+        pitchAttach, pwAttach;
   };
   std::array<StepColumn, 16> steps;
 
@@ -313,7 +425,10 @@ private:
 class SidPlayerPanel : public juce::Component, private juce::Timer {
 public:
   SidPlayerPanel(BreadbinProcessor &proc);
-  ~SidPlayerPanel() override { stopTimer(); setLookAndFeel(nullptr); }
+  ~SidPlayerPanel() override {
+    stopTimer();
+    setLookAndFeel(nullptr);
+  }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
@@ -371,7 +486,8 @@ private:
 
   // Title and global controls
   juce::Label titleLabel;
-  juce::ComboBox dualModeSelector;
+  MappableComboBox dualModeSelector{processor,
+                                    BreadbinProcessor::ControlParam::DualMode};
   juce::Label modeLabel;
   juce::ComboBox globalPresetSelector; // Factory global presets
   juce::Label globalPresetLabel;
@@ -420,7 +536,8 @@ private:
   MappableSlider leftDetuneSlider{processor,
                                   BreadbinProcessor::ControlParam::LeftDetune};
   juce::Label leftDetuneLabel;
-  juce::Slider leftPanSlider;
+  MappableSlider leftPanSlider{processor,
+                               BreadbinProcessor::ControlParam::LeftPan};
   juce::Label leftPanLabel;
 
   // ========== RIGHT SID SECTION ==========
@@ -442,7 +559,8 @@ private:
   MappableSlider rightDetuneSlider{
       processor, BreadbinProcessor::ControlParam::RightDetune};
   juce::Label rightDetuneLabel;
-  juce::Slider rightPanSlider;
+  MappableSlider rightPanSlider{processor,
+                                BreadbinProcessor::ControlParam::RightPan};
   juce::Label rightPanLabel;
 
   // ========== VOICE EDITOR (edits selected voice) ==========
@@ -461,16 +579,22 @@ private:
   // panSlider removed (per-SID pan now)
   juce::Label waveformLabel, pwLabel;
   juce::Label attackLabel, decayLabel, sustainLabel, releaseLabel;
-  juce::ToggleButton ringModButton{"Ring"};
-  juce::ToggleButton syncButton{"Sync"};
-  juce::ToggleButton voiceFilterButton{"Flt"};
+  MappableToggle ringModButton{"Ring", processor,
+                               BreadbinProcessor::ControlParam::VoiceRingMod};
+  MappableToggle syncButton{"Sync", processor,
+                            BreadbinProcessor::ControlParam::VoiceSync};
+  MappableToggle voiceFilterButton{
+      "Flt", processor, BreadbinProcessor::ControlParam::VoiceFilterEnable};
 
   // ========== ARPEGGIATOR ==========
-  juce::ToggleButton arpEnableButton{"Arp"};
-  juce::ComboBox arpPatternSelector;
+  MappableToggle arpEnableButton{"Arp", processor,
+                                 BreadbinProcessor::ControlParam::ArpEnable};
+  MappableComboBox arpPatternSelector{
+      processor, BreadbinProcessor::ControlParam::ArpPattern};
   MappableSlider arpRateSlider{processor,
                                BreadbinProcessor::ControlParam::ArpRate};
-  juce::ComboBox arpOctaveSelector;
+  MappableComboBox arpOctaveSelector{
+      processor, BreadbinProcessor::ControlParam::ArpOctaves};
   juce::Label arpRateLabel, arpPatternLabel, arpOctaveLabel;
 
   // ========== GLIDE/PORTAMENTO ==========
@@ -479,13 +603,15 @@ private:
   juce::Label glideTimeLabel;
 
   // ========== EXTERNAL AUDIO INPUT ==========
-  juce::ToggleButton extInputEnableButton{"Ext In"};
+  MappableToggle extInputEnableButton{
+      "Ext In", processor, BreadbinProcessor::ControlParam::ExtInputEnable};
   MappableSlider extInputLevelSlider{
       processor, BreadbinProcessor::ControlParam::ExtInputLevel};
   juce::Label extInputLabel;
 
   // ========== CLOCK MODE (PAL/NTSC) ==========
-  juce::ComboBox clockModeSelector;
+  MappableComboBox clockModeSelector{
+      processor, BreadbinProcessor::ControlParam::ClockMode};
   juce::Label clockModeLabel;
 
   // ========== APVTS ATTACHMENTS ==========
@@ -553,8 +679,14 @@ private:
   static constexpr int height = 743;
 
   // ========== FX: CHORUS ==========
-  juce::ToggleButton chorusEnableButton{"Chorus"};
-  juce::Slider chorusRateSlider, chorusDepthSlider, chorusMixSlider;
+  MappableToggle chorusEnableButton{
+      "Chorus", processor, BreadbinProcessor::ControlParam::ChorusEnable};
+  MappableSlider chorusRateSlider{processor,
+                                  BreadbinProcessor::ControlParam::ChorusRate};
+  MappableSlider chorusDepthSlider{
+      processor, BreadbinProcessor::ControlParam::ChorusDepth};
+  MappableSlider chorusMixSlider{processor,
+                                 BreadbinProcessor::ControlParam::ChorusMix};
   juce::Label chorusRateLabel, chorusDepthLabel, chorusMixLabel;
 
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -563,9 +695,16 @@ private:
       chorusRateAttach, chorusDepthAttach, chorusMixAttach;
 
   // ========== FX: DELAY ==========
-  juce::ToggleButton delayEnableButton{"Delay"};
-  juce::Slider delayTimeLSlider, delayTimeRSlider;
-  juce::Slider delayFeedbackSlider, delayMixSlider;
+  MappableToggle delayEnableButton{
+      "Delay", processor, BreadbinProcessor::ControlParam::DelayEnable};
+  MappableSlider delayTimeLSlider{processor,
+                                  BreadbinProcessor::ControlParam::DelayTimeL};
+  MappableSlider delayTimeRSlider{processor,
+                                  BreadbinProcessor::ControlParam::DelayTimeR};
+  MappableSlider delayFeedbackSlider{
+      processor, BreadbinProcessor::ControlParam::DelayFeedback};
+  MappableSlider delayMixSlider{processor,
+                                BreadbinProcessor::ControlParam::DelayMix};
   juce::Label delayTimeLLabel, delayTimeRLabel, delayFBLabel, delayMixLabel;
 
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -579,19 +718,28 @@ private:
   void showWavetablePopup();
 
   // ========== INLINE ENABLE TOGGLES (above popup buttons) ==========
-  juce::ToggleButton wtEnableToggle{"WT"};
-  juce::ToggleButton lfo1EnableToggle{"LFO1"};
-  juce::ToggleButton lfo2EnableToggle{"LFO2"};
+  MappableToggle wtEnableToggle{"WT", processor,
+                                BreadbinProcessor::ControlParam::WtEnable};
+  MappableToggle lfo1EnableToggle{"LFO1", processor,
+                                  BreadbinProcessor::ControlParam::LfoEnable};
+  MappableToggle lfo2EnableToggle{"LFO2", processor,
+                                  BreadbinProcessor::ControlParam::Lfo2Enable};
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       wtEnableToggleAttach, lfo1EnableToggleAttach, lfo2EnableToggleAttach;
 
   // ========== FILTER ENVELOPE ==========
-  juce::ToggleButton filterEnvEnableButton{"Filt Env"};
-  juce::Slider filterEnvAttackSlider;
-  juce::Slider filterEnvDecaySlider;
-  juce::Slider filterEnvSustainSlider;
-  juce::Slider filterEnvReleaseSlider;
-  juce::Slider filterEnvAmountSlider;
+  MappableToggle filterEnvEnableButton{
+      "Filt Env", processor, BreadbinProcessor::ControlParam::FilterEnvEnable};
+  MappableSlider filterEnvAttackSlider{
+      processor, BreadbinProcessor::ControlParam::FilterEnvAttack};
+  MappableSlider filterEnvDecaySlider{
+      processor, BreadbinProcessor::ControlParam::FilterEnvDecay};
+  MappableSlider filterEnvSustainSlider{
+      processor, BreadbinProcessor::ControlParam::FilterEnvSustain};
+  MappableSlider filterEnvReleaseSlider{
+      processor, BreadbinProcessor::ControlParam::FilterEnvRelease};
+  MappableSlider filterEnvAmountSlider{
+      processor, BreadbinProcessor::ControlParam::FilterEnvAmount};
   juce::Label filterEnvAttackLabel, filterEnvDecayLabel;
   juce::Label filterEnvSustainLabel, filterEnvReleaseLabel;
   juce::Label filterEnvAmountLabel;
@@ -632,7 +780,8 @@ private:
 
   // ========== SID PLAYER REGISTER OVERLAY ==========
   juce::Label sidOverlayWave, sidOverlayPW;
-  juce::Label sidOverlayAttack, sidOverlayDecay, sidOverlaySustain, sidOverlayRelease;
+  juce::Label sidOverlayAttack, sidOverlayDecay, sidOverlaySustain,
+      sidOverlayRelease;
   juce::Label sidOverlayCutoff, sidOverlayRes;
 
   // ========== PRESET DIRTY INDICATOR ==========

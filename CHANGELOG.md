@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
+  Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
+  widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep
+  controls, toggle buttons (arp/chorus/delay/filter env/ext in/LFO/wavetable/ring mod/sync/filter),
+  and combo boxes (dual mode/clock mode/arp pattern/arp octaves/LFO waveforms) to their Mappable
+  variants across both the main editor and ModMatrixPanel popup.
+
 - **Pitch bend range APVTS**: `pitchBendRange` AudioParameterInt (2-12, default 2) with
   processBlock sync, CC mapping writes APVTS, global preset reset. Replaces direct
   `setPitchBendRange()` calls with single source of truth.

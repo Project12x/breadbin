@@ -59,8 +59,10 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   sidResampleRatio = SidFilePlayer::ENGINE_SAMPLE_RATE / sampleRate;
   sidResamplerL.reset();
   sidResamplerR.reset();
-  // Pre-allocate resampler input buffers (enough for one block at engine rate + margin)
-  size_t resampleBufSize = static_cast<size_t>(samplesPerBlock * sidResampleRatio) + 64;
+  // Pre-allocate resampler input buffers (enough for one block at engine rate +
+  // margin)
+  size_t resampleBufSize =
+      static_cast<size_t>(samplesPerBlock * sidResampleRatio) + 64;
   sidResampleBufL.resize(resampleBufSize, 0.0f);
   sidResampleBufR.resize(resampleBufSize, 0.0f);
 
@@ -116,7 +118,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Sync LFO2 from APVTS
   lfo2.enabled = lfo2EnablePtr->load() > 0.5f;
-  lfo2.waveform = static_cast<LFOWaveform>(static_cast<int>(lfo2WavePtr->load()));
+  lfo2.waveform =
+      static_cast<LFOWaveform>(static_cast<int>(lfo2WavePtr->load()));
   lfo2.rate = lfo2RatePtr->load();
   lfo2.depthFilter = lfo2DepthFiltPtr->load();
   lfo2.depthPulseWidth = lfo2DepthPWPtr->load();
@@ -129,7 +132,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   wavetable.loop = wtLoopPtr->load() > 0.5f;
   for (int i = 0; i < 16; ++i) {
     wavetable.steps[i].waveform = static_cast<int>(wtStepPtrs[i].wave->load());
-    wavetable.steps[i].pitchOffset = static_cast<int>(wtStepPtrs[i].pitch->load());
+    wavetable.steps[i].pitchOffset =
+        static_cast<int>(wtStepPtrs[i].pitch->load());
     wavetable.steps[i].pulseWidth = static_cast<int>(wtStepPtrs[i].pw->load());
   }
 
@@ -141,10 +145,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Sync Chord Memory from APVTS
   chordMemory.enabled = chordEnablePtr->load() > 0.5f;
-  chordMemory.activeSlot = juce::jlimit(0, 3, static_cast<int>(chordSlotPtr->load()));
+  chordMemory.activeSlot =
+      juce::jlimit(0, 3, static_cast<int>(chordSlotPtr->load()));
   for (int s = 0; s < 4; ++s)
     for (int i = 0; i < 5; ++i)
-      chordMemory.intervals[s][i] = static_cast<int>(chordSlotPtrs[s].intervals[i]->load());
+      chordMemory.intervals[s][i] =
+          static_cast<int>(chordSlotPtrs[s].intervals[i]->load());
 
   // Check for discrete changes (handled by SIDEngine/Processor comparisons
   // internally)
@@ -231,7 +237,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // PWM Sweep phase (triangle oscillator, block-rate)
   if (pwmSweepEnablePtr->load() > 0.5f) {
     float sweepRate = pwmSweepRatePtr->load();
-    pwmSweepPhase += (static_cast<double>(sweepRate) * numSamples) / hostSampleRate;
+    pwmSweepPhase +=
+        (static_cast<double>(sweepRate) * numSamples) / hostSampleRate;
     pwmSweepPhase -= std::floor(pwmSweepPhase);
     float p = static_cast<float>(pwmSweepPhase);
     pwmSweepCurrentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
@@ -313,7 +320,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // === SID FILE PLAYER MIX (with resampling from 44100 to host rate) ===
   if (sidFilePlayer->isPlaying()) {
-    // How many samples we need from the SID engine to produce numSamples at host rate
+    // How many samples we need from the SID engine to produce numSamples at
+    // host rate
     int sourceSamples = static_cast<int>(numSamples * sidResampleRatio) + 4;
     // Ensure pre-allocated buffers are large enough
     if (static_cast<size_t>(sourceSamples) > sidResampleBufL.size()) {
@@ -321,7 +329,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       sidResampleBufR.resize(static_cast<size_t>(sourceSamples) + 64, 0.0f);
     }
     // Read from ring buffer at engine rate
-    sidFilePlayer->readSamples(sidResampleBufL.data(), sidResampleBufR.data(), sourceSamples);
+    sidFilePlayer->readSamples(sidResampleBufL.data(), sidResampleBufR.data(),
+                               sourceSamples);
 
     if (std::abs(sidResampleRatio - 1.0) < 0.001) {
       // No resampling needed (host rate == engine rate)
@@ -331,14 +340,17 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           rightChannel[i] += sidResampleBufR[static_cast<size_t>(i)];
       }
     } else {
-      // Resample from ENGINE_SAMPLE_RATE to host rate using Lagrange interpolation
-      // Stack-allocate output buffers (typical block size <= 4096)
+      // Resample from ENGINE_SAMPLE_RATE to host rate using Lagrange
+      // interpolation Stack-allocate output buffers (typical block size <=
+      // 4096)
       float resampledL[4096];
       float resampledR[4096];
       int outSamples = std::min(numSamples, 4096);
 
-      sidResamplerL.process(sidResampleRatio, sidResampleBufL.data(), resampledL, outSamples);
-      sidResamplerR.process(sidResampleRatio, sidResampleBufR.data(), resampledR, outSamples);
+      sidResamplerL.process(sidResampleRatio, sidResampleBufL.data(),
+                            resampledL, outSamples);
+      sidResamplerR.process(sidResampleRatio, sidResampleBufR.data(),
+                            resampledR, outSamples);
 
       for (int i = 0; i < outSamples; ++i) {
         leftChannel[i] += resampledL[i];
@@ -421,6 +433,14 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     const int note = msg.getNoteNumber();
     lastVelocity = msg.getVelocity();
     const int channel = msg.getChannel();
+
+    // Chord learn mode: capture notes without triggering
+    if (chordLearnActive) {
+      std::lock_guard<std::mutex> lock(chordLearnMutex);
+      if (std::find(chordLearnNotes.begin(), chordLearnNotes.end(), note) ==
+          chordLearnNotes.end())
+        chordLearnNotes.push_back(note);
+    }
 
     // Track for arpeggiator
     if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note) ==
@@ -730,7 +750,8 @@ void BreadbinProcessor::processFilterEnvelope(int numSamples) {
   }
   filterEnv.gateWasOn = gateOn;
 
-  float dt = static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
+  float dt =
+      static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
   float attack = filterEnvAttackPtr->load();
   float decay = filterEnvDecayPtr->load();
   float sustain = filterEnvSustainPtr->load();
@@ -807,8 +828,7 @@ void BreadbinProcessor::applyFilterModulation() {
   }
 
   // Apply combined modulation
-  int leftCutoff =
-      juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffsetLeft);
+  int leftCutoff = juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffsetLeft);
   int rightCutoff =
       juce::jlimit(0, 2047, baseFilterCutoffRight + modOffsetRight);
   lastAppliedCutoffLeft = leftCutoff;
@@ -1074,12 +1094,13 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
   }
 }
 
-void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote, int velocity) {
+void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote,
+                                     int velocity) {
   const int base = isLeftSID ? 0 : 3;
   const int slot = chordMemory.activeSlot;
 
   // Build chord notes: root + up to 2 non-zero intervals (3 voices per SID)
-  int notes[3] = { rootNote, -1, -1 };
+  int notes[3] = {rootNote, -1, -1};
   int count = 1;
   for (int i = 0; i < 5 && count < 3; ++i) {
     int interval = chordMemory.intervals[slot][i];
@@ -1099,7 +1120,26 @@ void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote, int velocity)
 void BreadbinProcessor::releaseChord(bool isLeftSID) {
   const int base = isLeftSID ? 0 : 3;
   for (int v = base; v < base + 3; ++v)
-    if (voices[v].active) releaseNote(v);
+    if (voices[v].active)
+      releaseNote(v);
+}
+
+void BreadbinProcessor::startChordLearn(int slot) {
+  std::lock_guard<std::mutex> lock(chordLearnMutex);
+  chordLearnSlot = juce::jlimit(0, 3, slot);
+  chordLearnNotes.clear();
+  chordLearnActive = true;
+}
+
+void BreadbinProcessor::stopChordLearn() {
+  std::lock_guard<std::mutex> lock(chordLearnMutex);
+  chordLearnActive = false;
+  chordLearnNotes.clear();
+}
+
+std::vector<int> BreadbinProcessor::getChordLearnNotes() {
+  std::lock_guard<std::mutex> lock(chordLearnMutex);
+  return chordLearnNotes;
 }
 
 void BreadbinProcessor::applyModMatrix() {
@@ -1110,8 +1150,10 @@ void BreadbinProcessor::applyModMatrix() {
   float resMod = 0.0f;
 
   for (int i = 0; i < kModSlots; ++i) {
-    auto src = static_cast<ModSource>(static_cast<int>(modSlotPtrs[i].src->load()));
-    auto dst = static_cast<ModDest>(static_cast<int>(modSlotPtrs[i].dst->load()));
+    auto src =
+        static_cast<ModSource>(static_cast<int>(modSlotPtrs[i].src->load()));
+    auto dst =
+        static_cast<ModDest>(static_cast<int>(modSlotPtrs[i].dst->load()));
     float amt = modSlotPtrs[i].amt->load();
 
     if (src == ModSource::None || dst == ModDest::None || amt == 0.0f) {
@@ -1216,7 +1258,8 @@ void BreadbinProcessor::applyModMatrix() {
 
 void BreadbinProcessor::processWavetable(int numSamples) {
   // Block-rate timer: advance by block duration
-  double samplesPerStep = hostSampleRate / static_cast<double>(wavetable.rateHz);
+  double samplesPerStep =
+      hostSampleRate / static_cast<double>(wavetable.rateHz);
   wavetable.timer += numSamples;
 
   if (wavetable.timer >= samplesPerStep) {
@@ -1241,11 +1284,21 @@ void BreadbinProcessor::processWavetable(int numSamples) {
   // Map waveform index to SIDEngine::Waveform
   SIDEngine::Waveform wf;
   switch (step.waveform) {
-  case 0:  wf = SIDEngine::Waveform::Triangle; break;
-  case 1:  wf = SIDEngine::Waveform::Sawtooth; break;
-  case 2:  wf = SIDEngine::Waveform::Pulse;    break;
-  case 3:  wf = SIDEngine::Waveform::Noise;    break;
-  default: wf = SIDEngine::Waveform::Pulse;    break;
+  case 0:
+    wf = SIDEngine::Waveform::Triangle;
+    break;
+  case 1:
+    wf = SIDEngine::Waveform::Sawtooth;
+    break;
+  case 2:
+    wf = SIDEngine::Waveform::Pulse;
+    break;
+  case 3:
+    wf = SIDEngine::Waveform::Noise;
+    break;
+  default:
+    wf = SIDEngine::Waveform::Pulse;
+    break;
   }
 
   for (int v = 0; v < 6; ++v) {
@@ -1324,18 +1377,21 @@ void BreadbinProcessor::applyLFOModulation() {
   // Filter cutoff modulation is now handled by applyFilterModulation()
   // which stacks mod wheel + LFO1 + LFO2 + filter envelope contributions.
 
-  // When wavetable is active, use its step values as base instead of voice settings
+  // When wavetable is active, use its step values as base instead of voice
+  // settings
   bool wtActive = wavetable.enabled;
   auto &wtStep = wavetable.steps[wavetable.currentStep];
 
-  // Pulse width modulation (sum LFO1 + LFO2 + PWM sweep, stacked on wavetable PW if active)
+  // Pulse width modulation (sum LFO1 + LFO2 + PWM sweep, stacked on wavetable
+  // PW if active)
   float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
   float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
-  float sweepDepth = (pwmSweepEnablePtr->load() > 0.5f) ? pwmSweepDepthPtr->load() : 0.0f;
+  float sweepDepth =
+      (pwmSweepEnablePtr->load() > 0.5f) ? pwmSweepDepthPtr->load() : 0.0f;
   int pwMod = 0;
   if (pwDepth1 > 0.0f || pwDepth2 > 0.0f)
-    pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f)
-          + static_cast<int>(val2 * pwDepth2 * 2048.0f);
+    pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f) +
+            static_cast<int>(val2 * pwDepth2 * 2048.0f);
   if (sweepDepth > 0.0f)
     pwMod += static_cast<int>(pwmSweepCurrentValue * sweepDepth * 2048.0f);
   for (int v = 0; v < 6; ++v) {
@@ -1349,7 +1405,8 @@ void BreadbinProcessor::applyLFOModulation() {
       (wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth) + pwMod, 0,
       4095));
 
-  // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if active
+  // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if
+  // active
   float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
   float pitchDepth2 = lfo2.enabled ? lfo2.depthPitch : 0.0f;
   float semitoneMod = 0.0f;
@@ -1460,7 +1517,8 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
     break;
   case ControlParam::PitchBendRange: {
     auto *p = apvts.getParameter("pitchBendRange");
-    if (p) p->setValueNotifyingHost(p->convertTo0to1(2.0f + normalized * 10.0f));
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(2.0f + normalized * 10.0f));
     break;
   }
   case ControlParam::LFORate:
@@ -1528,6 +1586,225 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
   case ControlParam::ExtInputLevel:
     setExtInputLevel(normalized * 2.0f);
     break;
+
+  // --- New APVTS-backed params ---
+  case ControlParam::LeftPan: {
+    auto *p = apvts.getParameter("leftPan");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(-1.0f + normalized * 2.0f));
+    break;
+  }
+  case ControlParam::RightPan: {
+    auto *p = apvts.getParameter("rightPan");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(-1.0f + normalized * 2.0f));
+    break;
+  }
+  case ControlParam::FilterEnvAttack: {
+    auto *p = apvts.getParameter("filterEnvAttack");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::FilterEnvDecay: {
+    auto *p = apvts.getParameter("filterEnvDecay");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::FilterEnvSustain: {
+    auto *p = apvts.getParameter("filterEnvSustain");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::FilterEnvRelease: {
+    auto *p = apvts.getParameter("filterEnvRelease");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::FilterEnvAmount: {
+    auto *p = apvts.getParameter("filterEnvAmount");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(-1.0f + normalized * 2.0f));
+    break;
+  }
+  case ControlParam::ChorusRate: {
+    auto *p = apvts.getParameter("chorusRate");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::ChorusDepth: {
+    auto *p = apvts.getParameter("chorusDepth");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::ChorusMix: {
+    auto *p = apvts.getParameter("chorusMix");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::DelayTimeL: {
+    auto *p = apvts.getParameter("delayTimeL");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::DelayTimeR: {
+    auto *p = apvts.getParameter("delayTimeR");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::DelayFeedback: {
+    auto *p = apvts.getParameter("delayFeedback");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::DelayMix: {
+    auto *p = apvts.getParameter("delayMix");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::PwmSweepRate: {
+    auto *p = apvts.getParameter("pwmSweepRate");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::PwmSweepDepth: {
+    auto *p = apvts.getParameter("pwmSweepDepth");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  // Toggle params: >= 64 = on, < 64 = off
+  case ControlParam::ArpEnable: {
+    auto *p = apvts.getParameter("arpEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::ArpOctaves: {
+    auto *p = apvts.getParameter("arpOctaves");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(1.0f + normalized * 3.0f));
+    break;
+  }
+  case ControlParam::ArpPattern: {
+    auto *p = apvts.getParameter("arpPattern");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(normalized * 3.0f));
+    break;
+  }
+  case ControlParam::ChorusEnable: {
+    auto *p = apvts.getParameter("chorusEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::DelayEnable: {
+    auto *p = apvts.getParameter("delayEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::FilterEnvEnable: {
+    auto *p = apvts.getParameter("filterEnvEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::ExtInputEnable: {
+    auto *p = apvts.getParameter("extInputEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::ClockMode: {
+    auto *p = apvts.getParameter("clockMode");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::DualMode: {
+    auto *p = apvts.getParameter("dualMode");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(normalized * 2.0f));
+    break;
+  }
+  case ControlParam::PwmSweepEnable: {
+    auto *p = apvts.getParameter("pwmSweepEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::WtEnable: {
+    auto *p = apvts.getParameter("wtEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::LfoEnable: {
+    auto *p = apvts.getParameter("lfoEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::Lfo2Enable: {
+    auto *p = apvts.getParameter("lfo2Enable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::ChordEnable: {
+    auto *p = apvts.getParameter("chordEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::LFO2Rate: {
+    auto *p = apvts.getParameter("lfo2Rate");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::LFO2DepthFilter: {
+    auto *p = apvts.getParameter("lfo2DepthFilt");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::LFO2DepthPW: {
+    auto *p = apvts.getParameter("lfo2DepthPW");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::LFO2DepthPitch: {
+    auto *p = apvts.getParameter("lfo2DepthPitch");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::LfoWave: {
+    auto *p = apvts.getParameter("lfoWave");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(normalized * 3.0f));
+    break;
+  }
+  case ControlParam::Lfo2Wave: {
+    auto *p = apvts.getParameter("lfo2Wave");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(normalized * 3.0f));
+    break;
+  }
   default:
     break;
   }
@@ -1612,6 +1889,78 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Left SID Detune";
   case ControlParam::RightDetune:
     return "Right SID Detune";
+  case ControlParam::LeftPan:
+    return "Left SID Pan";
+  case ControlParam::RightPan:
+    return "Right SID Pan";
+  case ControlParam::FilterEnvAttack:
+    return "Filter Env Attack";
+  case ControlParam::FilterEnvDecay:
+    return "Filter Env Decay";
+  case ControlParam::FilterEnvSustain:
+    return "Filter Env Sustain";
+  case ControlParam::FilterEnvRelease:
+    return "Filter Env Release";
+  case ControlParam::FilterEnvAmount:
+    return "Filter Env Amount";
+  case ControlParam::ChorusRate:
+    return "Chorus Rate";
+  case ControlParam::ChorusDepth:
+    return "Chorus Depth";
+  case ControlParam::ChorusMix:
+    return "Chorus Mix";
+  case ControlParam::DelayTimeL:
+    return "Delay Time L";
+  case ControlParam::DelayTimeR:
+    return "Delay Time R";
+  case ControlParam::DelayFeedback:
+    return "Delay Feedback";
+  case ControlParam::DelayMix:
+    return "Delay Mix";
+  case ControlParam::PwmSweepRate:
+    return "PWM Sweep Rate";
+  case ControlParam::PwmSweepDepth:
+    return "PWM Sweep Depth";
+  case ControlParam::ArpEnable:
+    return "Arp Enable";
+  case ControlParam::ArpOctaves:
+    return "Arp Octaves";
+  case ControlParam::ArpPattern:
+    return "Arp Pattern";
+  case ControlParam::ChorusEnable:
+    return "Chorus Enable";
+  case ControlParam::DelayEnable:
+    return "Delay Enable";
+  case ControlParam::FilterEnvEnable:
+    return "Filter Env Enable";
+  case ControlParam::ExtInputEnable:
+    return "Ext Input Enable";
+  case ControlParam::ClockMode:
+    return "Clock Mode";
+  case ControlParam::DualMode:
+    return "Dual Mode";
+  case ControlParam::PwmSweepEnable:
+    return "PWM Sweep Enable";
+  case ControlParam::WtEnable:
+    return "Wavetable Enable";
+  case ControlParam::LfoEnable:
+    return "LFO Enable";
+  case ControlParam::Lfo2Enable:
+    return "LFO2 Enable";
+  case ControlParam::ChordEnable:
+    return "Chord Enable";
+  case ControlParam::LFO2Rate:
+    return "LFO2 Rate";
+  case ControlParam::LFO2DepthFilter:
+    return "LFO2 Filter Depth";
+  case ControlParam::LFO2DepthPW:
+    return "LFO2 PWM Depth";
+  case ControlParam::LFO2DepthPitch:
+    return "LFO2 Pitch Depth";
+  case ControlParam::LfoWave:
+    return "LFO Waveform";
+  case ControlParam::Lfo2Wave:
+    return "LFO2 Waveform";
   default:
     return "Unknown";
   }
@@ -1700,9 +2049,11 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"pwmSweepEnable", 1}, "PWM Sweep Enable", false));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"pwmSweepRate", 1}, "PWM Sweep Rate", 0.05f, 10.0f, 0.5f));
+      juce::ParameterID{"pwmSweepRate", 1}, "PWM Sweep Rate", 0.05f, 10.0f,
+      0.5f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"pwmSweepDepth", 1}, "PWM Sweep Depth", 0.0f, 1.0f, 0.0f));
+      juce::ParameterID{"pwmSweepDepth", 1}, "PWM Sweep Depth", 0.0f, 1.0f,
+      0.0f));
 
   // Chord Memory
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -1714,8 +2065,7 @@ BreadbinProcessor::createParameterLayout() {
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
       layout.add(std::make_unique<juce::AudioParameterInt>(
           juce::ParameterID{id, 1},
-          "Chord " + juce::String(s) + " Int " + juce::String(i),
-          -24, 24, 0));
+          "Chord " + juce::String(s) + " Int " + juce::String(i), -24, 24, 0));
     }
   }
 
@@ -1726,8 +2076,8 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"filterEnvAttack", 1}, "Filter Env Attack", 0.001f,
       10.0f, 0.01f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"filterEnvDecay", 1}, "Filter Env Decay", 0.001f,
-      10.0f, 0.3f));
+      juce::ParameterID{"filterEnvDecay", 1}, "Filter Env Decay", 0.001f, 10.0f,
+      0.3f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"filterEnvSustain", 1}, "Filter Env Sustain", 0.0f,
       1.0f, 0.5f));
@@ -1735,8 +2085,8 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"filterEnvRelease", 1}, "Filter Env Release", 0.001f,
       10.0f, 0.5f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"filterEnvAmount", 1}, "Filter Env Amount", -1.0f,
-      1.0f, 0.5f));
+      juce::ParameterID{"filterEnvAmount", 1}, "Filter Env Amount", -1.0f, 1.0f,
+      0.5f));
 
   // Wavetable Step Sequencer
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -1984,10 +2334,14 @@ void BreadbinProcessor::snapshotSidPlayerToAPVTS() {
     // Waveform from control register bits 4-7
     uint8_t ctrl = snapshot.regs[base + 4];
     int waveIdx = 0; // Triangle
-    if (ctrl & 0x20) waveIdx = 1;      // Sawtooth
-    else if (ctrl & 0x40) waveIdx = 2; // Pulse
-    else if (ctrl & 0x80) waveIdx = 3; // Noise
-    else if (ctrl & 0x10) waveIdx = 0; // Triangle
+    if (ctrl & 0x20)
+      waveIdx = 1; // Sawtooth
+    else if (ctrl & 0x40)
+      waveIdx = 2; // Pulse
+    else if (ctrl & 0x80)
+      waveIdx = 3; // Noise
+    else if (ctrl & 0x10)
+      waveIdx = 0; // Triangle
     setParam(vp + "waveform", static_cast<float>(waveIdx));
 
     // Sync and Ring mod
@@ -1995,10 +2349,13 @@ void BreadbinProcessor::snapshotSidPlayerToAPVTS() {
     setParam(vp + "ringMod", (ctrl & 0x04) ? 1.0f : 0.0f);
 
     // ADSR
-    setParam(vp + "attack", static_cast<float>((snapshot.regs[base + 5] >> 4) & 0x0F));
+    setParam(vp + "attack",
+             static_cast<float>((snapshot.regs[base + 5] >> 4) & 0x0F));
     setParam(vp + "decay", static_cast<float>(snapshot.regs[base + 5] & 0x0F));
-    setParam(vp + "sustain", static_cast<float>((snapshot.regs[base + 6] >> 4) & 0x0F));
-    setParam(vp + "release", static_cast<float>(snapshot.regs[base + 6] & 0x0F));
+    setParam(vp + "sustain",
+             static_cast<float>((snapshot.regs[base + 6] >> 4) & 0x0F));
+    setParam(vp + "release",
+             static_cast<float>(snapshot.regs[base + 6] & 0x0F));
 
     // Filter routing per voice (register 0x17, bits 0-2)
     bool voiceFiltered = (snapshot.regs[0x17] >> voice) & 0x01;

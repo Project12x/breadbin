@@ -7,6 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <map>
+#include <mutex>
 #include <random>
 #include <vector>
 
@@ -87,7 +88,44 @@ public:
     ArpRate,
     ExtInputLevel,
     LeftDetune,
-    RightDetune
+    RightDetune,
+    // --- New entries (append-only for serialization stability) ---
+    LeftPan,
+    RightPan,
+    FilterEnvAttack,
+    FilterEnvDecay,
+    FilterEnvSustain,
+    FilterEnvRelease,
+    FilterEnvAmount,
+    ChorusRate,
+    ChorusDepth,
+    ChorusMix,
+    DelayTimeL,
+    DelayTimeR,
+    DelayFeedback,
+    DelayMix,
+    PwmSweepRate,
+    PwmSweepDepth,
+    ArpEnable,
+    ArpOctaves,
+    ArpPattern,
+    ChorusEnable,
+    DelayEnable,
+    FilterEnvEnable,
+    ExtInputEnable,
+    ClockMode,
+    DualMode,
+    PwmSweepEnable,
+    WtEnable,
+    LfoEnable,
+    Lfo2Enable,
+    ChordEnable,
+    LFO2Rate,
+    LFO2DepthFilter,
+    LFO2DepthPW,
+    LFO2DepthPitch,
+    LfoWave,
+    Lfo2Wave,
   };
 
   static juce::String getParamName(ControlParam param);
@@ -201,10 +239,16 @@ public:
 
   // Base filter values (updated by editor sliders, used by modulation system)
   void setBaseFilterCutoff(bool isLeft, int value) {
-    if (isLeft) baseFilterCutoffLeft = value; else baseFilterCutoffRight = value;
+    if (isLeft)
+      baseFilterCutoffLeft = value;
+    else
+      baseFilterCutoffRight = value;
   }
   void setBaseFilterResonance(bool isLeft, int value) {
-    if (isLeft) baseFilterResLeft = value; else baseFilterResRight = value;
+    if (isLeft)
+      baseFilterResLeft = value;
+    else
+      baseFilterResRight = value;
   }
 
   // External audio input (routes through SID filter)
@@ -300,7 +344,8 @@ private:
 
   // Resampler: SID player outputs at 44100, host may run at different rate
   juce::LagrangeInterpolator sidResamplerL, sidResamplerR;
-  std::vector<float> sidResampleBufL, sidResampleBufR; // pre-allocated in prepareToPlay
+  std::vector<float> sidResampleBufL,
+      sidResampleBufR;           // pre-allocated in prepareToPlay
   double sidResampleRatio = 1.0; // ENGINE_RATE / hostRate
 
   DualMode dualMode = DualMode::StereoSplit;
@@ -320,16 +365,18 @@ private:
   float modWheelValue = 0.0f;      // 0.0 to 1.0
   int baseFilterCutoffLeft = 1024; // Store base cutoff for mod wheel
   int baseFilterCutoffRight = 1024;
-  int baseFilterResLeft = 0;  // Store base resonance for mod matrix
+  int baseFilterResLeft = 0; // Store base resonance for mod matrix
   int baseFilterResRight = 0;
-  int lastAppliedCutoffLeft = 1024;  // Post-modulation cutoff (set by applyFilterModulation)
+  int lastAppliedCutoffLeft =
+      1024; // Post-modulation cutoff (set by applyFilterModulation)
   int lastAppliedCutoffRight = 1024;
 
   // Post-modulation values for UI meters (audio thread writes, UI thread reads)
-  std::atomic<int> lastAppliedPW{2048};                     // representative (voice 0), 0-4095
-  std::atomic<float> lastAppliedPitchOffsetSemitones{0.0f}; // total semitone offset
-  std::atomic<int> lastAppliedResLeft{0};                    // 0-15
-  std::atomic<int> lastAppliedResRight{0};                   // 0-15
+  std::atomic<int> lastAppliedPW{2048}; // representative (voice 0), 0-4095
+  std::atomic<float> lastAppliedPitchOffsetSemitones{
+      0.0f};                               // total semitone offset
+  std::atomic<int> lastAppliedResLeft{0};  // 0-15
+  std::atomic<int> lastAppliedResRight{0}; // 0-15
 
   // Mod matrix per-slot display values
   struct ModSlotDisplay {
@@ -364,9 +411,16 @@ private:
 
 public:
   // SID file player
-  SidFilePlayer& getSidFilePlayer() { return *sidFilePlayer; }
+  SidFilePlayer &getSidFilePlayer() { return *sidFilePlayer; }
   std::atomic<bool> sidPlayerActive{false};
   void snapshotSidPlayerToAPVTS();
+
+  // Chord Learn mode
+  void startChordLearn(int slot);
+  void stopChordLearn();
+  bool isChordLearning() const { return chordLearnActive; }
+  int getChordLearnSlot() const { return chordLearnSlot; }
+  std::vector<int> getChordLearnNotes();
 
   // State management - public for editor attachment access
   juce::AudioProcessorValueTreeState apvts;
@@ -414,7 +468,7 @@ private:
   std::atomic<float> *chordEnablePtr = nullptr;
   std::atomic<float> *chordSlotPtr = nullptr;
   struct ChordSlotPtrs {
-    std::array<std::atomic<float>*, 5> intervals;
+    std::array<std::atomic<float> *, 5> intervals;
   };
   std::array<ChordSlotPtrs, 4> chordSlotPtrs;
 
@@ -481,7 +535,8 @@ private:
     std::atomic<float> *amt = nullptr;
   };
   std::array<ModSlotPtrs, kModSlots> modSlotPtrs;
-  void applyModMatrix(); // Apply mod matrix routing after all mod sources computed
+  void
+  applyModMatrix(); // Apply mod matrix routing after all mod sources computed
 
   // FX CHAIN
   juce::dsp::Chorus<float> chorus;
@@ -519,10 +574,11 @@ private:
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
   void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
-  void processLFO(int numSamples);   // Advance LFO1 phase
-  void processLFO2(int numSamples);  // Advance LFO2 phase
-  void applyLFOModulation();         // Apply LFO1+LFO2 to PW and pitch destinations
-  void applyFilterModulation();     // Unified filter cutoff modulation (mod wheel + LFO + filter env)
+  void processLFO(int numSamples);  // Advance LFO1 phase
+  void processLFO2(int numSamples); // Advance LFO2 phase
+  void applyLFOModulation();    // Apply LFO1+LFO2 to PW and pitch destinations
+  void applyFilterModulation(); // Unified filter cutoff modulation (mod wheel +
+                                // LFO + filter env)
   void processFilterEnvelope(int numSamples); // Advance filter envelope
 
   // Arpeggiator
@@ -555,6 +611,12 @@ private:
   ChordMemoryState chordMemory;
   void triggerChord(bool isLeftSID, int rootNote, int velocity);
   void releaseChord(bool isLeftSID);
+
+  // Chord Learn mode (data is private, methods exposed below)
+  bool chordLearnActive = false;
+  int chordLearnSlot = 0;
+  std::vector<int> chordLearnNotes;
+  std::mutex chordLearnMutex;
 
   // Filter Envelope state
   FilterEnvelopeState filterEnv;
