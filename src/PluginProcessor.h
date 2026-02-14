@@ -414,8 +414,11 @@ private:
   std::array<ControlParam, 128> midiMappings;
   ControlParam learningParam = ControlParam::None;
   int selectedVoice = 0;
+  int globalPresetId = 1; // Persisted global preset selector ID
 
 public:
+  void setGlobalPresetId(int id) { globalPresetId = id; }
+  int getGlobalPresetId() const { return globalPresetId; }
   // SID file player
   SidFilePlayer &getSidFilePlayer() { return *sidFilePlayer; }
   std::atomic<bool> sidPlayerActive{false};

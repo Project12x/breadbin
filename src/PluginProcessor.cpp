@@ -932,6 +932,15 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   apvts.state.addChild(mappings, -1, nullptr);
   apvts.state.setProperty("selectedVoice", selectedVoice, nullptr);
 
+  // Persist non-APVTS filter state
+  apvts.state.setProperty("filterCutoffL", baseFilterCutoffLeft, nullptr);
+  apvts.state.setProperty("filterResL", baseFilterResLeft, nullptr);
+  apvts.state.setProperty("filterCutoffR", baseFilterCutoffRight, nullptr);
+  apvts.state.setProperty("filterResR", baseFilterResRight, nullptr);
+
+  // Persist global preset selection
+  apvts.state.setProperty("globalPresetId", globalPresetId, nullptr);
+
   auto apvtsState = apvts.copyState();
   std::unique_ptr<juce::XmlElement> xml(apvtsState.createXml());
   copyXmlToBinary(*xml, destData);
@@ -958,6 +967,16 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         }
       }
       selectedVoice = apvts.state.getProperty("selectedVoice", 0);
+
+      // Restore non-APVTS filter state
+      baseFilterCutoffLeft = apvts.state.getProperty("filterCutoffL", 1024);
+      baseFilterResLeft = apvts.state.getProperty("filterResL", 0);
+      baseFilterCutoffRight = apvts.state.getProperty("filterCutoffR", 1024);
+      baseFilterResRight = apvts.state.getProperty("filterResR", 0);
+
+      // Restore global preset selection
+      globalPresetId = apvts.state.getProperty("globalPresetId", 1);
+
       stateRestored = true;
     }
   }

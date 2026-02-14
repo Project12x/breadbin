@@ -668,6 +668,10 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
                                juce::dontSendNotification);
     rightResonanceSlider.setValue(processor.getBaseFilterResonance(false),
                                   juce::dontSendNotification);
+
+    // Sync global preset selector from persisted ID
+    globalPresetSelector.setSelectedId(processor.getGlobalPresetId(),
+                                       juce::dontSendNotification);
   }
   processor.markEditorOpened();
   selectVoice(processor.getSelectedVoice());
@@ -1859,7 +1863,7 @@ void BreadbinEditor::setupControls() {
   // Factory + user presets are populated by refreshUserPresets()
   refreshUserPresets();
 
-  globalPresetSelector.setSelectedId(1);
+  // Initial ID set by constructor restore path or applyGlobalPreset
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
     int id = globalPresetSelector.getSelectedId();
@@ -1898,6 +1902,9 @@ void BreadbinEditor::setupControls() {
       applyGlobalPreset(id);
       processor.snapshotPresetState();
     }
+    // Persist selection for editor close/reopen
+    if (id > 0)
+      processor.setGlobalPresetId(id);
   };
   addAndMakeVisible(globalPresetSelector);
 
@@ -2353,7 +2360,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftCutoffLabel);
 
   leftCutoffSlider.setRange(0, 2047, 1);
-  leftCutoffSlider.setValue(1024);
+  // leftCutoffSlider.setValue(1024);  // Restored by constructor sync
   leftCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   leftCutoffSlider.setColour(juce::Slider::trackColourId, juce::Colours::cyan);
@@ -2372,7 +2379,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftResonanceLabel);
 
   leftResonanceSlider.setRange(0, 15, 1);
-  leftResonanceSlider.setValue(0);
+  // leftResonanceSlider.setValue(0);  // Restored by constructor sync
   leftResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   leftResonanceSlider.setColour(juce::Slider::trackColourId,
@@ -2490,7 +2497,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightCutoffLabel);
 
   rightCutoffSlider.setRange(0, 2047, 1);
-  rightCutoffSlider.setValue(1024);
+  // rightCutoffSlider.setValue(1024);  // Restored by constructor sync
   rightCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   rightCutoffSlider.setColour(juce::Slider::trackColourId,
@@ -2510,7 +2517,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightResonanceLabel);
 
   rightResonanceSlider.setRange(0, 15, 1);
-  rightResonanceSlider.setValue(0);
+  // rightResonanceSlider.setValue(0);  // Restored by constructor sync
   rightResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
   rightResonanceSlider.setColour(juce::Slider::trackColourId,
@@ -2598,7 +2605,7 @@ void BreadbinEditor::setupVoiceEditor() {
   waveformSelector.addItem("Noise", 4);
   waveformSelector.setSelectedId(1);
   waveformSelector.setTooltip("Oscillator Waveform");
-  waveformSelector.onChange = [this]() { saveUIToVoice(selectedVoice); };
+  // onChange set below (ring mod logic); APVTS attachment handles sync
   addAndMakeVisible(waveformSelector);
 
   pwLabel.setText("Pulse:", juce::dontSendNotification);
@@ -2611,7 +2618,7 @@ void BreadbinEditor::setupVoiceEditor() {
   pulseWidthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
   pulseWidthSlider.setTooltip(
       "Pulse Width (0-4095): Controls the square wave duty cycle");
-  pulseWidthSlider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
+  // APVTS attachment handles sync — no manual callback needed
   addAndMakeVisible(pulseWidthSlider);
 
   // Modulation meters for voice editor
@@ -2633,7 +2640,7 @@ void BreadbinEditor::setupVoiceEditor() {
     slider.setSliderStyle(juce::Slider::LinearVertical);
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setTooltip(tooltip);
-    slider.onValueChange = [this]() { saveUIToVoice(selectedVoice); };
+    // APVTS attachment handles sync — no manual callback needed
     addAndMakeVisible(slider);
   };
 
@@ -2652,25 +2659,24 @@ void BreadbinEditor::setupVoiceEditor() {
   ringModButton.setTooltip(
       "Ring Modulation: Multiplies triangle wave with previous voice. "
       "Only works with Triangle waveform.");
-  ringModButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  // APVTS attachment handles sync — no manual callback needed
   addAndMakeVisible(ringModButton);
 
   // Hard Sync button
   syncButton.setTooltip(
       "Hard Sync: Resets oscillator phase when previous voice completes a "
       "cycle. Creates harmonic overtones.");
-  syncButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  // APVTS attachment handles sync — no manual callback needed
   addAndMakeVisible(syncButton);
 
   // Per-voice filter routing button
   voiceFilterButton.setTooltip("Route this voice through the SID filter.");
   voiceFilterButton.setToggleState(true, juce::dontSendNotification);
-  voiceFilterButton.onClick = [this]() { saveUIToVoice(selectedVoice); };
+  // APVTS attachment handles sync — no manual callback needed
   addAndMakeVisible(voiceFilterButton);
 
   // Update Ring Mod enable state when waveform changes
   waveformSelector.onChange = [this]() {
-    saveUIToVoice(selectedVoice);
     // Ring mod only works with Triangle waveform
     bool isTriangle = (waveformSelector.getSelectedId() == 1);
     ringModButton.setEnabled(isTriangle);
