@@ -114,11 +114,11 @@ juce_add_binary_data(BreadbinAssets
 )
 
 juce_add_plugin(Breadbin
-    COMPANY_NAME "GPL Audio"
+    COMPANY_NAME "Eric Steenwerth"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
-    PLUGIN_MANUFACTURER_CODE Gplx
+    PLUGIN_MANUFACTURER_CODE Estw
     PLUGIN_CODE Bred
     FORMATS VST3 Standalone
     PRODUCT_NAME "Breadbin"
