@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editor State Restoration**: Filter cutoff/resonance, preset selection, and voice
+  parameters now persist correctly when closing/reopening the editor and when
+  saving/reloading DAW projects. Serialized non-APVTS filter state to ValueTree,
+  removed conflicting `saveUIToVoice()` callbacks on APVTS-attached controls,
+  and eliminated hardcoded preset selector default.
+
 ### Added
 
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
