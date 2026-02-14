@@ -141,6 +141,18 @@ target_include_directories(Breadbin PRIVATE
     src
 )
 
+# ASIO Support (Windows standalone)
+if(WIN32)
+    set(ASIO_SDK_PATH "C:/SDKs/asiosdk/ASIOSDK" CACHE PATH "Path to Steinberg ASIO SDK")
+    if(EXISTS "${ASIO_SDK_PATH}/common/asio.h")
+        message(STATUS "ASIO SDK found at ${ASIO_SDK_PATH}")
+        target_compile_definitions(Breadbin PUBLIC JUCE_ASIO=1)
+        target_include_directories(Breadbin PRIVATE "${ASIO_SDK_PATH}/common")
+    else()
+        message(WARNING "ASIO SDK not found at ${ASIO_SDK_PATH}/common/asio.h - building without ASIO support")
+    endif()
+endif()
+
 target_compile_definitions(Breadbin PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0

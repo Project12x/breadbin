@@ -549,9 +549,10 @@ private:
   MappableComboBox dualModeSelector{processor,
                                     BreadbinProcessor::ControlParam::DualMode};
   juce::Label modeLabel;
-  juce::ComboBox globalPresetSelector; // Factory global presets
+  juce::ComboBox globalPresetSelector; // Factory + user presets
   juce::Label globalPresetLabel;
-  juce::ComboBox presetSelector; // Voice presets
+  std::vector<juce::File> userPresetFiles; // Tracked user presets (ID 1000+)
+  juce::ComboBox presetSelector;           // Voice presets
   juce::Label presetLabel;
   juce::ShapeButton savePatchButton{"Save Patch", juce::Colours::cyan,
                                     juce::Colours::cyan.withAlpha(0.7f),
@@ -871,10 +872,13 @@ private:
   void updateFiltersFromUI();
   void applyPreset(int presetId);
   void applyGlobalPreset(int presetId);
-  void savePresetToFile();        // Overall Patch
-  void loadPresetFromFile();      // Overall Patch
-  void saveVoicePresetToFile();   // Selected Voice
-  void loadVoicePresetFromFile(); // Selected Voice
+  void savePresetToFile();               // Overall Patch
+  void loadPresetFromFile();             // Overall Patch
+  void saveVoicePresetToFile();          // Selected Voice
+  void loadVoicePresetFromFile();        // Selected Voice
+  void savePresetToMenu();               // Save into preset dropdown
+  void refreshUserPresets();             // Scan user preset directory
+  static juce::File getUserPresetsDir(); // %APPDATA%/GPLAudio/Breadbin/Presets
 
   // MidiKeyboardState::Listener
   void handleNoteOn(juce::MidiKeyboardState *, int midiChannel,

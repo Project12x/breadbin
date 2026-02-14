@@ -1844,56 +1844,48 @@ void BreadbinEditor::setupControls() {
                               juce::Colours::lightgrey);
   addAndMakeVisible(globalPresetLabel);
 
-  // -- Classic C64 (era-accurate, no modern FX) --
-  globalPresetSelector.addSectionHeading("Classic C64");
-  globalPresetSelector.addItem("Commando", 10);
-  globalPresetSelector.addItem("Ninja Bass", 11);
-  globalPresetSelector.addItem("Ocean Loader", 12);
-  globalPresetSelector.addItem("Cybernoid", 16);
-  globalPresetSelector.addItem("Wizball", 17);
-  globalPresetSelector.addItem("Thing Bounce", 18);
-
-  // -- Leads --
-  globalPresetSelector.addSectionHeading("Leads");
-  globalPresetSelector.addItem("Dual Lead", 1);
-  globalPresetSelector.addItem("Retro Synth", 5);
-  globalPresetSelector.addItem("SID Brass", 15);
-  globalPresetSelector.addItem("Sync Lead", 19);
-  globalPresetSelector.addItem("Acid Squelch", 20);
-
-  // -- Bass --
-  globalPresetSelector.addSectionHeading("Bass");
-  globalPresetSelector.addItem("Sub Bass", 21);
-  globalPresetSelector.addItem("Growl Bass", 22);
-
-  // -- Pads & Keys --
-  globalPresetSelector.addSectionHeading("Pads & Keys");
-  globalPresetSelector.addItem("Pad Stack", 2);
-  globalPresetSelector.addItem("Chord Stab", 6);
-  globalPresetSelector.addItem("Ice Pad", 23);
-  globalPresetSelector.addItem("PWM Strings", 24);
-
-  // -- Arps & Sequences --
-  globalPresetSelector.addSectionHeading("Arps & Sequences");
-  globalPresetSelector.addItem("Arpeggiated", 3);
-  globalPresetSelector.addItem("WT Arpeggio", 8);
-  globalPresetSelector.addItem("WT Morph", 9);
-  globalPresetSelector.addItem("Hubbard Arp", 13);
-  globalPresetSelector.addItem("Chip Sequence", 25);
-
-  // -- FX & Modulation --
-  globalPresetSelector.addSectionHeading("FX & Modulation");
-  globalPresetSelector.addItem("Fat Unison", 4);
-  globalPresetSelector.addItem("Galway Sweep", 14);
-  globalPresetSelector.addItem("Mod Madness", 7);
-  globalPresetSelector.addItem("S&H Glitch", 26);
-  globalPresetSelector.addItem("Ring Bell", 27);
+  // Factory + user presets are populated by refreshUserPresets()
+  refreshUserPresets();
 
   globalPresetSelector.setSelectedId(1);
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
-    applyGlobalPreset(globalPresetSelector.getSelectedId());
-    processor.snapshotPresetState();
+    int id = globalPresetSelector.getSelectedId();
+    if (id >= 1000) {
+      // User preset: load from file
+      auto idx = static_cast<size_t>(id - 1000);
+      if (idx < userPresetFiles.size() && userPresetFiles[idx].existsAsFile()) {
+        auto xml = juce::XmlDocument::parse(userPresetFiles[idx]);
+        if (xml != nullptr) {
+          auto state = juce::ValueTree::fromXml(*xml);
+          if (state.isValid()) {
+            juce::MemoryBlock data;
+            juce::MemoryOutputStream stream(data, false);
+            state.writeToStream(stream);
+            processor.setStateInformation(data.getData(),
+                                          static_cast<int>(data.getSize()));
+            loadVoiceToUI(selectedVoice);
+            updateVoiceButtonStates();
+            dualModeSelector.setSelectedId(
+                static_cast<int>(processor.getDualMode()) + 1,
+                juce::dontSendNotification);
+            agingSlider.setValue(processor.getAgingFactor(),
+                                 juce::dontSendNotification);
+            clockModeSelector.setSelectedId(
+                static_cast<int>(processor.getClockMode()) + 1,
+                juce::dontSendNotification);
+            extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
+                                                juce::dontSendNotification);
+            extInputLevelSlider.setValue(processor.getExtInputLevel(),
+                                         juce::dontSendNotification);
+            processor.snapshotPresetState();
+          }
+        }
+      }
+    } else if (id > 0) {
+      applyGlobalPreset(id);
+      processor.snapshotPresetState();
+    }
   };
   addAndMakeVisible(globalPresetSelector);
 
@@ -1929,8 +1921,18 @@ void BreadbinEditor::setupControls() {
   auto folderPath = makeFolderPath();
 
   savePatchButton.setShape(diskPath, true, true, false);
-  savePatchButton.setTooltip("Save all settings to a .breadbin patch file");
-  savePatchButton.onClick = [this]() { savePresetToFile(); };
+  savePatchButton.setTooltip("Save all settings to a file or preset menu");
+  savePatchButton.onClick = [this]() {
+    juce::PopupMenu menu;
+    menu.addItem(1, "Save to File...");
+    menu.addItem(2, "Save to Preset Menu...");
+    menu.showMenuAsync(juce::PopupMenu::Options(), [this](int choice) {
+      if (choice == 1)
+        savePresetToFile();
+      else if (choice == 2)
+        savePresetToMenu();
+    });
+  };
   addAndMakeVisible(savePatchButton);
 
   loadPatchButton.setShape(folderPath, true, true, false);
@@ -4311,6 +4313,139 @@ void BreadbinEditor::loadPresetFromFile() {
 
   static std::unique_ptr<juce::FileChooser> savedChooser;
   savedChooser = std::move(chooser);
+}
+
+juce::File BreadbinEditor::getUserPresetsDir() {
+  auto appData =
+      juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+  return appData.getChildFile("GPLAudio")
+      .getChildFile("Breadbin")
+      .getChildFile("Presets");
+}
+
+void BreadbinEditor::refreshUserPresets() {
+  // JUCE ComboBox has no removeItem(), so clear and rebuild everything
+  int prevId = globalPresetSelector.getSelectedId();
+  globalPresetSelector.clear(juce::dontSendNotification);
+
+  // Re-add all factory presets
+  globalPresetSelector.addSectionHeading("Classic C64");
+  globalPresetSelector.addItem("Commando", 10);
+  globalPresetSelector.addItem("Ninja Bass", 11);
+  globalPresetSelector.addItem("Ocean Loader", 12);
+  globalPresetSelector.addItem("Cybernoid", 16);
+  globalPresetSelector.addItem("Wizball", 17);
+  globalPresetSelector.addItem("Thing Bounce", 18);
+
+  globalPresetSelector.addSectionHeading("Leads");
+  globalPresetSelector.addItem("Dual Lead", 1);
+  globalPresetSelector.addItem("Retro Synth", 5);
+  globalPresetSelector.addItem("SID Brass", 15);
+  globalPresetSelector.addItem("Sync Lead", 19);
+  globalPresetSelector.addItem("Acid Squelch", 20);
+
+  globalPresetSelector.addSectionHeading("Bass");
+  globalPresetSelector.addItem("Sub Bass", 21);
+  globalPresetSelector.addItem("Growl Bass", 22);
+
+  globalPresetSelector.addSectionHeading("Pads & Keys");
+  globalPresetSelector.addItem("Pad Stack", 2);
+  globalPresetSelector.addItem("Chord Stab", 6);
+  globalPresetSelector.addItem("Ice Pad", 23);
+  globalPresetSelector.addItem("PWM Strings", 24);
+
+  globalPresetSelector.addSectionHeading("Arps & Sequences");
+  globalPresetSelector.addItem("Arpeggiated", 3);
+  globalPresetSelector.addItem("WT Arpeggio", 8);
+  globalPresetSelector.addItem("WT Morph", 9);
+  globalPresetSelector.addItem("Hubbard Arp", 13);
+  globalPresetSelector.addItem("Chip Sequence", 25);
+
+  globalPresetSelector.addSectionHeading("FX & Modulation");
+  globalPresetSelector.addItem("Fat Unison", 4);
+  globalPresetSelector.addItem("Galway Sweep", 14);
+  globalPresetSelector.addItem("Mod Madness", 7);
+  globalPresetSelector.addItem("S&H Glitch", 26);
+  globalPresetSelector.addItem("Ring Bell", 27);
+
+  // Scan for user presets
+  userPresetFiles.clear();
+  auto dir = getUserPresetsDir();
+  if (dir.exists()) {
+    auto files = dir.findChildFiles(juce::File::findFiles, false, "*.breadbin");
+    files.sort();
+
+    if (!files.isEmpty()) {
+      globalPresetSelector.addSeparator();
+      globalPresetSelector.addSectionHeading("User Presets");
+
+      for (int i = 0; i < files.size(); ++i) {
+        userPresetFiles.push_back(files[i]);
+        globalPresetSelector.addItem(files[i].getFileNameWithoutExtension(),
+                                     1000 + i);
+      }
+    }
+  }
+
+  // Restore previous selection if valid
+  if (prevId > 0)
+    globalPresetSelector.setSelectedId(prevId, juce::dontSendNotification);
+}
+
+void BreadbinEditor::savePresetToMenu() {
+  // Save current voice state
+  saveUIToVoice(selectedVoice);
+
+  // Prompt for preset name
+  auto *aw = new juce::AlertWindow(
+      "Save Preset",
+      "Enter a name for this preset:", juce::AlertWindow::NoIcon);
+  aw->addTextEditor("name", "", "Preset name:");
+  aw->addButton("Save", 1);
+  aw->addButton("Cancel", 0);
+
+  aw->enterModalState(
+      true, juce::ModalCallbackFunction::create([this, aw](int result) {
+        if (result == 1) {
+          auto name = aw->getTextEditorContents("name").trim();
+          if (name.isEmpty())
+            return;
+
+          // Sanitize filename
+          name = name.replaceCharacters("\\/:*?\"<>|", "_________");
+
+          // Get state data
+          juce::MemoryBlock data;
+          processor.getStateInformation(data);
+
+          auto state =
+              juce::ValueTree::readFromData(data.getData(), data.getSize());
+          if (state.isValid()) {
+            auto xml = state.createXml();
+            if (xml != nullptr) {
+              auto dir = getUserPresetsDir();
+              dir.createDirectory();
+              auto file = dir.getChildFile(name + ".breadbin");
+              xml->writeTo(file);
+
+              // Refresh the preset list
+              refreshUserPresets();
+
+              // Select the newly saved preset
+              for (int i = 0; i < static_cast<int>(userPresetFiles.size());
+                   ++i) {
+                if (userPresetFiles[static_cast<size_t>(i)] == file) {
+                  globalPresetSelector.setSelectedId(
+                      1000 + i, juce::dontSendNotification);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        delete aw;
+      }),
+      false);
 }
 
 void BreadbinEditor::saveVoicePresetToFile() {

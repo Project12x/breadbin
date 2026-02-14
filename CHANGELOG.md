@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and combo boxes (dual mode/clock mode/arp pattern/arp octaves/LFO waveforms) to their Mappable
   variants across both the main editor and ModMatrixPanel popup.
 
+- **User Preset Menu Saving**: Save button now shows a popup menu with "Save to File" and
+  "Save to Preset Menu" options. User presets are stored as `.breadbin` XML files in
+  `%APPDATA%/GPLAudio/Breadbin/Presets/` and appear in a "User Presets" section of the global
+  preset dropdown. Presets persist across sessions and are loaded on startup.
+
+- **ASIO Standalone Support**: Added `JUCE_ASIO=1` compile definition and Steinberg ASIO SDK
+  include path to CMakeLists.txt. ASIO devices now appear in the standalone audio settings.
+  SDK path is configurable via `-DASIO_SDK_PATH` CMake cache variable.
 - **Pitch bend range APVTS**: `pitchBendRange` AudioParameterInt (2-12, default 2) with
   processBlock sync, CC mapping writes APVTS, global preset reset. Replaces direct
   `setPitchBendRange()` calls with single source of truth.
