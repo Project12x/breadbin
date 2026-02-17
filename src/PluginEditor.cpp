@@ -2281,6 +2281,20 @@ void BreadbinEditor::setupControls() {
   presetSelector.addItem("PWM Pad (Hubbard)", 4);
   presetSelector.addItem("Noise Snare", 5);
   presetSelector.addItem("Retro Triangle", 6);
+  presetSelector.addItem("Thin Pulse", 7);
+  presetSelector.addItem("Wide Pulse", 8);
+  presetSelector.addItem("Pluck Bass", 9);
+  presetSelector.addItem("Sub Bass", 10);
+  presetSelector.addItem("Saw Lead", 11);
+  presetSelector.addItem("Staccato Saw", 12);
+  presetSelector.addItem("Soft Pad", 13);
+  presetSelector.addItem("Bright Pad", 14);
+  presetSelector.addItem("Organ", 15);
+  presetSelector.addItem("Clavinet", 16);
+  presetSelector.addItem("Hi-Hat", 17);
+  presetSelector.addItem("Kick Thump", 18);
+  presetSelector.addItem("White Noise", 19);
+  presetSelector.addItem("Zap", 20);
   presetSelector.setSelectedId(1);
   presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
@@ -3634,6 +3648,56 @@ void BreadbinEditor::applyPreset(int presetId) {
   case 6: // Retro Triangle - Soft triangle with slow attack
     configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 2, 4, 10,
                    6);
+    break;
+  case 7: // Thin Pulse - Narrow PW, bright nasal tone
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2);
+    break;
+  case 8: // Wide Pulse - Wide PW, hollow/woody
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 3584, 0, 3, 12,
+                   4);
+    break;
+  case 9: // Pluck Bass - Fast decay, no sustain
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 8, 0, 2);
+    break;
+  case 10: // Sub Bass - Pure triangle, organ-like
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 0, 0, 15,
+                   3);
+    break;
+  case 11: // Saw Lead - Raw sawtooth, full sustain
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 0, 0, 15,
+                   3);
+    break;
+  case 12: // Staccato Saw - Short punchy saw stab
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 0, 6, 0, 0);
+    break;
+  case 13: // Soft Pad - Slow swell triangle
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 10, 4, 12,
+                   10);
+    break;
+  case 14: // Bright Pad - Slow attack sawtooth
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 6, 4, 10,
+                   8);
+    break;
+  case 15: // Organ - Square wave, instant on/off
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15,
+                   0);
+    break;
+  case 16: // Clavinet - Percussive pluck
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1536, 0, 10, 4,
+                   2);
+    break;
+  case 17: // Hi-Hat - Short noise burst
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0);
+    break;
+  case 18: // Kick Thump - Low triangle thump
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 0);
+    break;
+  case 19: // White Noise - Sustained noise
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 0, 15, 4);
+    break;
+  case 20: // Zap - Fast saw decay
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 0, 12, 0,
+                   0);
     break;
   }
 
