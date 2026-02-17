@@ -2099,6 +2099,34 @@ void testPostModValuesReturnToBaseline() {
               "Pitch offset returns to zero when LFO disabled");
 }
 
+void testIdleLFOModulationDoesNotTouchVoices() {
+  std::printf("--- Idle LFO modulation: PW/pitch remain at baseline with no active voices ---\n");
+  auto p = createTestProcessor();
+
+  // Configure deterministic non-zero LFO modulation depths.
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  auto *rateParam = p->apvts.getParameter("lfoRate");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f));
+  p->apvts.getParameter("lfoDepthPW")->setValueNotifyingHost(1.0f);
+  p->apvts.getParameter("lfoDepthPitch")->setValueNotifyingHost(1.0f);
+
+  int basePW = p->getVoiceSettings(0).pulseWidth; // default 2048
+  ASSERT_NEAR(static_cast<float>(p->getActiveVoiceCountRuntime()), 0.0f, 0.01f,
+              "No active voices before idle modulation test");
+
+  // Process several blocks with no MIDI note activity.
+  for (int i = 0; i < 8; ++i)
+    processBlock(*p);
+
+  ASSERT_NEAR(static_cast<float>(p->getLastAppliedPW()),
+              static_cast<float>(basePW), 1.0f,
+              "Idle LFO does not modulate PW without active voices");
+  ASSERT_NEAR(p->getLastAppliedPitchOffset(), 0.0f, 0.001f,
+              "Idle LFO does not modulate pitch without active voices");
+}
+
 // ============================================================================
 // Chord Memory tests
 // ============================================================================
@@ -2471,6 +2499,7 @@ int main() {
   testModSlotEnableStateRoundTrip();
   testPresetDirtyDetection();
   testPostModValuesReturnToBaseline();
+  testIdleLFOModulationDoesNotTouchVoices();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

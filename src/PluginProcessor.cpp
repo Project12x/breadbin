@@ -1429,6 +1429,13 @@ void BreadbinProcessor::processLFO2(int numSamples) {
 void BreadbinProcessor::applyLFOModulation() {
   float val1 = lfo.enabled ? lfo.currentValue : 0.0f;
   float val2 = lfo2.enabled ? lfo2.currentValue : 0.0f;
+  bool anyVoiceActive = false;
+  for (int v = 0; v < 6; ++v) {
+    if (voices[v].active) {
+      anyVoiceActive = true;
+      break;
+    }
+  }
 
   // Filter cutoff modulation is now handled by applyFilterModulation()
   // which stacks mod wheel + LFO1 + LFO2 + filter envelope contributions.
@@ -1450,16 +1457,21 @@ void BreadbinProcessor::applyLFOModulation() {
             static_cast<int>(val2 * pwDepth2 * 2048.0f);
   if (sweepDepth > 0.0f)
     pwMod += static_cast<int>(pwmSweepCurrentValue * sweepDepth * 2048.0f);
-  for (int v = 0; v < 6; ++v) {
-    int basePW = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
-    int modPW = std::clamp(basePW + pwMod, 0, 4095);
-    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-    sid.setPulseWidth(v % 3, modPW);
+  if (anyVoiceActive) {
+    for (int v = 0; v < 6; ++v) {
+      if (!voices[v].active)
+        continue;
+      int basePW = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
+      int modPW = std::clamp(basePW + pwMod, 0, 4095);
+      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+      sid.setPulseWidth(v % 3, modPW);
+    }
   }
-  // Store representative PW for UI meter (voice 0)
-  lastAppliedPW.store(std::clamp(
-      (wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth) + pwMod, 0,
-      4095));
+  // Store representative PW for UI meter (voice 0), but avoid idle modulation
+  // movement when no voice is sounding.
+  int uiPWBase = wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth;
+  lastAppliedPW.store(
+      anyVoiceActive ? std::clamp(uiPWBase + pwMod, 0, 4095) : uiPWBase);
 
   // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if
   // active
@@ -1471,15 +1483,19 @@ void BreadbinProcessor::applyLFOModulation() {
   // Add wavetable pitch offset
   if (wtActive)
     semitoneMod += static_cast<float>(wtStep.pitchOffset);
-  for (int v = 0; v < 6; ++v) {
-    double baseHz =
-        voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-    double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
-    SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-    sid.setFrequency(v % 3, modHz);
+  if (anyVoiceActive) {
+    for (int v = 0; v < 6; ++v) {
+      if (!voices[v].active)
+        continue;
+      double baseHz =
+          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+      double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+      sid.setFrequency(v % 3, modHz);
+    }
   }
   // Store pitch offset for UI meter
-  lastAppliedPitchOffsetSemitones.store(semitoneMod);
+  lastAppliedPitchOffsetSemitones.store(anyVoiceActive ? semitoneMod : 0.0f);
 }
 
 // Preset dirty-state detection
