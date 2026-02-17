@@ -440,6 +440,9 @@ private:
   std::array<SlotRow, 4> slots;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       enableAttach;
+  juce::ComboBox presetSelector;
+  juce::TextButton presetPrevButton, presetNextButton;
+  void applyChordPresetByIndex(int presetIndex);
   juce::TextButton saveButton{"Save"}, loadButton{"Load"};
   void saveChordPreset();
   void loadChordPreset();
@@ -489,6 +492,9 @@ private:
   juce::TextButton randomizeButton{"Randomize"};
   juce::TextButton clearButton{"Clear"};
 
+  juce::ComboBox presetSelector;
+  juce::TextButton presetPrevButton, presetNextButton;
+  void applyWavetablePresetByIndex(int presetIndex);
   juce::TextButton saveButton{"Save"}, loadButton{"Load"};
   void saveWavetablePreset();
   void loadWavetablePreset();

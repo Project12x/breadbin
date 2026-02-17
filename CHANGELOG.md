@@ -55,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wavetable Presets**: Save/Load buttons in Wavetable popup.
   Saves all 16 steps (wave/pitch/PW) + settings to .wtsteps files via XML.
 
+- **Factory Preset Menus**: Chord Memory and Wavetable panels now have
+  preset browser (ComboBox + prev/next navigation) with 6 factory presets each.
+  Chord: Major Triad, Minor Triad, 7th, Sus4, Power Chord, Octaves.
+  Wavetable: Classic Sweep, Arp Up, Random S&H, PWM Cycle, Noise Burst, Waveform Morph.
+
+### Fixed
+
+- **SID Player Title Clipping**: Removed painted title decoration that
+  overlapped content below native title bar.
+
+- **Chord/WT Button Clipping**: Rearranged panel layouts so Save/Load and
+  preset controls no longer overlap existing buttons.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep
