@@ -1040,8 +1040,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     auto &s = slots[i];
     auto prefix = "mod" + juce::String(i) + "_";
 
-    s.slotLabel.setText("S" + juce::String(i + 1),
-                        juce::dontSendNotification);
+    s.slotLabel.setText("S" + juce::String(i + 1), juce::dontSendNotification);
     s.slotLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     s.slotLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(s.slotLabel);
@@ -1091,9 +1090,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.contributionLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.contributionLabel);
 
-    s.enableAttach = std::make_unique<
-        juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.apvts, prefix + "enable", s.enableButton);
+    s.enableAttach =
+        std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+            processor.apvts, prefix + "enable", s.enableButton);
     s.srcAttach = std::make_unique<
         juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         processor.apvts, prefix + "src", s.srcBox);
@@ -1366,16 +1365,15 @@ void ModMatrixPanel::timerCallback() {
                                        juce::dontSendNotification);
   }
 
-  totalFilterLabel.setText("Filter " +
-                               juce::String(processor.getModTotalFilterCutoff(),
-                                            2),
-                           juce::dontSendNotification);
-  totalPWLabel.setText(
-      "PW " + juce::String(processor.getModTotalPulseWidth(), 2),
+  totalFilterLabel.setText(
+      "Filter " + juce::String(processor.getModTotalFilterCutoff(), 2),
       juce::dontSendNotification);
-  totalPitchLabel.setText(
-      "Pitch " + juce::String(processor.getModTotalPitch(), 2),
-      juce::dontSendNotification);
+  totalPWLabel.setText("PW " +
+                           juce::String(processor.getModTotalPulseWidth(), 2),
+                       juce::dontSendNotification);
+  totalPitchLabel.setText("Pitch " +
+                              juce::String(processor.getModTotalPitch(), 2),
+                          juce::dontSendNotification);
   totalResLabel.setText("Res " +
                             juce::String(processor.getModTotalResonance(), 2),
                         juce::dontSendNotification);
@@ -1532,9 +1530,9 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   // Subtitle
   g.setColour(juce::Colour(120, 120, 135));
   g.setFont(juce::Font(juce::FontOptions(10.0f)));
-  g.drawText(
-      "Play a chord and click Learn, or set intervals manually (up to 6 notes total; 3 per SID in Multitimbral)",
-      10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
+  g.drawText("Play a chord and click Learn, or set intervals manually (up to 6 "
+             "notes total; 3 per SID in Multitimbral)",
+             10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
 
   // Divider below header
   g.setColour(juce::Colour(55, 55, 65));
@@ -1676,9 +1674,11 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   auto setupActionButton = [this](juce::TextButton &button,
                                   const juce::String &tooltip,
                                   std::function<void()> onClick) {
-    button.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
+    button.setColour(juce::TextButton::buttonColourId,
+                     juce::Colour(50, 50, 60));
     button.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
-    button.setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    button.setColour(juce::TextButton::textColourOffId,
+                     juce::Colours::lightgrey);
     button.setTooltip(tooltip);
     button.onClick = std::move(onClick);
     addAndMakeVisible(button);
@@ -1686,14 +1686,15 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   setupActionButton(shiftLeftButton,
                     "Rotate active steps left (step 1 takes step 2, etc.)",
                     [this]() { shiftActiveSteps(false); });
-  setupActionButton(shiftRightButton,
-                    "Rotate active steps right (last active step wraps to step 1)",
-                    [this]() { shiftActiveSteps(true); });
-  setupActionButton(randomizeButton,
-                    "Randomize waveform, pitch, and pulse width for active steps",
-                    [this]() { randomizeActiveSteps(); });
-  setupActionButton(clearButton,
-                    "Reset active steps to Pulse / 0 st / PW 2048",
+  setupActionButton(
+      shiftRightButton,
+      "Rotate active steps right (last active step wraps to step 1)",
+      [this]() { shiftActiveSteps(true); });
+  setupActionButton(
+      randomizeButton,
+      "Randomize waveform, pitch, and pulse width for active steps",
+      [this]() { randomizeActiveSteps(); });
+  setupActionButton(clearButton, "Reset active steps to Pulse / 0 st / PW 2048",
                     [this]() { clearActiveSteps(); });
 
   startTimer(33);
@@ -1840,7 +1841,8 @@ void WavetablePanel::shiftActiveSteps(bool right) {
   };
   auto writeParamInt = [this](const juce::String &id, int value) {
     if (auto *param = processor.apvts.getParameter(id))
-      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+      param->setValueNotifyingHost(
+          param->convertTo0to1(static_cast<float>(value)));
   };
 
   for (int i = 0; i < numActive; ++i) {
@@ -1866,7 +1868,8 @@ void WavetablePanel::randomizeActiveSteps() {
 
   auto writeParamInt = [this](const juce::String &id, int value) {
     if (auto *param = processor.apvts.getParameter(id))
-      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+      param->setValueNotifyingHost(
+          param->convertTo0to1(static_cast<float>(value)));
   };
 
   for (int i = 0; i < numActive; ++i) {
@@ -1883,7 +1886,8 @@ void WavetablePanel::clearActiveSteps() {
 
   auto writeParamInt = [this](const juce::String &id, int value) {
     if (auto *param = processor.apvts.getParameter(id))
-      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+      param->setValueNotifyingHost(
+          param->convertTo0to1(static_cast<float>(value)));
   };
 
   for (int i = 0; i < numActive; ++i) {
@@ -2027,6 +2031,14 @@ void BreadbinEditor::setupControls() {
   globalPresetSelector.setTooltip("Factory presets - applies to entire plugin");
   globalPresetSelector.onChange = [this]() {
     int id = globalPresetSelector.getSelectedId();
+    // Remap favorite sentinel IDs to real preset IDs
+    constexpr int favMap[][2] = {
+        {500, 1}, {501, 10}, {502, 38}, {503, 22}, {504, 25}};
+    for (auto &f : favMap)
+      if (id == f[0]) {
+        id = f[1];
+        break;
+      }
     if (id >= 1000) {
       // User preset: load from file
       auto idx = static_cast<size_t>(id - 1000);
@@ -4905,66 +4917,100 @@ void BreadbinEditor::refreshUserPresets() {
   int prevId = globalPresetSelector.getSelectedId();
   globalPresetSelector.clear(juce::dontSendNotification);
 
-  // Re-add all factory presets
-  globalPresetSelector.addSectionHeading("Classic C64");
-  globalPresetSelector.addItem("Commando", 10);
-  globalPresetSelector.addItem("Ninja Bass", 11);
-  globalPresetSelector.addItem("Ocean Loader", 12);
-  globalPresetSelector.addItem("Cybernoid", 16);
-  globalPresetSelector.addItem("Wizball", 17);
-  globalPresetSelector.addItem("Thing Bounce", 18);
-  globalPresetSelector.addItem("Monty Lead", 28);
-  globalPresetSelector.addItem("Sanxion Buzz", 29);
-  globalPresetSelector.addItem("Last Ninja", 30);
-  globalPresetSelector.addItem("Delta Run", 31);
-  globalPresetSelector.addItem("IK Lead", 33);
-  globalPresetSelector.addItem("Turbo Saw", 34);
-  globalPresetSelector.addItem("Times of Lore", 35);
-  globalPresetSelector.addItem("Hawkeye Pluck", 36);
-  globalPresetSelector.addItem("Deflektor Bell", 37);
-  globalPresetSelector.addItem("Follin Complex", 43);
-  globalPresetSelector.addItem("Noise Drums", 44);
+  // Build categorized preset menu using PopupMenu submenus
+  auto *root = globalPresetSelector.getRootMenu();
 
-  globalPresetSelector.addSectionHeading("Leads");
-  globalPresetSelector.addItem("Dual Lead", 1);
-  globalPresetSelector.addItem("Retro Synth", 5);
-  globalPresetSelector.addItem("SID Brass", 15);
-  globalPresetSelector.addItem("Sync Lead", 19);
-  globalPresetSelector.addItem("Acid Squelch", 20);
-  globalPresetSelector.addItem("Filter Scream", 46);
+  // -- Favorites (top-level, sentinel IDs remapped in onChange) --
+  root->addItem(500, "Dual Lead");
+  root->addItem(501, "Commando");
+  root->addItem(502, "Drift Pad");
+  root->addItem(503, "Growl Bass");
+  root->addItem(504, "Chip Sequence");
+  root->addSeparator();
 
-  globalPresetSelector.addSectionHeading("Bass");
-  globalPresetSelector.addItem("Sub Bass", 21);
-  globalPresetSelector.addItem("Growl Bass", 22);
-  globalPresetSelector.addItem("Cobra Bass", 32);
-  globalPresetSelector.addItem("Wobble Bass", 40);
-  globalPresetSelector.addItem("Arp Bass", 45);
+  // -- Leads --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(1, "Dual Lead");
+    sub.addItem(5, "Retro Synth");
+    sub.addItem(15, "SID Brass");
+    sub.addItem(19, "Sync Lead");
+    sub.addItem(20, "Acid Squelch");
+    sub.addItem(46, "Filter Scream");
+    root->addSubMenu("Leads", sub);
+  }
 
-  globalPresetSelector.addSectionHeading("Pads & Keys");
-  globalPresetSelector.addItem("Pad Stack", 2);
-  globalPresetSelector.addItem("Chord Stab", 6);
-  globalPresetSelector.addItem("Ice Pad", 23);
-  globalPresetSelector.addItem("PWM Strings", 24);
-  globalPresetSelector.addItem("Drift Pad", 38);
-  globalPresetSelector.addItem("Poly Chord", 42);
+  // -- Bass --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(21, "Sub Bass");
+    sub.addItem(22, "Growl Bass");
+    sub.addItem(32, "Cobra Bass");
+    sub.addItem(40, "Wobble Bass");
+    sub.addItem(45, "Arp Bass");
+    root->addSubMenu("Bass", sub);
+  }
 
-  globalPresetSelector.addSectionHeading("Arps & Sequences");
-  globalPresetSelector.addItem("Arpeggiated", 3);
-  globalPresetSelector.addItem("WT Arpeggio", 8);
-  globalPresetSelector.addItem("WT Morph", 9);
-  globalPresetSelector.addItem("Hubbard Arp", 13);
-  globalPresetSelector.addItem("Chip Sequence", 25);
-  globalPresetSelector.addItem("Arp Machine", 39);
-  globalPresetSelector.addItem("Sequence Morph", 41);
+  // -- Pads & Keys --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(2, "Pad Stack");
+    sub.addItem(6, "Chord Stab");
+    sub.addItem(23, "Ice Pad");
+    sub.addItem(24, "PWM Strings");
+    sub.addItem(38, "Drift Pad");
+    sub.addItem(42, "Poly Chord");
+    root->addSubMenu("Pads & Keys", sub);
+  }
 
-  globalPresetSelector.addSectionHeading("FX & Modulation");
-  globalPresetSelector.addItem("Fat Unison", 4);
-  globalPresetSelector.addItem("Galway Sweep", 14);
-  globalPresetSelector.addItem("Mod Madness", 7);
-  globalPresetSelector.addItem("S&H Glitch", 26);
-  globalPresetSelector.addItem("Ring Bell", 27);
+  // -- Arps & Sequences --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(3, "Arpeggiated");
+    sub.addItem(8, "WT Arpeggio");
+    sub.addItem(9, "WT Morph");
+    sub.addItem(13, "Hubbard Arp");
+    sub.addItem(25, "Chip Sequence");
+    sub.addItem(39, "Arp Machine");
+    sub.addItem(41, "Sequence Morph");
+    root->addSubMenu("Arps & Sequences", sub);
+  }
 
-  // Scan for user presets
+  // -- FX & Modulation --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(4, "Fat Unison");
+    sub.addItem(14, "Galway Sweep");
+    sub.addItem(7, "Mod Madness");
+    sub.addItem(26, "S&H Glitch");
+    sub.addItem(27, "Ring Bell");
+    root->addSubMenu("FX & Modulation", sub);
+  }
+
+  // -- Classic C64 (last - niche/educational) --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(10, "Commando");
+    sub.addItem(11, "Ninja Bass");
+    sub.addItem(12, "Ocean Loader");
+    sub.addItem(16, "Cybernoid");
+    sub.addItem(17, "Wizball");
+    sub.addItem(18, "Thing Bounce");
+    sub.addItem(28, "Monty Lead");
+    sub.addItem(29, "Sanxion Buzz");
+    sub.addItem(30, "Last Ninja");
+    sub.addItem(31, "Delta Run");
+    sub.addItem(33, "IK Lead");
+    sub.addItem(34, "Turbo Saw");
+    sub.addItem(35, "Times of Lore");
+    sub.addItem(36, "Hawkeye Pluck");
+    sub.addItem(37, "Deflektor Bell");
+    sub.addItem(43, "Follin Complex");
+    sub.addItem(44, "Noise Drums");
+    root->addSubMenu("Classic C64", sub);
+  }
+
+  // -- User Presets --
   userPresetFiles.clear();
   auto dir = getUserPresetsDir();
   if (dir.exists()) {
@@ -4972,14 +5018,13 @@ void BreadbinEditor::refreshUserPresets() {
     files.sort();
 
     if (!files.isEmpty()) {
-      globalPresetSelector.addSeparator();
-      globalPresetSelector.addSectionHeading("User Presets");
-
+      root->addSeparator();
+      juce::PopupMenu userMenu;
       for (int i = 0; i < files.size(); ++i) {
         userPresetFiles.push_back(files[i]);
-        globalPresetSelector.addItem(files[i].getFileNameWithoutExtension(),
-                                     1000 + i);
+        userMenu.addItem(1000 + i, files[i].getFileNameWithoutExtension());
       }
+      root->addSubMenu("User Presets", userMenu);
     }
   }
 
