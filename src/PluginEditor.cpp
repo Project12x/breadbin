@@ -5138,10 +5138,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(600, 5);
-    // Wavetable: 3-step bass octave arp at frame rate
+    // Wavetable: 3-step bass octave arp
     setParam("wtEnable", 1.0f);
     setParam("wtNumSteps", 3.0f);
-    setParam("wtRate", 50.0f);
+    setParam("wtRate", 8.0f);
     {
       auto setWTStep = [&setParam](int step, float wave, float pitch,
                                    float pw) {
@@ -5798,6 +5798,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
   }
+
+  // Re-apply all voice settings to SID engine after preset configuration.
+  // configVoice calls applyVoiceSettings before per-voice params like
+  // _sync/_ringMod are set, so this final pass pushes them to the engine.
+  for (int v = 0; v < 6; ++v)
+    processor.applyVoiceSettings(v);
 
   // Refresh UI for current voice
   loadVoiceToUI(selectedVoice);
