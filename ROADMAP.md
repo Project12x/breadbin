@@ -78,12 +78,14 @@
 - [ ] macOS build (AU format)
 - [ ] Linux build (LV2 format)
 - [x] Factory preset pack (69 global presets, 37 voice presets, categorized submenus)
+- [ ] Hard sync audibility study (per-voice pitch offset / cross-SID sync for C64-accurate behavior)
+- [ ] Ring mod audibility study (voice frequency relationships for proper inharmonic sidebands)
 - [ ] User documentation / manual
 - [ ] Marketing assets (screenshots, demo audio)
 
 ### Deferred / High-Risk
 
-- [ ] 3-SID expansion (9-voice architecture) — previous attempt caused oscillation; requires careful CPU/stability work
+- [ ] 3-SID expansion (9-voice architecture) ï¿½ previous attempt caused oscillation; requires careful CPU/stability work
 
 ### UI Polish
 
