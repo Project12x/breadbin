@@ -1923,6 +1923,111 @@ void testModSlotInactiveZeros() {
   }
 }
 
+void testModSlotEnableGate() {
+  std::printf("--- Mod slot enable gate: disabling row zeros contribution and totals ---\n");
+  auto p = createTestProcessor();
+
+  auto *enable0 = p->apvts.getParameter("mod0_enable");
+  auto *src0 = p->apvts.getParameter("mod0_src");
+  auto *dst0 = p->apvts.getParameter("mod0_dst");
+  auto *amt0 = p->apvts.getParameter("mod0_amt");
+  if (!enable0 || !src0 || !dst0 || !amt0) {
+    ASSERT_TRUE(false, "mod0 params missing");
+    return;
+  }
+
+  // Ensure all mod-row enable params exist and default to enabled.
+  for (int i = 0; i < 4; ++i) {
+    auto id = "mod" + juce::String(i) + "_enable";
+    auto *param = p->apvts.getParameter(id);
+    ASSERT_TRUE(param != nullptr, ("Param exists: " + id).toStdString().c_str());
+    if (param) {
+      float enabled = param->convertFrom0to1(param->getValue());
+      ASSERT_NEAR(enabled, 1.0f, 0.01f, ("Default enabled: " + id).toStdString().c_str());
+    }
+  }
+
+  // Deterministic non-zero source: LFO1 square.
+  p->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p->apvts.getParameter("lfoWave");
+  auto *rateParam = p->apvts.getParameter("lfoRate");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
+  rateParam->setValueNotifyingHost(rateParam->convertTo0to1(2.0f)); // slow
+
+  // Slot 0: LFO1 -> Filter, amount 0.75.
+  src0->setValueNotifyingHost(src0->convertTo0to1(1.0f));
+  dst0->setValueNotifyingHost(dst0->convertTo0to1(1.0f));
+  amt0->setValueNotifyingHost(amt0->convertTo0to1(0.75f));
+  enable0->setValueNotifyingHost(1.0f);
+
+  for (int i = 0; i < 3; ++i)
+    processBlock(*p);
+
+  float srcOn = p->getModSlotSourceValue(0);
+  float contribOn = p->getModSlotContribution(0);
+  float totalOn = p->getModTotalFilterCutoff();
+
+  ASSERT_TRUE(std::abs(srcOn) > 0.5f, "Enabled row has non-zero source value");
+  ASSERT_TRUE(std::abs(contribOn) > 0.2f, "Enabled row has non-zero contribution");
+  ASSERT_TRUE(std::abs(totalOn) > 0.2f, "Enabled row contributes to destination total");
+
+  // Disable row 0 and verify slot + totals zero out.
+  enable0->setValueNotifyingHost(0.0f);
+  for (int i = 0; i < 3; ++i)
+    processBlock(*p);
+
+  ASSERT_NEAR(p->getModSlotSourceValue(0), 0.0f, 0.001f, "Disabled row source is zero");
+  ASSERT_NEAR(p->getModSlotContribution(0), 0.0f, 0.001f, "Disabled row contribution is zero");
+  ASSERT_NEAR(p->getModTotalFilterCutoff(), 0.0f, 0.001f, "Disabled row destination total is zero");
+}
+
+void testModSlotEnableStateRoundTrip() {
+  std::printf("--- Mod slot enable state round-trip: enable toggles persist ---\n");
+  auto p = createTestProcessor();
+
+  auto *enable0 = p->apvts.getParameter("mod0_enable");
+  auto *enable1 = p->apvts.getParameter("mod1_enable");
+  auto *src0 = p->apvts.getParameter("mod0_src");
+  auto *dst0 = p->apvts.getParameter("mod0_dst");
+  auto *amt0 = p->apvts.getParameter("mod0_amt");
+  if (!enable0 || !enable1 || !src0 || !dst0 || !amt0) {
+    ASSERT_TRUE(false, "mod enable/state params missing");
+    return;
+  }
+
+  // Configure slot 0 but disable it, plus disable slot 1 to validate persistence.
+  src0->setValueNotifyingHost(src0->convertTo0to1(1.0f)); // LFO1
+  dst0->setValueNotifyingHost(dst0->convertTo0to1(1.0f)); // Filter
+  amt0->setValueNotifyingHost(amt0->convertTo0to1(0.9f));
+  enable0->setValueNotifyingHost(0.0f);
+  enable1->setValueNotifyingHost(0.0f);
+
+  juce::MemoryBlock stateData;
+  p->getStateInformation(stateData);
+
+  auto p2 = createTestProcessor();
+  p2->setStateInformation(stateData.getData(), static_cast<int>(stateData.getSize()));
+
+  float en0 = p2->apvts.getParameter("mod0_enable")->convertFrom0to1(
+      p2->apvts.getParameter("mod0_enable")->getValue());
+  float en1 = p2->apvts.getParameter("mod1_enable")->convertFrom0to1(
+      p2->apvts.getParameter("mod1_enable")->getValue());
+  ASSERT_NEAR(en0, 0.0f, 0.01f, "mod0_enable restored disabled");
+  ASSERT_NEAR(en1, 0.0f, 0.01f, "mod1_enable restored disabled");
+
+  // With slot 0 disabled after restore, its runtime display/total stay zero.
+  p2->apvts.getParameter("lfoEnable")->setValueNotifyingHost(1.0f);
+  auto *waveParam = p2->apvts.getParameter("lfoWave");
+  waveParam->setValueNotifyingHost(waveParam->convertTo0to1(2.0f)); // Square
+  for (int i = 0; i < 3; ++i)
+    processBlock(*p2);
+
+  ASSERT_NEAR(p2->getModSlotContribution(0), 0.0f, 0.001f,
+              "Restored disabled slot 0 contribution is zero");
+  ASSERT_NEAR(p2->getModTotalFilterCutoff(), 0.0f, 0.001f,
+              "Restored disabled slot 0 does not affect destination total");
+}
+
 void testPresetDirtyDetection() {
   std::printf("--- Preset dirty: snapshot clean, change param -> dirty ---\n");
   auto p = createTestProcessor();
@@ -2104,6 +2209,58 @@ void testChordMemoryStateRoundTrip() {
   float int1 = p2->apvts.getParameter("chord_s2_i1")->convertFrom0to1(
       p2->apvts.getParameter("chord_s2_i1")->getValue());
   ASSERT_NEAR(int1, 7.0f, 0.01f, "Chord interval s2_i1 restored (7)");
+}
+
+void testChordMemoryDualSIDSpread() {
+  std::printf("--- Chord Memory dual-SID spread: 6-note chord allocates across all voices ---\n");
+  auto p = createTestProcessor();
+
+  // Use Stereo mode (non-multitimbral path) so chord note allocation goes
+  // through triggerChordDualSID().
+  auto *dualMode = p->apvts.getParameter("dualMode");
+  auto *chordEnable = p->apvts.getParameter("chordEnable");
+  if (!dualMode || !chordEnable) {
+    ASSERT_TRUE(false, "dualMode or chordEnable param missing");
+    return;
+  }
+  dualMode->setValueNotifyingHost(dualMode->convertTo0to1(0.0f)); // Stereo Split
+
+  // Enable chord memory with 5 intervals => 6 total notes.
+  chordEnable->setValueNotifyingHost(1.0f);
+  std::array<int, 5> intervals = {3, 7, 10, 14, 17};
+  for (int i = 0; i < 5; ++i) {
+    auto id = "chord_s0_i" + juce::String(i);
+    auto *param = p->apvts.getParameter(id);
+    param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(intervals[i])));
+  }
+
+  // Ensure APVTS values are synced before MIDI trigger.
+  processBlock(*p);
+
+  // Trigger note-on.
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi);
+
+  // Expected spread for root C4 (60):
+  // left SID voices 0..2 -> 60, 63, 67
+  // right SID voices 3..5 -> 70, 74, 77
+  std::array<int, 6> expected = {60, 63, 67, 70, 74, 77};
+  ASSERT_NEAR(static_cast<float>(p->getActiveVoiceCountRuntime()), 6.0f, 0.01f,
+              "All 6 voices are active for 6-note chord");
+  for (int v = 0; v < 6; ++v) {
+    ASSERT_TRUE(p->isVoiceActiveRuntime(v), "Voice is active");
+    ASSERT_NEAR(static_cast<float>(p->getVoiceNoteRuntime(v)),
+                static_cast<float>(expected[v]), 0.01f,
+                "Voice note matches dual-SID chord allocation");
+  }
+
+  // Note-off should release all chord voices in non-multitimbral mode.
+  juce::MidiBuffer noteOff;
+  noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &noteOff);
+  ASSERT_NEAR(static_cast<float>(p->getActiveVoiceCountRuntime()), 0.0f, 0.01f,
+              "All chord voices release on note-off");
 }
 
 // ============================================================================
@@ -2298,6 +2455,7 @@ int main() {
   testChordMemoryDefaultOff();
   testChordMemoryTriggersAudio();
   testChordMemoryStateRoundTrip();
+  testChordMemoryDualSIDSpread();
 
   // Wavetable Step Editor
   testWavetableStepParamsEditable();
@@ -2309,6 +2467,8 @@ int main() {
   testPostModResonanceStorage();
   testModSlotDisplayValues();
   testModSlotInactiveZeros();
+  testModSlotEnableGate();
+  testModSlotEnableStateRoundTrip();
   testPresetDirtyDetection();
   testPostModValuesReturnToBaseline();
 

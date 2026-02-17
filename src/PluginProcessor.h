@@ -430,6 +430,23 @@ private:
 public:
   void setGlobalPresetId(int id) { globalPresetId = id; }
   int getGlobalPresetId() const { return globalPresetId; }
+
+  // Runtime voice-state accessors (used by integration diagnostics/tests)
+  bool isVoiceActiveRuntime(int voiceIndex) const {
+    return (voiceIndex >= 0 && voiceIndex < 6) ? voices[voiceIndex].active
+                                                : false;
+  }
+  int getVoiceNoteRuntime(int voiceIndex) const {
+    return (voiceIndex >= 0 && voiceIndex < 6) ? voices[voiceIndex].note : -1;
+  }
+  int getActiveVoiceCountRuntime() const {
+    int count = 0;
+    for (const auto &voice : voices)
+      if (voice.active)
+        ++count;
+    return count;
+  }
+
   // SID file player
   SidFilePlayer &getSidFilePlayer() { return *sidFilePlayer; }
   std::atomic<bool> sidPlayerActive{false};
