@@ -2295,6 +2295,16 @@ void BreadbinEditor::setupControls() {
   presetSelector.addItem("Kick Thump", 18);
   presetSelector.addItem("White Noise", 19);
   presetSelector.addItem("Zap", 20);
+  presetSelector.addItem("Commando Pluck", 21);
+  presetSelector.addItem("Punchy Saw", 22);
+  presetSelector.addItem("Buzz Saw", 23);
+  presetSelector.addItem("Driving Saw", 24);
+  presetSelector.addItem("Wide Lead", 25);
+  presetSelector.addItem("Gentle Triangle", 26);
+  presetSelector.addItem("Short Pluck", 27);
+  presetSelector.addItem("Punch Bass", 28);
+  presetSelector.addItem("Bell Triangle", 29);
+  presetSelector.addItem("Delta Sustain", 30);
   presetSelector.setSelectedId(1);
   presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
@@ -3699,6 +3709,43 @@ void BreadbinEditor::applyPreset(int presetId) {
     configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 0, 12, 0,
                    0);
     break;
+  case 21: // Commando Pluck - Hubbard's iconic plucky pulse
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1536, 0, 6, 0, 6);
+    break;
+  case 22: // Punchy Saw - Fast decay saw bass hit
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 9, 0,
+                   0);
+    break;
+  case 23: // Buzz Saw - Ultra-short buzzy saw
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 2, 6,
+                   1);
+    break;
+  case 24: // Driving Saw - Medium decay driving saw
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10,
+                   2);
+    break;
+  case 25: // Wide Lead - Hubbard's wide clean pulse
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 2400, 0, 4, 12,
+                   3);
+    break;
+  case 26: // Gentle Triangle - Galway's soft triangle
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 4, 4, 14,
+                   8);
+    break;
+  case 27: // Short Pluck - Tel's short pulse pluck
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1600, 0, 4, 0, 3);
+    break;
+  case 28: // Punch Bass - Daglish's punchy saw bass
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 0,
+                   0);
+    break;
+  case 29: // Bell Triangle - Daglish's metallic ring mod bell
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8);
+    break;
+  case 30: // Delta Sustain - Hubbard's sustained narrow pulse
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15,
+                   6);
+    break;
   }
 
   loadVoiceToUI(selectedVoice);
@@ -4214,7 +4261,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   case 10: { // Commando - Rob Hubbard's iconic pulse lead
     // Hubbard signature: narrow pulse, fast pluck envelope, LP filter
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 6, 0, 6, 2);
+      configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 6, 0, 6, 21);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(900, 7);
@@ -4225,7 +4272,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   case 11: { // Ninja Bass - Punchy saw bass (Ben Daglish / Rob Hubbard style)
     // Classic C64 bass: sawtooth, instant attack, fast decay, no sustain
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 9, 0, 0, 3);
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 9, 0, 0, 22);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(350, 4);
@@ -4690,7 +4737,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 29: { // Sanxion Buzz - Rob Hubbard's bright aggressive saw (Sanxion)
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 2, 6, 1, 3);
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 2, 6, 1, 23);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1500, 7);
@@ -4712,7 +4759,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 31: { // Delta Run - Rob Hubbard's sustained resonant pulse (Delta)
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15, 6, 2);
+      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15, 6, 30);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(900, 6);
@@ -4721,7 +4768,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 32: { // Cobra Bass - Ben Daglish's punchy resonant saw bass
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 0, 0, 3);
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 0, 0, 28);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(400, 8);
@@ -4730,7 +4777,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 33: { // IK Lead - Rob Hubbard's wide clean pulse (International Karate)
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 2400, 0, 4, 12, 3, 2);
+      configVoice(v, SIDEngine::Waveform::Pulse, 2400, 0, 4, 12, 3, 25);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1300, 3);
@@ -4739,7 +4786,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 34: { // Turbo Saw - Jeroen Tel's bright driving saw (Turbo Outrun)
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 3);
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 24);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1400, 5);
@@ -4748,7 +4795,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 35: { // Times of Lore - Martin Galway's soft triangle pad
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Triangle, 0, 4, 4, 14, 8, 6);
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 4, 4, 14, 8, 26);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(600, 2);
@@ -4757,7 +4804,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 36: { // Hawkeye Pluck - Jeroen Tel's short pulse pluck (Hawkeye)
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1600, 0, 4, 0, 3, 2);
+      configVoice(v, SIDEngine::Waveform::Pulse, 1600, 0, 4, 0, 3, 27);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1200, 6);
@@ -4766,7 +4813,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 37: { // Deflektor Bell - Ben Daglish's metallic ring mod bell
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8, 6);
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8, 29);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
