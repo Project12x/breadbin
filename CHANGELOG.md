@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Preset Navigation**: Previous/next buttons flanking the preset selector
   for sequential browsing through all 46 factory presets with wrapping.
 
+- **Tooltip Audit**: Added tooltips to mod matrix source/destination/amount
+  controls and LFO depth sliders.
+
+- **Popup Panel Styling**: Standardized SID File Player with title decoration
+  (glow pill + divider). Wavetable title font matched to 14pt bold.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

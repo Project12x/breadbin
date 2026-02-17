@@ -545,6 +545,17 @@ void SidPlayerPanel::resized() {
 
 void SidPlayerPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+
+  // Title with glow pill
+  g.setColour(juce::Colours::cyan.withAlpha(0.15f));
+  g.fillRoundedRectangle(8.0f, 4.0f, 160.0f, 22.0f, 4.0f);
+  g.setColour(juce::Colours::cyan);
+  g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
+  g.drawText("SID FILE PLAYER", 14, 6, 150, 20, juce::Justification::centredLeft);
+
+  // Divider below header
+  g.setColour(juce::Colour(55, 55, 65));
+  g.drawHorizontalLine(30, 8.0f, static_cast<float>(getWidth() - 8));
 }
 
 void SidPlayerPanel::timerCallback() { updateRegisterDisplay(); }
@@ -956,6 +967,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     slider->setColour(juce::Slider::textBoxOutlineColourId,
                       juce::Colours::transparentBlack);
     addAndMakeVisible(*slider);
+    slider->setTooltip(name);
     label.setText(name, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     label.setFont(juce::Font(juce::FontOptions(9.0f)));
@@ -1072,6 +1084,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.srcBox.addItem("FiltEnv", 4);
     s.srcBox.addItem("ModWheel", 5);
     s.srcBox.addItem("Velocity", 6);
+    s.srcBox.setTooltip("Modulation source");
     addAndMakeVisible(s.srcBox);
 
     s.dstBox.addItem("None", 1);
@@ -1079,6 +1092,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.dstBox.addItem("PW", 3);
     s.dstBox.addItem("Pitch", 4);
     s.dstBox.addItem("Resonance", 5);
+    s.dstBox.setTooltip("Modulation destination");
     addAndMakeVisible(s.dstBox);
 
     s.amtSlider.setRange(-1.0, 1.0, 0.01);
@@ -1089,6 +1103,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
                           juce::Colours::cyan);
     s.amtSlider.setColour(juce::Slider::textBoxOutlineColourId,
                           juce::Colours::transparentBlack);
+    s.amtSlider.setTooltip("Modulation amount (-1 to +1)");
     addAndMakeVisible(s.amtSlider);
 
     s.sourceValueLabel.setColour(juce::Label::textColourId,
@@ -1722,7 +1737,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.fillRoundedRectangle(10.0f, 2.0f, static_cast<float>(panelWidth - 20),
                          22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
-  g.setFont(16.0f);
+  g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
              juce::Justification::centred);
 
