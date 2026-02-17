@@ -13,6 +13,8 @@ SIDEngine::SIDEngine() {
   setVolume(15);
   setFilterCutoff(1024);
   setFilterResonance(0);
+  setFilterMode(true, false,
+                false); // Default to lowpass so filtered voices produce output
 }
 
 SIDEngine::~SIDEngine() = default;

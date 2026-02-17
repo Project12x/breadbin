@@ -101,7 +101,8 @@ private:
   // Filter state cache
   uint16_t filterCutoff = 1024;
   uint8_t filterResonance = 0;
-  uint8_t filterMode = 0;
+  uint8_t filterMode =
+      0x10; // Default lowpass so filtered voices produce output
   uint8_t filterVoiceMask = 0;
   uint8_t masterVolume = 15;
 
