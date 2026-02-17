@@ -687,6 +687,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   masterVolAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "masterVol", masterVolSlider);
+  noiseGateAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "noiseGateThreshold", noiseGateSlider);
   dualModeAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processor.apvts, "dualMode", dualModeSelector);
@@ -2409,6 +2412,17 @@ void BreadbinEditor::setupControls() {
   // No onValueChange needed — APVTS attachment + processBlock sync handles it
   addAndMakeVisible(masterVolSlider);
 
+  noiseGateLabel.setText("Gate", juce::dontSendNotification);
+  noiseGateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  noiseGateLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
+  addAndMakeVisible(noiseGateLabel);
+
+  noiseGateSlider.setRange(0.0, 0.1, 0.001);
+  noiseGateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  noiseGateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
+  noiseGateSlider.setTooltip("Noise gate threshold (0 = off, higher = more gating)");
+  addAndMakeVisible(noiseGateSlider);
+
   // External Audio Input
   extInputEnableButton.setToggleState(processor.isExtInputEnabled(),
                                       juce::dontSendNotification);
@@ -3197,6 +3211,8 @@ void BreadbinEditor::resized() {
   // Master Volume in header (wider slider for better resolution)
   masterVolLabel.setBounds(topRow.removeFromLeft(45));
   masterVolSlider.setBounds(topRow.removeFromLeft(160));
+  noiseGateLabel.setBounds(topRow.removeFromLeft(35));
+  noiseGateSlider.setBounds(topRow.removeFromLeft(120));
 
   // Ext In on the right of header
   extInputLevelSlider.setBounds(topRow.removeFromRight(80));

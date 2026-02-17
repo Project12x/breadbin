@@ -427,7 +427,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   safetyLimiter.process(context);
 
   // Simple noise gate to silence residual drone (-40dB threshold)
-  constexpr float noiseGateThreshold = 0.01f; // ~-40dB
+  const float noiseGateThreshold =
+      noiseGateThresholdPtr->load(std::memory_order_relaxed);
   for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
     auto *channelData = buffer.getWritePointer(ch);
     for (int i = 0; i < numSamples; ++i) {
@@ -439,7 +440,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Measure CPU load: time spent / time available
   const auto cpuTimerEnd = juce::Time::getHighResolutionTicks();
-  const double elapsed = juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
+  const double elapsed =
+      juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
   const double budget = static_cast<double>(numSamples) / getSampleRate();
   cpuLoadPercent.store(static_cast<float>(elapsed / budget * 100.0),
                        std::memory_order_relaxed);
@@ -1205,10 +1207,9 @@ void BreadbinProcessor::applyModMatrix() {
   float resMod = 0.0f;
 
   for (int i = 0; i < kModSlots; ++i) {
-    const bool rowEnabled =
-        (modSlotPtrs[i].enable != nullptr)
-            ? (modSlotPtrs[i].enable->load() > 0.5f)
-            : true;
+    const bool rowEnabled = (modSlotPtrs[i].enable != nullptr)
+                                ? (modSlotPtrs[i].enable->load() > 0.5f)
+                                : true;
     auto src =
         static_cast<ModSource>(static_cast<int>(modSlotPtrs[i].src->load()));
     auto dst =
@@ -1478,8 +1479,8 @@ void BreadbinProcessor::applyLFOModulation() {
   // Store representative PW for UI meter (voice 0), but avoid idle modulation
   // movement when no voice is sounding.
   int uiPWBase = wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth;
-  lastAppliedPW.store(
-      anyVoiceActive ? std::clamp(uiPWBase + pwMod, 0, 4095) : uiPWBase);
+  lastAppliedPW.store(anyVoiceActive ? std::clamp(uiPWBase + pwMod, 0, 4095)
+                                     : uiPWBase);
 
   // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if
   // active
@@ -2053,6 +2054,9 @@ BreadbinProcessor::createParameterLayout() {
   // Global
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"masterVol", 1}, "Master Volume", 0.0f, 1.0f, 0.8f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"noiseGateThreshold", 1}, "Noise Gate Threshold", 0.0f,
+      0.1f, 0.01f));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"dualMode", 1}, "Dual SID Mode",
       juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
@@ -2285,6 +2289,7 @@ BreadbinProcessor::createParameterLayout() {
 
 void BreadbinProcessor::initializeParameterPointers() {
   masterVolPtr = apvts.getRawParameterValue("masterVol");
+  noiseGateThresholdPtr = apvts.getRawParameterValue("noiseGateThreshold");
   dualModePtr = apvts.getRawParameterValue("dualMode");
   chipLeftPtr = apvts.getRawParameterValue("chipLeft");
   chipRightPtr = apvts.getRawParameterValue("chipRight");

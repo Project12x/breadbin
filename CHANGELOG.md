@@ -68,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Chord/WT Button Clipping**: Rearranged panel layouts so Save/Load and
   preset controls no longer overlap existing buttons.
 
+- **Adjustable Noise Gate**: Noise gate threshold now controllable via
+  slider (0-0.1, default 0.01 / ~-40dB). Set to 0 to disable gating.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

@@ -703,6 +703,9 @@ private:
   // ========== APVTS ATTACHMENTS ==========
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       masterVolAttach;
+  juce::Label noiseGateLabel{"", "GATE"};
+  juce::Slider noiseGateSlider;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseGateAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       dualModeAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>

@@ -471,6 +471,7 @@ private:
 
   // APVTS Parameter Pointers for fast access in audio thread
   std::atomic<float> *masterVolPtr = nullptr;
+  std::atomic<float> *noiseGateThresholdPtr = nullptr;
   std::atomic<float> *dualModePtr = nullptr;
   std::atomic<float> *chipLeftPtr = nullptr;
   std::atomic<float> *chipRightPtr = nullptr;
