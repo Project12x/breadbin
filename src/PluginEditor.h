@@ -562,6 +562,7 @@ private:
   juce::Label modeLabel;
   juce::ComboBox globalPresetSelector; // Factory + user presets
   juce::Label cpuLoadLabel;
+  juce::TextButton presetPrevButton, presetNextButton;
   juce::Label globalPresetLabel;
   std::vector<juce::File> userPresetFiles; // Tracked user presets (ID 1000+)
   juce::ComboBox presetSelector;           // Voice presets

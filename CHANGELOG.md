@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CPU Meter**: Real-time DSP load percentage displayed in top-right corner.
   Color-coded: grey (<50%), orange (<80%), red (>=80%).
 
+- **Preset Navigation**: Previous/next buttons flanking the preset selector
+  for sequential browsing through all 46 factory presets with wrapping.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

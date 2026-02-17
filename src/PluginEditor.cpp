@@ -2101,6 +2101,47 @@ void BreadbinEditor::setupControls() {
   cpuLoadLabel.setTooltip("DSP CPU usage (% of audio buffer time budget)");
   addAndMakeVisible(cpuLoadLabel);
 
+  // Preset prev/next navigation
+  presetPrevButton.setButtonText("<");
+  presetPrevButton.setTooltip("Previous preset");
+  presetPrevButton.onClick = [this]() {
+    // Ordered list of all factory preset IDs for sequential navigation
+    static const int ids[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
+                              19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,
+                              34,35,36,37,38,39,40,41,42,43,44,45,46};
+    static const int count = sizeof(ids) / sizeof(ids[0]);
+    int cur = globalPresetSelector.getSelectedId();
+    // Remap favorites to real IDs
+    constexpr int favMap[][2] = {{500,1},{501,10},{502,38},{503,22},{504,25}};
+    for (auto& f : favMap)
+      if (cur == f[0]) { cur = f[1]; break; }
+    int idx = 0;
+    for (int i = 0; i < count; ++i)
+      if (ids[i] == cur) { idx = i; break; }
+    idx = (idx - 1 + count) % count;
+    globalPresetSelector.setSelectedId(ids[idx]);
+  };
+  addAndMakeVisible(presetPrevButton);
+
+  presetNextButton.setButtonText(">");
+  presetNextButton.setTooltip("Next preset");
+  presetNextButton.onClick = [this]() {
+    static const int ids[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
+                              19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,
+                              34,35,36,37,38,39,40,41,42,43,44,45,46};
+    static const int count = sizeof(ids) / sizeof(ids[0]);
+    int cur = globalPresetSelector.getSelectedId();
+    constexpr int favMap[][2] = {{500,1},{501,10},{502,38},{503,22},{504,25}};
+    for (auto& f : favMap)
+      if (cur == f[0]) { cur = f[1]; break; }
+    int idx = 0;
+    for (int i = 0; i < count; ++i)
+      if (ids[i] == cur) { idx = i; break; }
+    idx = (idx + 1) % count;
+    globalPresetSelector.setSelectedId(ids[idx]);
+  };
+  addAndMakeVisible(presetNextButton);
+
   // Preset dirty indicator
   presetDirtyLabel.setColour(juce::Label::textColourId, juce::Colours::gold);
   presetDirtyLabel.setFont(juce::Font(juce::FontOptions(16.0f)).boldened());
@@ -3044,8 +3085,10 @@ void BreadbinEditor::resized() {
   topRow.removeFromLeft(pad * 2);
 
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
+  presetPrevButton.setBounds(topRow.removeFromLeft(20).reduced(0, 2));
   globalPresetSelector.setBounds(topRow.removeFromLeft(100));
   presetDirtyLabel.setBounds(topRow.removeFromLeft(14));
+  presetNextButton.setBounds(topRow.removeFromLeft(20).reduced(0, 2));
   cpuLoadLabel.setBounds(topRow.removeFromRight(60));
   topRow.removeFromLeft(pad);
   savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
