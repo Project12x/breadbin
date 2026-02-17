@@ -393,17 +393,21 @@ private:
 
   // ========== MOD MATRIX ==========
   struct SlotRow {
+    juce::ToggleButton enableButton;
     juce::ComboBox srcBox, dstBox;
     juce::Slider amtSlider;
     juce::Label slotLabel;
     juce::Label sourceValueLabel;  // current source value
     juce::Label contributionLabel; // effective contribution
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+        enableAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         srcAttach, dstAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         amtAttach;
   };
   std::array<SlotRow, BreadbinProcessor::kModSlots> slots;
+  juce::Label totalFilterLabel, totalPWLabel, totalPitchLabel, totalResLabel;
 };
 
 // Chord Memory popup panel
@@ -477,8 +481,15 @@ private:
         pitchAttach, pwAttach;
   };
   std::array<StepColumn, 16> steps;
+  juce::TextButton shiftLeftButton{"Shift <-"};
+  juce::TextButton shiftRightButton{"Shift ->"};
+  juce::TextButton randomizeButton{"Randomize"};
+  juce::TextButton clearButton{"Clear"};
 
   int lastHighlightedStep = -1;
+  void shiftActiveSteps(bool right);
+  void randomizeActiveSteps();
+  void clearActiveSteps();
 };
 
 // SID file player popup panel

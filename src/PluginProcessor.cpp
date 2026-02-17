@@ -152,6 +152,15 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       chordMemory.intervals[s][i] =
           static_cast<int>(chordSlotPtrs[s].intervals[i]->load());
 
+  // Chord memory and arpeggiator are mutually exclusive. If both are enabled
+  // via host automation, chord mode wins and arp state is held idle.
+  if (chordMemory.enabled && arpEnabled) {
+    arpHeldNotes.clear();
+    arpSequence.clear();
+    arpIndex = 0;
+    lastArpNote = -1;
+  }
+
   // Check for discrete changes (handled by SIDEngine/Processor comparisons
   // internally)
   auto newLeftModel =
@@ -184,9 +193,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     handleMidiEvent(metadata.getMessage());
   }
 
-  // Process arpeggiator
+  // Process arpeggiator (disabled while chord memory is active)
   const int numSamples = buffer.getNumSamples();
-  if (arpEnabled && !arpSequence.empty()) {
+  if (!chordMemory.enabled && arpEnabled && !arpSequence.empty()) {
     processArpeggiator(numSamples);
   }
 
@@ -442,14 +451,7 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
         chordLearnNotes.push_back(note);
     }
 
-    // Track for arpeggiator
-    if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note) ==
-        arpHeldNotes.end()) {
-      arpHeldNotes.push_back(note);
-      rebuildArpSequence();
-    }
-
-    // Chord memory takes priority over arp and normal handling
+    // Chord memory takes priority and does not feed arp tracking.
     if (chordMemory.enabled) {
       if (dualMode == DualMode::Multitimbral) {
         if (channel == 2)
@@ -457,10 +459,16 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
         else
           triggerChord(true, note, lastVelocity);
       } else {
-        triggerChord(true, note, lastVelocity);
-        triggerChord(false, note, lastVelocity);
+        triggerChordDualSID(note, lastVelocity);
       }
       return;
+    }
+
+    // Track for arpeggiator
+    if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note) ==
+        arpHeldNotes.end()) {
+      arpHeldNotes.push_back(note);
+      rebuildArpSequence();
     }
 
     // If arp is enabled, don't do normal note handling
@@ -486,14 +494,7 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
 
-    // Remove from arp tracking
-    auto it = std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note);
-    if (it != arpHeldNotes.end()) {
-      arpHeldNotes.erase(it);
-      rebuildArpSequence();
-    }
-
-    // Chord memory release
+    // Chord memory release (stays independent of arp state)
     if (chordMemory.enabled) {
       if (!sustainActive) {
         if (dualMode == DualMode::Multitimbral) {
@@ -507,6 +508,13 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
         }
       }
       return;
+    }
+
+    // Remove from arp tracking
+    auto it = std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note);
+    if (it != arpHeldNotes.end()) {
+      arpHeldNotes.erase(it);
+      rebuildArpSequence();
     }
 
     // If arp is enabled, handle release when no notes held
@@ -1118,7 +1126,7 @@ void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote,
   const int base = isLeftSID ? 0 : 3;
   const int slot = chordMemory.activeSlot;
 
-  // Build chord notes: root + up to 2 non-zero intervals (3 voices per SID)
+  // Per-SID allocation: root + up to 2 non-zero intervals (3 voices available).
   int notes[3] = {rootNote, -1, -1};
   int count = 1;
   for (int i = 0; i < 5 && count < 3; ++i) {
@@ -1133,6 +1141,26 @@ void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote,
       triggerNote(base + v, notes[v], velocity);
     else if (voices[base + v].active)
       releaseNote(base + v);
+  }
+}
+
+void BreadbinProcessor::triggerChordDualSID(int rootNote, int velocity) {
+  const int slot = chordMemory.activeSlot;
+
+  // Dual-SID allocation: root + up to 5 intervals -> up to 6 voices.
+  int notes[6] = {rootNote, -1, -1, -1, -1, -1};
+  int count = 1;
+  for (int i = 0; i < 5 && count < 6; ++i) {
+    int interval = chordMemory.intervals[slot][i];
+    if (interval != 0)
+      notes[count++] = juce::jlimit(0, 127, rootNote + interval);
+  }
+
+  for (int v = 0; v < 6; ++v) {
+    if (v < count && voiceSettings[v].enabled)
+      triggerNote(v, notes[v], velocity);
+    else if (voices[v].active)
+      releaseNote(v);
   }
 }
 
@@ -1169,13 +1197,18 @@ void BreadbinProcessor::applyModMatrix() {
   float resMod = 0.0f;
 
   for (int i = 0; i < kModSlots; ++i) {
+    const bool rowEnabled =
+        (modSlotPtrs[i].enable != nullptr)
+            ? (modSlotPtrs[i].enable->load() > 0.5f)
+            : true;
     auto src =
         static_cast<ModSource>(static_cast<int>(modSlotPtrs[i].src->load()));
     auto dst =
         static_cast<ModDest>(static_cast<int>(modSlotPtrs[i].dst->load()));
     float amt = modSlotPtrs[i].amt->load();
 
-    if (src == ModSource::None || dst == ModDest::None || amt == 0.0f) {
+    if (!rowEnabled || src == ModSource::None || dst == ModDest::None ||
+        amt == 0.0f) {
       modSlotDisplay[i].sourceValue.store(0.0f);
       modSlotDisplay[i].contribution.store(0.0f);
       continue;
@@ -1226,6 +1259,10 @@ void BreadbinProcessor::applyModMatrix() {
       break;
     }
   }
+  modTotals.filterCutoff.store(filterMod);
+  modTotals.pulseWidth.store(pwMod);
+  modTotals.pitch.store(pitchMod);
+  modTotals.resonance.store(resMod);
 
   // Apply filter cutoff mod (additive, on top of applyFilterModulation result)
   if (filterMod != 0.0f) {
@@ -2134,6 +2171,9 @@ BreadbinProcessor::createParameterLayout() {
   // Mod Matrix (4 slots)
   for (int i = 0; i < kModSlots; ++i) {
     auto prefix = "mod" + juce::String(i) + "_";
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{prefix + "enable", 1},
+        "Mod " + juce::String(i) + " Enable", true));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{prefix + "src", 1},
         "Mod " + juce::String(i) + " Source",
@@ -2292,6 +2332,7 @@ void BreadbinProcessor::initializeParameterPointers() {
   // Mod Matrix
   for (int i = 0; i < kModSlots; ++i) {
     auto prefix = "mod" + juce::String(i) + "_";
+    modSlotPtrs[i].enable = apvts.getRawParameterValue(prefix + "enable");
     modSlotPtrs[i].src = apvts.getRawParameterValue(prefix + "src");
     modSlotPtrs[i].dst = apvts.getRawParameterValue(prefix + "dst");
     modSlotPtrs[i].amt = apvts.getRawParameterValue(prefix + "amt");

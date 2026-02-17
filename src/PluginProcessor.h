@@ -321,6 +321,10 @@ public:
                ? modSlotDisplay[slot].contribution.load()
                : 0.0f;
   }
+  float getModTotalFilterCutoff() const { return modTotals.filterCutoff.load(); }
+  float getModTotalPulseWidth() const { return modTotals.pulseWidth.load(); }
+  float getModTotalPitch() const { return modTotals.pitch.load(); }
+  float getModTotalResonance() const { return modTotals.resonance.load(); }
 
   // Preset dirty-state detection
   void snapshotPresetState();
@@ -390,6 +394,13 @@ private:
     std::atomic<float> contribution{0.0f};
   };
   std::array<ModSlotDisplay, kModSlots> modSlotDisplay;
+  struct ModTotals {
+    std::atomic<float> filterCutoff{0.0f};
+    std::atomic<float> pulseWidth{0.0f};
+    std::atomic<float> pitch{0.0f};
+    std::atomic<float> resonance{0.0f};
+  };
+  ModTotals modTotals;
 
   // Preset dirty-state detection
   std::map<juce::String, float> presetParamSnapshot;
@@ -539,6 +550,7 @@ private:
 
   // Mod Matrix APVTS pointers
   struct ModSlotPtrs {
+    std::atomic<float> *enable = nullptr;
     std::atomic<float> *src = nullptr;
     std::atomic<float> *dst = nullptr;
     std::atomic<float> *amt = nullptr;
@@ -619,6 +631,7 @@ private:
   };
   ChordMemoryState chordMemory;
   void triggerChord(bool isLeftSID, int rootNote, int velocity);
+  void triggerChordDualSID(int rootNote, int velocity);
   void releaseChord(bool isLeftSID);
 
   // Chord Learn mode (data is private, methods exposed below)

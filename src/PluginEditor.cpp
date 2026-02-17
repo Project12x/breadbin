@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
+#include <functional>
 
 // ========== CUSTOM LOOKANDFEEL ==========
 
@@ -1391,6 +1392,12 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   enableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "chordEnable", enableButton);
+  enableButton.onClick = [this]() {
+    if (!enableButton.getToggleState())
+      return;
+    if (auto *arpParam = processor.apvts.getParameter("arpEnable"))
+      arpParam->setValueNotifyingHost(0.0f);
+  };
 
   // 4 slot radio buttons
   int currentSlot = static_cast<int>(
@@ -1526,8 +1533,8 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colour(120, 120, 135));
   g.setFont(juce::Font(juce::FontOptions(10.0f)));
   g.drawText(
-      "Play a chord and click Learn to capture, or set intervals manually", 10,
-      28, panelWidth - 20, 14, juce::Justification::centredLeft);
+      "Play a chord and click Learn, or set intervals manually (up to 6 notes total; 3 per SID in Multitimbral)",
+      10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
 
   // Divider below header
   g.setColour(juce::Colour(55, 55, 65));
@@ -1705,13 +1712,6 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
              juce::Justification::centred);
 
-  // Subtitle - brief explanation below the header controls
-  g.setColour(juce::Colour(120, 120, 135));
-  g.setFont(9.0f);
-  g.drawText(
-      "Each step sets waveform, pitch offset, and pulse width for all voices",
-      520, 46, 290, 12, juce::Justification::centredLeft);
-
   // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
   g.setFont(11.0f);
@@ -1817,6 +1817,80 @@ void WavetablePanel::timerCallback() {
     steps[i].waveBox.setAlpha(alpha);
     steps[i].pitchSlider.setAlpha(alpha);
     steps[i].pwSlider.setAlpha(alpha);
+  }
+}
+
+void WavetablePanel::shiftActiveSteps(bool right) {
+  const int numActive =
+      juce::jlimit(1, 16, juce::roundToInt(numStepsSlider.getValue()));
+  if (numActive <= 1)
+    return;
+
+  struct StepValues {
+    int wave = 2;
+    int pitch = 0;
+    int pw = 2048;
+  };
+  std::array<StepValues, 16> before;
+
+  auto readParamInt = [this](const juce::String &id, int fallback) {
+    if (auto *param = processor.apvts.getParameter(id))
+      return juce::roundToInt(param->convertFrom0to1(param->getValue()));
+    return fallback;
+  };
+  auto writeParamInt = [this](const juce::String &id, int value) {
+    if (auto *param = processor.apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+  };
+
+  for (int i = 0; i < numActive; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    before[i].wave = readParamInt(prefix + "wave", 2);
+    before[i].pitch = readParamInt(prefix + "pitch", 0);
+    before[i].pw = readParamInt(prefix + "pw", 2048);
+  }
+
+  for (int i = 0; i < numActive; ++i) {
+    int src = right ? (i - 1 + numActive) % numActive : (i + 1) % numActive;
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    writeParamInt(prefix + "wave", before[src].wave);
+    writeParamInt(prefix + "pitch", before[src].pitch);
+    writeParamInt(prefix + "pw", before[src].pw);
+  }
+}
+
+void WavetablePanel::randomizeActiveSteps() {
+  const int numActive =
+      juce::jlimit(1, 16, juce::roundToInt(numStepsSlider.getValue()));
+  juce::Random rng(static_cast<juce::int64>(juce::Time::currentTimeMillis()));
+
+  auto writeParamInt = [this](const juce::String &id, int value) {
+    if (auto *param = processor.apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+  };
+
+  for (int i = 0; i < numActive; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    writeParamInt(prefix + "wave", rng.nextInt(4));
+    writeParamInt(prefix + "pitch", rng.nextInt(25) - 12);
+    writeParamInt(prefix + "pw", 256 + rng.nextInt(3585));
+  }
+}
+
+void WavetablePanel::clearActiveSteps() {
+  const int numActive =
+      juce::jlimit(1, 16, juce::roundToInt(numStepsSlider.getValue()));
+
+  auto writeParamInt = [this](const juce::String &id, int value) {
+    if (auto *param = processor.apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(value)));
+  };
+
+  for (int i = 0; i < numActive; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    writeParamInt(prefix + "wave", 2);
+    writeParamInt(prefix + "pitch", 0);
+    writeParamInt(prefix + "pw", 2048);
   }
 }
 
@@ -2084,7 +2158,14 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(agingSlider);
 
   // ========== ARPEGGIATOR ==========
-  arpEnableButton.setTooltip("Enable the arpeggiator");
+  arpEnableButton.setTooltip(
+      "Enable the arpeggiator (automatically disables chord memory)");
+  arpEnableButton.onClick = [this]() {
+    if (!arpEnableButton.getToggleState())
+      return;
+    if (auto *chordParam = processor.apvts.getParameter("chordEnable"))
+      chordParam->setValueNotifyingHost(0.0f);
+  };
   addAndMakeVisible(arpEnableButton);
 
   arpPatternSelector.addItem("Up", 1);
@@ -3479,6 +3560,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   // Mod Matrix: all slots cleared
   for (int i = 0; i < 4; ++i) {
     auto mp = "mod" + juce::String(i) + "_";
+    setParam(mp + "enable", 1.0f);
     setParam(mp + "src", 0.0f); // None
     setParam(mp + "dst", 0.0f); // None
     setParam(mp + "amt", 0.0f);

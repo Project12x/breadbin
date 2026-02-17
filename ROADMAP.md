@@ -83,12 +83,20 @@
 
 ### Deferred / High-Risk
 
-- [ ] 3-SID expansion (9-voice architecture) â€” previous attempt caused oscillation; requires careful CPU/stability work
+- [ ] 3-SID expansion (9-voice architecture) — previous attempt caused oscillation; requires careful CPU/stability work
+
+### UI Polish
+
+- [x] Chord/Arp exclusivity hardening (event pipeline + UI auto-disable)
+- [x] Chord Memory dual-SID note allocation (up to 6 notes in Stereo/Unison)
+- [x] Mod Matrix slot enable toggles + destination total readouts
+- [x] Wavetable step operations (shift left/right, randomize, clear)
 
 ## Task Resolution Log
 
 | Date | Feature | Resolution | Commit |
 |------|---------|------------|--------|
+| 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
 | 2026-02-11 | Per-SID pan UI + dead code removal | Added leftPan/rightPan sliders to SID panels, removed all per-voice pan dead code (APVTS param, VoiceSettings, VoiceParamPtrs, serialization, preset lambdas) | `65113ae` |
 | 2026-02-11 | NTSC frequency fix | `midiNoteToFrequency`/`noteOn`/`setFrequency` now use `getClockHz()` instead of hardcoded PAL | v0.9.2 |
 | 2026-02-11 | Chip model cache churn | `processBlock` updates caches after applying models | v0.9.2 |

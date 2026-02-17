@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saving/reloading DAW projects. Serialized non-APVTS filter state to ValueTree,
   removed conflicting `saveUIToVoice()` callbacks on APVTS-attached controls,
   and eliminated hardcoded preset selector default.
+- **Chord/Arp exclusivity hardening**: Chord memory no longer populates arpeggiator
+  held-note state, and arp stepping is bypassed while chord mode is active, avoiding
+  stale arp behavior when both modes are enabled by automation/state.
+
+### Changed
+
+- **Chord voice allocation in Stereo/Unison**: Chord memory now allocates root + up
+  to 5 intervals across both SIDs (up to 6 notes total), aligning playback with the
+  5-interval chord editor.
 
 ### Added
 
@@ -61,6 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 3 new integration tests for PWM sweep (default off, modifies PW, state round-trip).
 - 3 new integration tests for Chord Memory (default off, triggers audio, state round-trip).
 - 2 new integration tests for Wavetable (step params editable, step sequencer produces variation).
+- **Mod Matrix slot enable + totals**: Added per-slot enable/bypass control (new
+  `mod*_enable` APVTS params) and popup readouts for destination totals (Filter/PW/Pitch/Res).
+- **Wavetable step edit operations**: Added popup actions for active steps:
+  shift left, shift right, randomize, and clear.
 - **SID File Player**: Load and play .SID/.PSID files from the HVSC (50,000+ C64 tunes) using
   the full libsidplayfp engine (6502 CPU, CIA, VIC, MMU). Background thread produces audio via
   lock-free ring buffer, mixed additively into plugin output alongside synth voices.
