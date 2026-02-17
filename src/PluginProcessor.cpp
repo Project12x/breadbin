@@ -639,29 +639,42 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
     voices[voiceIndex].isGliding = false;
     sid.noteOn(sidVoice, midiNote, velocity, detune);
 
-    // Apply modulator offset for sync/ring mod audibility
-    // SID links: voice N modulated by voice N-1 (wrapping: v0<-v2, v1<-v0,
-    // v2<-v1) Check if any voice on this SID needs the current voice as its
-    // modulator
+    // Apply frequency offsets for sync/ring mod audibility.
+    // Hard sync: carrier (voice N, sync enabled) must be HIGHER than modulator
+    //   (N-1) for dramatic harmonics.  We offset the carrier UP.
+    // Ring mod: modulator (voice N-1) at a different freq creates sidebands.
+    //   We offset the modulator UP.
+    // SID voice pairing: v0<-v2, v1<-v0, v2<-v1.
     int sidBase = (voiceIndex < 3) ? 0 : 3;
     for (int sv = 0; sv < 3; ++sv) {
       int globalV = sidBase + sv;
       bool hasSync = voiceParamPtrs[globalV].sync->load() > 0.5f;
       bool hasRing = voiceParamPtrs[globalV].ringMod->load() > 0.5f;
-      if (hasSync || hasRing) {
-        // voice sv is modulated by voice (sv+2)%3 (i.e., sv-1 wrapping)
+      float offsetSemitones = voiceParamPtrs[globalV].modOffset->load();
+      if (std::abs(offsetSemitones) < 0.01f)
+        continue;
+
+      if (hasSync) {
+        // Offset the CARRIER (voice sv) UP so it's higher than the modulator
+        double carrierDetune =
+            (globalV < 3) ? leftDetuneCents : rightDetuneCents;
+        double carrierNote = static_cast<double>(midiNote) +
+                             (carrierDetune / 100.0) +
+                             static_cast<double>(offsetSemitones);
+        double carrierHz = 440.0 * std::pow(2.0, (carrierNote - 69.0) / 12.0);
+        sid.setFrequency(sv, carrierHz);
+      }
+      if (hasRing) {
+        // Offset the MODULATOR (voice N-1, i.e. (sv+2)%3) for ring mod
+        // sidebands
         int modulatorSidVoice = (sv + 2) % 3;
         int modulatorGlobal = sidBase + modulatorSidVoice;
-        float offsetSemitones = voiceParamPtrs[globalV].modOffset->load();
-        if (std::abs(offsetSemitones) > 0.01f) {
-          // Calculate offset frequency for the modulator voice
-          double modDetune =
-              (modulatorGlobal < 3) ? leftDetuneCents : rightDetuneCents;
-          double modNote = static_cast<double>(midiNote) + (modDetune / 100.0) +
-                           static_cast<double>(offsetSemitones);
-          double modHz = 440.0 * std::pow(2.0, (modNote - 69.0) / 12.0);
-          sid.setFrequency(modulatorSidVoice, modHz);
-        }
+        double modDetune =
+            (modulatorGlobal < 3) ? leftDetuneCents : rightDetuneCents;
+        double modNote = static_cast<double>(midiNote) + (modDetune / 100.0) +
+                         static_cast<double>(offsetSemitones);
+        double modHz = 440.0 * std::pow(2.0, (modNote - 69.0) / 12.0);
+        sid.setFrequency(modulatorSidVoice, modHz);
       }
     }
   }
