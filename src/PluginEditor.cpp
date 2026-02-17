@@ -3109,6 +3109,18 @@ void BreadbinEditor::setupVoiceEditor() {
   // APVTS attachment handles sync — no manual callback needed
   addAndMakeVisible(voiceFilterButton);
 
+  // Mod Offset slider (semitones for sync/ring mod modulator voice)
+  modOffsetSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+  modOffsetSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 20);
+  modOffsetSlider.setTooltip(
+      "Modulator voice offset in semitones. Controls the pitch difference \n"
+      "between carrier and modulator voices for Sync/Ring Mod effects.\n"
+      "Default: 7 (perfect fifth). Set to 0 for no offset.");
+  addAndMakeVisible(modOffsetSlider);
+  modOffsetLabel.setJustificationType(juce::Justification::centredRight);
+  modOffsetLabel.setFont(juce::Font(11.0f));
+  addAndMakeVisible(modOffsetLabel);
+
   // Update Ring Mod enable state when waveform changes
   waveformSelector.onChange = [this]() {
     // Ring mod only works with Triangle waveform
@@ -3448,6 +3460,9 @@ void BreadbinEditor::resized() {
   syncButton.setBounds(modRow.removeFromLeft(55));
   modRow.removeFromLeft(pad);
   voiceFilterButton.setBounds(modRow.removeFromLeft(45));
+  modRow.removeFromLeft(pad);
+  modOffsetLabel.setBounds(modRow.removeFromLeft(30));
+  modOffsetSlider.setBounds(modRow.removeFromLeft(110));
 
   // Row 4: Glide
   editorArea.removeFromTop(pad);
@@ -6597,6 +6612,7 @@ void BreadbinEditor::refreshVoiceEditorAttachments() {
   voiceRingModAttach.reset();
   voiceSyncAttach.reset();
   voiceFilterAttach.reset();
+  voiceModOffsetAttach.reset();
 
   // Re-attach to selected voice
   juce::String prefix = "v" + juce::String(processor.getSelectedVoice()) + "_";
@@ -6629,4 +6645,7 @@ void BreadbinEditor::refreshVoiceEditorAttachments() {
   voiceFilterAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, prefix + "filter", voiceFilterButton);
+  voiceModOffsetAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, prefix + "modOffset", modOffsetSlider);
 }

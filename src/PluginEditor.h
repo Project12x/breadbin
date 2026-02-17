@@ -671,6 +671,8 @@ private:
                             BreadbinProcessor::ControlParam::VoiceSync};
   MappableToggle voiceFilterButton{
       "Flt", processor, BreadbinProcessor::ControlParam::VoiceFilterEnable};
+  juce::Slider modOffsetSlider;
+  juce::Label modOffsetLabel{"", "MOD"};
 
   // ========== ARPEGGIATOR ==========
   MappableToggle arpEnableButton{"Arp", processor,
@@ -705,7 +707,8 @@ private:
       masterVolAttach;
   juce::Label noiseGateLabel{"", "GATE"};
   juce::Slider noiseGateSlider;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> noiseGateAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      noiseGateAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       dualModeAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
@@ -760,6 +763,8 @@ private:
       voiceSyncAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       voiceFilterAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      voiceModOffsetAttach;
 
   void refreshVoiceEditorAttachments();
 
