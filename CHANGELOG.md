@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **19 Factory Presets**: 10 classic C64 sounds (Monty Lead, Sanxion Buzz, Last Ninja,
+  Delta Run, Cobra Bass, IK Lead, Turbo Saw, Times of Lore, Hawkeye Pluck, Deflektor Bell),
+  5 modern modulation patches (Drift Pad, Arp Machine, Wobble Bass, Sequence Morph, Poly Chord),
+  and 4 bonus distinct sounds (Follin Complex, Noise Drums, Arp Bass, Filter Scream).
+  Total factory presets: 46.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

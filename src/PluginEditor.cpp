@@ -1039,10 +1039,19 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     auto &s = slots[i];
     auto prefix = "mod" + juce::String(i) + "_";
 
-    s.slotLabel.setText("Slot " + juce::String(i + 1),
+    s.slotLabel.setText("S" + juce::String(i + 1),
                         juce::dontSendNotification);
     s.slotLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    s.slotLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(s.slotLabel);
+
+    s.enableButton.setButtonText("On");
+    s.enableButton.setColour(juce::ToggleButton::textColourId,
+                             juce::Colours::lightgrey);
+    s.enableButton.setColour(juce::ToggleButton::tickColourId,
+                             juce::Colours::greenyellow);
+    s.enableButton.setTooltip("Enable or bypass this modulation slot");
+    addAndMakeVisible(s.enableButton);
 
     s.srcBox.addItem("None", 1);
     s.srcBox.addItem("LFO1", 2);
@@ -1081,6 +1090,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     s.contributionLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.contributionLabel);
 
+    s.enableAttach = std::make_unique<
+        juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.apvts, prefix + "enable", s.enableButton);
     s.srcAttach = std::make_unique<
         juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         processor.apvts, prefix + "src", s.srcBox);
@@ -1091,6 +1103,17 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             processor.apvts, prefix + "amt", s.amtSlider);
   }
+
+  auto setupTotalLabel = [this](juce::Label &label, juce::Colour colour) {
+    label.setColour(juce::Label::textColourId, colour);
+    label.setFont(juce::Font(juce::FontOptions(10.0f)));
+    label.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(label);
+  };
+  setupTotalLabel(totalFilterLabel, juce::Colours::cyan);
+  setupTotalLabel(totalPWLabel, juce::Colours::orange);
+  setupTotalLabel(totalPitchLabel, juce::Colours::greenyellow);
+  setupTotalLabel(totalResLabel, juce::Colours::white);
 
   // ========== PWM SWEEP SETUP ==========
   pwmSweepEnableButton.setColour(juce::ToggleButton::tickColourId,
@@ -1231,12 +1254,20 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   const int mmTop = 172;
   g.setColour(juce::Colours::cyan);
   g.setFont(12.0f);
-  g.drawText("Source", 50, mmTop, 90, 16, juce::Justification::centred);
-  g.drawText("Dest", 150, mmTop, 90, 16, juce::Justification::centred);
-  g.drawText("Amount", 250, mmTop, 120, 16, juce::Justification::centred);
-  g.drawText("Src", 380, mmTop, 45, 16, juce::Justification::centred);
+  g.drawText("On", 30, mmTop, 40, 16, juce::Justification::centred);
+  g.drawText("Source", 70, mmTop, 90, 16, juce::Justification::centred);
+  g.drawText("Dest", 170, mmTop, 90, 16, juce::Justification::centred);
+  g.drawText("Amount", 270, mmTop, 120, 16, juce::Justification::centred);
+  g.drawText("Src", 400, mmTop, 45, 16, juce::Justification::centred);
   g.setColour(juce::Colours::orange);
-  g.drawText("Out", 430, mmTop, 45, 16, juce::Justification::centred);
+  g.drawText("Out", 447, mmTop, 45, 16, juce::Justification::centred);
+
+  g.setColour(juce::Colour(55, 55, 65));
+  g.drawHorizontalLine(338, 6.0f, static_cast<float>(panelWidth - 6));
+  g.setColour(juce::Colour(130, 130, 145));
+  g.setFont(10.0f);
+  g.drawText("Destination Totals", 8, 342, 160, 14,
+             juce::Justification::centredLeft);
 }
 
 void ModMatrixPanel::resized() {
@@ -1301,17 +1332,31 @@ void ModMatrixPanel::resized() {
     auto &s = slots[i];
     int y = mmTop + i * rowH;
 
-    s.slotLabel.setBounds(4, y + 8, 44, 18);
-    s.srcBox.setBounds(50, y + 6, 90, 22);
-    s.dstBox.setBounds(150, y + 6, 90, 22);
-    s.amtSlider.setBounds(250, y + 6, 120, 22);
-    s.sourceValueLabel.setBounds(380, y + 6, 45, 22);
-    s.contributionLabel.setBounds(430, y + 6, 45, 22);
+    s.slotLabel.setBounds(4, y + 8, 24, 18);
+    s.enableButton.setBounds(30, y + 7, 38, 20);
+    s.srcBox.setBounds(70, y + 6, 90, 22);
+    s.dstBox.setBounds(170, y + 6, 90, 22);
+    s.amtSlider.setBounds(270, y + 6, 120, 22);
+    s.sourceValueLabel.setBounds(400, y + 6, 45, 22);
+    s.contributionLabel.setBounds(447, y + 6, 45, 22);
   }
+
+  totalFilterLabel.setBounds(8, 356, 120, 16);
+  totalPWLabel.setBounds(132, 356, 120, 16);
+  totalPitchLabel.setBounds(256, 356, 120, 16);
+  totalResLabel.setBounds(380, 356, 132, 16);
 }
 
 void ModMatrixPanel::timerCallback() {
   for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
+    bool rowEnabled = slots[i].enableButton.getToggleState();
+    float alpha = rowEnabled ? 1.0f : 0.35f;
+    slots[i].srcBox.setAlpha(alpha);
+    slots[i].dstBox.setAlpha(alpha);
+    slots[i].amtSlider.setAlpha(alpha);
+    slots[i].sourceValueLabel.setAlpha(alpha);
+    slots[i].contributionLabel.setAlpha(alpha);
+
     float srcVal = processor.getModSlotSourceValue(i);
     float contrib = processor.getModSlotContribution(i);
     slots[i].sourceValueLabel.setText(juce::String(srcVal, 2),
@@ -1319,6 +1364,20 @@ void ModMatrixPanel::timerCallback() {
     slots[i].contributionLabel.setText(juce::String(contrib, 2),
                                        juce::dontSendNotification);
   }
+
+  totalFilterLabel.setText("Filter " +
+                               juce::String(processor.getModTotalFilterCutoff(),
+                                            2),
+                           juce::dontSendNotification);
+  totalPWLabel.setText(
+      "PW " + juce::String(processor.getModTotalPulseWidth(), 2),
+      juce::dontSendNotification);
+  totalPitchLabel.setText(
+      "Pitch " + juce::String(processor.getModTotalPitch(), 2),
+      juce::dontSendNotification);
+  totalResLabel.setText("Res " +
+                            juce::String(processor.getModTotalResonance(), 2),
+                        juce::dontSendNotification);
 }
 
 // ========== CHORD MEMORY PANEL ==========
@@ -1607,6 +1666,29 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
             processor.apvts, prefix + "pw", step.pwSlider);
   }
 
+  auto setupActionButton = [this](juce::TextButton &button,
+                                  const juce::String &tooltip,
+                                  std::function<void()> onClick) {
+    button.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
+    button.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
+    button.setColour(juce::TextButton::textColourOffId, juce::Colours::lightgrey);
+    button.setTooltip(tooltip);
+    button.onClick = std::move(onClick);
+    addAndMakeVisible(button);
+  };
+  setupActionButton(shiftLeftButton,
+                    "Rotate active steps left (step 1 takes step 2, etc.)",
+                    [this]() { shiftActiveSteps(false); });
+  setupActionButton(shiftRightButton,
+                    "Rotate active steps right (last active step wraps to step 1)",
+                    [this]() { shiftActiveSteps(true); });
+  setupActionButton(randomizeButton,
+                    "Randomize waveform, pitch, and pulse width for active steps",
+                    [this]() { randomizeActiveSteps(); });
+  setupActionButton(clearButton,
+                    "Reset active steps to Pulse / 0 st / PW 2048",
+                    [this]() { clearActiveSteps(); });
+
   startTimer(33);
   setSize(panelWidth, panelHeight);
 }
@@ -1623,12 +1705,12 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
              juce::Justification::centred);
 
-  // Subtitle — brief explanation on the right side of header row
+  // Subtitle - brief explanation below the header controls
   g.setColour(juce::Colour(120, 120, 135));
-  g.setFont(10.0f);
+  g.setFont(9.0f);
   g.drawText(
       "Each step sets waveform, pitch offset, and pulse width for all voices",
-      520, 28, 290, 14, juce::Justification::centredLeft);
+      520, 46, 290, 12, juce::Justification::centredLeft);
 
   // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
@@ -1700,6 +1782,10 @@ void WavetablePanel::resized() {
   rateLabel.setBounds(230, 24, 60, 18);
   rateSlider.setBounds(292, 22, 150, 34);
   loopButton.setBounds(455, 24, 55, 20);
+  shiftLeftButton.setBounds(520, 24, 66, 20);
+  shiftRightButton.setBounds(590, 24, 66, 20);
+  randomizeButton.setBounds(660, 24, 72, 20);
+  clearButton.setBounds(736, 24, 72, 20);
 
   // Per-step columns — wider
   const int leftMargin = 55;
@@ -4231,6 +4317,397 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("lfoDepthPitch", 0.04f);
     break;
   }
+
+    // ---- CLASSIC C64 PACK ----
+
+  case 28: { // Monty Lead - Rob Hubbard's melodic pulse (Monty on the Run)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1400, 0, 8, 10, 4, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1100, 5);
+    break;
+  }
+
+  case 29: { // Sanxion Buzz - Rob Hubbard's bright aggressive saw (Sanxion)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 2, 6, 1, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1500, 7);
+    break;
+  }
+
+  case 30: { // Last Ninja - Ben Daglish's layered tri/pulse mix
+    configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 6, 10, 6, 6);
+    configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 4, 2);
+    configVoice(2, SIDEngine::Waveform::Triangle, 0, 2, 6, 10, 6, 6);
+    configVoice(3, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 4, 2);
+    configVoice(4, SIDEngine::Waveform::Triangle, 0, 2, 6, 10, 6, 6);
+    configVoice(5, SIDEngine::Waveform::Pulse, 2048, 0, 4, 12, 4, 2);
+    for (int v = 0; v < 6; ++v)
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    setFilters(800, 4);
+    break;
+  }
+
+  case 31: { // Delta Run - Rob Hubbard's sustained resonant pulse (Delta)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15, 6, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(900, 6);
+    break;
+  }
+
+  case 32: { // Cobra Bass - Ben Daglish's punchy resonant saw bass
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 6, 0, 0, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(400, 8);
+    break;
+  }
+
+  case 33: { // IK Lead - Rob Hubbard's wide clean pulse (International Karate)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 2400, 0, 4, 12, 3, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1300, 3);
+    break;
+  }
+
+  case 34: { // Turbo Saw - Jeroen Tel's bright driving saw (Turbo Outrun)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1400, 5);
+    break;
+  }
+
+  case 35: { // Times of Lore - Martin Galway's soft triangle pad
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 4, 4, 14, 8, 6);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(600, 2);
+    break;
+  }
+
+  case 36: { // Hawkeye Pluck - Jeroen Tel's short pulse pluck (Hawkeye)
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1600, 0, 4, 0, 3, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1200, 6);
+    break;
+  }
+
+  case 37: { // Deflektor Bell - Ben Daglish's metallic ring mod bell
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8, 6);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1500, 3);
+    break;
+  }
+
+    // ---- MODERN MODULATION PACK ----
+
+  case 38: { // Drift Pad - Evolving pad with PWM sweep + dual LFOs + FX
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 8, 4, 14, 10, 2);
+    setFilters(600, 4);
+    setParam("leftDetune", -12.0f);
+    setParam("rightDetune", 12.0f);
+    // PWM sweep: slow evolving width
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.2f);
+    setParam("pwmSweepDepth", 0.45f);
+    // LFO1: slow triangle on filter
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.12f);
+    setParam("lfoDepthFilt", 0.3f);
+    // LFO2: very slow pitch drift
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f);
+    setParam("lfo2Rate", 0.08f);
+    setParam("lfo2DepthPitch", 0.03f);
+    // Filter env: glacial swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 3.5f);
+    setParam("filterEnvDecay", 2.0f);
+    setParam("filterEnvSustain", 0.7f);
+    setParam("filterEnvRelease", 4.0f);
+    setParam("filterEnvAmount", 0.35f);
+    // Chorus + delay for space
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.5f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.4f);
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 450.0f);
+    setParam("delayTimeR", 650.0f);
+    setParam("delayFeedback", 0.45f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 39: { // Arp Machine - Arp + filter env pluck + mod matrix vel->filter
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 0, 15, 3, 2);
+    setFilters(500, 6);
+    setParam("leftDetune", -5.0f);
+    setParam("rightDetune", 5.0f);
+    // Arpeggiator: fast, 3 octaves, up-down
+    setParam("arpEnable", 1.0f);
+    setParam("arpPattern", 1.0f); // Up-Down
+    setParam("arpRate", 12.0f);
+    setParam("arpOctaves", 3.0f);
+    // Filter envelope: snappy pluck per note
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.1f);
+    setParam("filterEnvSustain", 0.1f);
+    setParam("filterEnvRelease", 0.15f);
+    setParam("filterEnvAmount", 0.75f);
+    // Mod matrix: Velocity -> Filter for dynamics
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.5f);
+    }
+    // Stereo delay: rhythmic
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 188.0f);
+    setParam("delayTimeR", 280.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 40: { // Wobble Bass - LFO saw->filter dubstep wobble + ring mod
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 4, 10, 2, 2);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(300, 10);
+    setParam("dualMode", 1.0f); // Unison for mono bass
+    setParam("leftDetune", -8.0f);
+    setParam("rightDetune", 8.0f);
+    // LFO1: saw on filter for classic wobble
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 1.0f); // Sawtooth
+    setParam("lfoRate", 3.0f);
+    setParam("lfoDepthFilt", 0.7f);
+    // Mod matrix: LFO2 -> Resonance for extra growl
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f); // Triangle
+    setParam("lfo2Rate", 1.5f);
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(2.0f)); // LFO2
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(4.0f)); // Resonance
+      setParam("mod0_amt", 0.5f);
+    }
+    // Filter env: aggressive attack
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.3f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.4f);
+    setParam("filterEnvAmount", 0.6f);
+    setParam("glide", 60.0f);
+    break;
+  }
+
+  case 41: { // Sequence Morph - 16-step wavetable timbral journey + FX
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 4, 2);
+    setFilters(1000, 5);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    // Wavetable: 16-step full timbral sequence
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 16.0f);
+    setParam("wtRate", 10.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Pulse, root
+      setWTStep(1, 2.0f, 0.0f, 3000.0f);   // Pulse, thin
+      setWTStep(2, 1.0f, 0.0f, 2048.0f);   // Saw, root
+      setWTStep(3, 2.0f, 7.0f, 2048.0f);   // Pulse, 5th
+      setWTStep(4, 0.0f, 0.0f, 2048.0f);   // Triangle, root
+      setWTStep(5, 2.0f, -12.0f, 1200.0f); // Pulse, octave down, narrow
+      setWTStep(6, 1.0f, 7.0f, 2048.0f);   // Saw, 5th
+      setWTStep(7, 2.0f, 12.0f, 800.0f);   // Pulse, octave up, very narrow
+      setWTStep(8, 2.0f, 0.0f, 1536.0f);   // Pulse, medium
+      setWTStep(9, 3.0f, 0.0f, 2048.0f);   // Noise hit
+      setWTStep(10, 1.0f, -5.0f, 2048.0f); // Saw, 4th below
+      setWTStep(11, 2.0f, 4.0f, 2800.0f);  // Pulse, 3rd, thin
+      setWTStep(12, 0.0f, 12.0f, 2048.0f); // Triangle, octave up
+      setWTStep(13, 2.0f, 0.0f, 600.0f);   // Pulse, very narrow
+      setWTStep(14, 1.0f, 0.0f, 2048.0f);  // Saw, root
+      setWTStep(15, 2.0f, -7.0f, 2048.0f); // Pulse, 5th below
+    }
+    // LFO1: slow filter sweep overlaid
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.2f);
+    setParam("lfoDepthFilt", 0.25f);
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 200.0f);
+    setParam("delayTimeR", 300.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.25f);
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    break;
+  }
+
+  case 42: { // Poly Chord - Chord memory + PWM sweep + filter env pad
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 4, 4, 13, 6, 2);
+    setFilters(700, 5);
+    setParam("leftDetune", -10.0f);
+    setParam("rightDetune", 10.0f);
+    // Chord memory: major 7th voicing
+    setParam("chordEnable", 1.0f);
+    setParam("chordSlot", 0.0f);
+    setParam("chord_s0_i0", 4.0f);  // major 3rd
+    setParam("chord_s0_i1", 7.0f);  // perfect 5th
+    setParam("chord_s0_i2", 11.0f); // major 7th
+    // Slot 1: minor 7th
+    setParam("chord_s1_i0", 3.0f);
+    setParam("chord_s1_i1", 7.0f);
+    setParam("chord_s1_i2", 10.0f);
+    // PWM sweep
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.3f);
+    setParam("pwmSweepDepth", 0.4f);
+    // Filter envelope: warm swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 1.0f);
+    setParam("filterEnvDecay", 1.0f);
+    setParam("filterEnvSustain", 0.6f);
+    setParam("filterEnvRelease", 2.0f);
+    setParam("filterEnvAmount", 0.4f);
+    // LFO2: gentle vibrato
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 4.0f);
+    setParam("lfo2DepthPitch", 0.04f);
+    // Chorus for width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.7f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    break;
+  }
+
+    // ---- BONUS DISTINCT PACK ----
+
+  case 43: { // Follin Complex - Tim Follin's multi-waveform melodic lead
+    // Follin signature: waveform variety across voices for rich harmonic
+    // content
+    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 12, 4, 3);
+    configVoice(1, SIDEngine::Waveform::Pulse, 1536, 0, 5, 10, 3, 2);
+    configVoice(2, SIDEngine::Waveform::Triangle, 0, 0, 0, 15, 6, 6);
+    configVoice(3, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 12, 4, 3);
+    configVoice(4, SIDEngine::Waveform::Pulse, 1536, 0, 5, 10, 3, 2);
+    configVoice(5, SIDEngine::Waveform::Triangle, 0, 0, 0, 15, 6, 6);
+    for (int v = 0; v < 6; ++v)
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    setFilters(1100, 4);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // No FX - authentic multi-waveform layering
+    break;
+  }
+
+  case 44: { // Noise Drums - Noise + fast envelope for percussion channel
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Noise, 2048, 0, 3, 0, 1, 5);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1800, 2);
+    // No FX - raw noise percussion
+    break;
+  }
+
+  case 45: { // Arp Bass - Hubbard-style bass arpeggiation with WT
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1400, 0, 4, 8, 2, 2);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(600, 5);
+    // Wavetable: 3-step bass octave arp at frame rate
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 3.0f);
+    setParam("wtRate", 50.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 1400.0f);   // Root
+      setWTStep(1, 2.0f, -12.0f, 1400.0f); // Octave down
+      setWTStep(2, 2.0f, -12.0f, 1400.0f); // Octave down (double pump)
+    }
+    break;
+  }
+
+  case 46: { // Filter Scream - High-resonance filter sweep lead
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 0, 15, 4, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(200, 14); // Very low cutoff, max resonance for scream
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    // Filter envelope: dramatic sweep from bottom to top
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.5f);
+    setParam("filterEnvDecay", 0.8f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 1.0f);
+    setParam("filterEnvAmount", 0.9f);
+    // LFO1: triangle on pitch for vibrato at top of sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 5.0f);
+    setParam("lfoDepthPitch", 0.1f);
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    break;
+  }
   }
 
   // Refresh UI for current voice
@@ -4354,6 +4831,17 @@ void BreadbinEditor::refreshUserPresets() {
   globalPresetSelector.addItem("Cybernoid", 16);
   globalPresetSelector.addItem("Wizball", 17);
   globalPresetSelector.addItem("Thing Bounce", 18);
+  globalPresetSelector.addItem("Monty Lead", 28);
+  globalPresetSelector.addItem("Sanxion Buzz", 29);
+  globalPresetSelector.addItem("Last Ninja", 30);
+  globalPresetSelector.addItem("Delta Run", 31);
+  globalPresetSelector.addItem("IK Lead", 33);
+  globalPresetSelector.addItem("Turbo Saw", 34);
+  globalPresetSelector.addItem("Times of Lore", 35);
+  globalPresetSelector.addItem("Hawkeye Pluck", 36);
+  globalPresetSelector.addItem("Deflektor Bell", 37);
+  globalPresetSelector.addItem("Follin Complex", 43);
+  globalPresetSelector.addItem("Noise Drums", 44);
 
   globalPresetSelector.addSectionHeading("Leads");
   globalPresetSelector.addItem("Dual Lead", 1);
@@ -4361,16 +4849,22 @@ void BreadbinEditor::refreshUserPresets() {
   globalPresetSelector.addItem("SID Brass", 15);
   globalPresetSelector.addItem("Sync Lead", 19);
   globalPresetSelector.addItem("Acid Squelch", 20);
+  globalPresetSelector.addItem("Filter Scream", 46);
 
   globalPresetSelector.addSectionHeading("Bass");
   globalPresetSelector.addItem("Sub Bass", 21);
   globalPresetSelector.addItem("Growl Bass", 22);
+  globalPresetSelector.addItem("Cobra Bass", 32);
+  globalPresetSelector.addItem("Wobble Bass", 40);
+  globalPresetSelector.addItem("Arp Bass", 45);
 
   globalPresetSelector.addSectionHeading("Pads & Keys");
   globalPresetSelector.addItem("Pad Stack", 2);
   globalPresetSelector.addItem("Chord Stab", 6);
   globalPresetSelector.addItem("Ice Pad", 23);
   globalPresetSelector.addItem("PWM Strings", 24);
+  globalPresetSelector.addItem("Drift Pad", 38);
+  globalPresetSelector.addItem("Poly Chord", 42);
 
   globalPresetSelector.addSectionHeading("Arps & Sequences");
   globalPresetSelector.addItem("Arpeggiated", 3);
@@ -4378,6 +4872,8 @@ void BreadbinEditor::refreshUserPresets() {
   globalPresetSelector.addItem("WT Morph", 9);
   globalPresetSelector.addItem("Hubbard Arp", 13);
   globalPresetSelector.addItem("Chip Sequence", 25);
+  globalPresetSelector.addItem("Arp Machine", 39);
+  globalPresetSelector.addItem("Sequence Morph", 41);
 
   globalPresetSelector.addSectionHeading("FX & Modulation");
   globalPresetSelector.addItem("Fat Unison", 4);
