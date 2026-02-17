@@ -638,6 +638,32 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
     voices[voiceIndex].currentHz = targetHz;
     voices[voiceIndex].isGliding = false;
     sid.noteOn(sidVoice, midiNote, velocity, detune);
+
+    // Apply modulator offset for sync/ring mod audibility
+    // SID links: voice N modulated by voice N-1 (wrapping: v0<-v2, v1<-v0,
+    // v2<-v1) Check if any voice on this SID needs the current voice as its
+    // modulator
+    int sidBase = (voiceIndex < 3) ? 0 : 3;
+    for (int sv = 0; sv < 3; ++sv) {
+      int globalV = sidBase + sv;
+      bool hasSync = voiceParamPtrs[globalV].sync->load() > 0.5f;
+      bool hasRing = voiceParamPtrs[globalV].ringMod->load() > 0.5f;
+      if (hasSync || hasRing) {
+        // voice sv is modulated by voice (sv+2)%3 (i.e., sv-1 wrapping)
+        int modulatorSidVoice = (sv + 2) % 3;
+        int modulatorGlobal = sidBase + modulatorSidVoice;
+        float offsetSemitones = voiceParamPtrs[globalV].modOffset->load();
+        if (std::abs(offsetSemitones) > 0.01f) {
+          // Calculate offset frequency for the modulator voice
+          double modDetune =
+              (modulatorGlobal < 3) ? leftDetuneCents : rightDetuneCents;
+          double modNote = static_cast<double>(midiNote) + (modDetune / 100.0) +
+                           static_cast<double>(offsetSemitones);
+          double modHz = 440.0 * std::pow(2.0, (modNote - 69.0) / 12.0);
+          sid.setFrequency(modulatorSidVoice, modHz);
+        }
+      }
+    }
   }
 }
 
@@ -2282,6 +2308,9 @@ BreadbinProcessor::createParameterLayout() {
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{prefix + "filter", 1}, label + "Filter Enable",
         true));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{prefix + "modOffset", 1}, label + "Mod Offset",
+        -24.0f, 24.0f, 7.0f));
   }
 
   return layout;
@@ -2391,6 +2420,7 @@ void BreadbinProcessor::initializeParameterPointers() {
     // per-voice pan removed (now per-SID: leftPan/rightPan)
     ptrs.ringMod = apvts.getRawParameterValue(prefix + "ringMod");
     ptrs.sync = apvts.getRawParameterValue(prefix + "sync");
+    ptrs.modOffset = apvts.getRawParameterValue(prefix + "modOffset");
     ptrs.filter = apvts.getRawParameterValue(prefix + "filter");
   }
 }

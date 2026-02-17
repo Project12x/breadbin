@@ -321,7 +321,9 @@ public:
                ? modSlotDisplay[slot].contribution.load()
                : 0.0f;
   }
-  float getModTotalFilterCutoff() const { return modTotals.filterCutoff.load(); }
+  float getModTotalFilterCutoff() const {
+    return modTotals.filterCutoff.load();
+  }
   float getModTotalPulseWidth() const { return modTotals.pulseWidth.load(); }
   float getModTotalPitch() const { return modTotals.pitch.load(); }
   float getModTotalResonance() const { return modTotals.resonance.load(); }
@@ -433,12 +435,14 @@ public:
   int getGlobalPresetId() const { return globalPresetId; }
 
   // CPU load measurement (updated per processBlock)
-  float getCpuLoad() const { return cpuLoadPercent.load(std::memory_order_relaxed); }
+  float getCpuLoad() const {
+    return cpuLoadPercent.load(std::memory_order_relaxed);
+  }
 
   // Runtime voice-state accessors (used by integration diagnostics/tests)
   bool isVoiceActiveRuntime(int voiceIndex) const {
     return (voiceIndex >= 0 && voiceIndex < 6) ? voices[voiceIndex].active
-                                                : false;
+                                               : false;
   }
   int getVoiceNoteRuntime(int voiceIndex) const {
     return (voiceIndex >= 0 && voiceIndex < 6) ? voices[voiceIndex].note : -1;
@@ -538,6 +542,8 @@ private:
     // per-voice pan removed (now per-SID: leftPan/rightPan)
     std::atomic<float> *ringMod = nullptr;
     std::atomic<float> *sync = nullptr;
+    std::atomic<float> *modOffset =
+        nullptr; // Semitone offset for modulator voice (sync/ring)
     std::atomic<float> *filter = nullptr;
   };
   std::array<VoiceParamPtrs, 6> voiceParamPtrs;

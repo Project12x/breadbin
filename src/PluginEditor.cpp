@@ -3859,6 +3859,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam(vp + "release", 0.0f);
     setParam(vp + "ringMod", 0.0f);
     setParam(vp + "sync", 0.0f);
+    setParam(vp + "modOffset", 7.0f); // Default: perfect fifth
     setParam(vp + "filter", 1.0f);
     processor.getVoiceSettings(v).presetId = 1; // "-- Select --"
   }
