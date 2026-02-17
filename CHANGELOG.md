@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   5 curated favorites (Dual Lead, Commando, Drift Pad, Growl Bass, Chip Sequence)
   appear at the top level for quick access.
 
+- **CPU Meter**: Real-time DSP load percentage displayed in top-right corner.
+  Color-coded: grey (<50%), orange (<80%), red (>=80%).
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

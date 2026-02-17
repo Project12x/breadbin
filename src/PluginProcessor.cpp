@@ -92,6 +92,7 @@ void BreadbinProcessor::releaseResources() {}
 void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                      juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
+  const auto cpuTimerStart = juce::Time::getHighResolutionTicks();
 
   // Add messages from virtual keyboard (standalone mode)
   midiCollector.removeNextBlockOfMessages(midiMessages, buffer.getNumSamples());
@@ -435,6 +436,13 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   }
+
+  // Measure CPU load: time spent / time available
+  const auto cpuTimerEnd = juce::Time::getHighResolutionTicks();
+  const double elapsed = juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
+  const double budget = static_cast<double>(numSamples) / getSampleRate();
+  cpuLoadPercent.store(static_cast<float>(elapsed / budget * 100.0),
+                       std::memory_order_relaxed);
 }
 
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {

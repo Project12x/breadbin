@@ -426,10 +426,14 @@ private:
   ControlParam learningParam = ControlParam::None;
   int selectedVoice = 0;
   int globalPresetId = 1; // Persisted global preset selector ID
+  std::atomic<float> cpuLoadPercent{0.0f};
 
 public:
   void setGlobalPresetId(int id) { globalPresetId = id; }
   int getGlobalPresetId() const { return globalPresetId; }
+
+  // CPU load measurement (updated per processBlock)
+  float getCpuLoad() const { return cpuLoadPercent.load(std::memory_order_relaxed); }
 
   // Runtime voice-state accessors (used by integration diagnostics/tests)
   bool isVoiceActiveRuntime(int voiceIndex) const {

@@ -853,6 +853,19 @@ void BreadbinEditor::timerCallback() {
   presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
                            juce::dontSendNotification);
 
+  // CPU load
+  {
+    float cpu = processor.getCpuLoad();
+    juce::String txt = "CPU: " + juce::String(static_cast<int>(cpu)) + "%";
+    if (cpu > 80.0f)
+      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::red);
+    else if (cpu > 50.0f)
+      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
+    else
+      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF888888));
+    cpuLoadLabel.setText(txt, juce::dontSendNotification);
+  }
+
   // SID Player register overlay
   if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
     auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
@@ -2080,6 +2093,14 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(globalPresetSelector);
 
+  // CPU load display
+  cpuLoadLabel.setText("CPU: 0%", juce::dontSendNotification);
+  cpuLoadLabel.setFont(juce::FontOptions(10.0f));
+  cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF888888));
+  cpuLoadLabel.setJustificationType(juce::Justification::centredRight);
+  cpuLoadLabel.setTooltip("DSP CPU usage (% of audio buffer time budget)");
+  addAndMakeVisible(cpuLoadLabel);
+
   // Preset dirty indicator
   presetDirtyLabel.setColour(juce::Label::textColourId, juce::Colours::gold);
   presetDirtyLabel.setFont(juce::Font(juce::FontOptions(16.0f)).boldened());
@@ -3025,6 +3046,7 @@ void BreadbinEditor::resized() {
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
   globalPresetSelector.setBounds(topRow.removeFromLeft(100));
   presetDirtyLabel.setBounds(topRow.removeFromLeft(14));
+  cpuLoadLabel.setBounds(topRow.removeFromRight(60));
   topRow.removeFromLeft(pad);
   savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
   topRow.removeFromLeft(pad);
