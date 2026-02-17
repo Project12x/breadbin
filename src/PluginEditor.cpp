@@ -5067,6 +5067,366 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusMix", 0.3f);
     break;
   }
+
+  case 47: { // Thin Lead - Narrow pulse lead with vibrato + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
+    setFilters(1600, 4);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // Vibrato
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 5.5f);
+    setParam("lfo2DepthPitch", 0.06f);
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 300.0f);
+    setParam("delayTimeR", 450.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 48: { // Wide Organ - Hollow wide-pulse organ + chorus
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 3584, 0, 3, 12, 4, 8);
+    setFilters(1200, 3);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    // Chorus for warmth
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.9f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    // Slow PWM sweep for subtle movement
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.2f);
+    setParam("pwmSweepDepth", 0.15f);
+    break;
+  }
+
+  case 49: { // Pluck Sequence - Pluck bass WT arp + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 8, 0, 2, 9);
+    setFilters(900, 5);
+    // Filter envelope for pluck accent
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.1f);
+    setParam("filterEnvSustain", 0.1f);
+    setParam("filterEnvRelease", 0.15f);
+    setParam("filterEnvAmount", 0.7f);
+    // Wavetable: 4-step pitch sequence
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 4.0f);
+    setParam("wtRate", 12.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);  // Root
+      setWTStep(1, 2.0f, 7.0f, 2048.0f);  // 5th
+      setWTStep(2, 2.0f, 12.0f, 2048.0f); // Octave
+      setWTStep(3, 2.0f, 5.0f, 2048.0f);  // 4th
+    }
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 200.0f);
+    setParam("delayTimeR", 300.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 50: { // Deep Sub - Sub bass + glide + slow chorus
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 0, 15, 3, 10);
+    setFilters(600, 2);
+    setParam("glide", 50.0f);
+    setParam("dualMode", 1.0f); // Unison for thickness
+    setParam("leftDetune", -2.0f);
+    setParam("rightDetune", 2.0f);
+    // Subtle chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.5f);
+    setParam("chorusDepth", 0.15f);
+    setParam("chorusMix", 0.2f);
+    break;
+  }
+
+  case 51: { // Saw Stack - 6-voice saw unison + heavy detune + FX
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 0, 0, 15, 3, 11);
+    setParam("dualMode", 1.0f); // Unison
+    setParam("leftDetune", -15.0f);
+    setParam("rightDetune", 15.0f);
+    setFilters(1800, 4);
+    // Chorus for super-saw width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.5f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.4f);
+    // LFO1 on filter for slow movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoRate", 0.3f);
+    setParam("lfoDepthFilt", 0.2f);
+    break;
+  }
+
+  case 52: { // Stab Machine - Staccato saw + arp + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 0, 6, 0, 0, 12);
+    setFilters(1400, 5);
+    // Arpeggiator
+    setParam("arpEnable", 1.0f);
+    setParam("arpRate", 12.0f);
+    setParam("arpOctaves", 2.0f);
+    setParam("arpPattern", 2.0f); // Up-Down
+    // Stereo delay for rhythmic echoes
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 150.0f);
+    setParam("delayTimeR", 225.0f);
+    setParam("delayFeedback", 0.45f);
+    setParam("delayMix", 0.35f);
+    // Filter envelope punch
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.08f);
+    setParam("filterEnvSustain", 0.05f);
+    setParam("filterEnvRelease", 0.1f);
+    setParam("filterEnvAmount", 0.8f);
+    break;
+  }
+
+  case 53: { // Ethereal Pad - Soft triangle pad + dual LFOs + chorus
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 10, 4, 12, 10, 13);
+    setFilters(900, 3);
+    setParam("leftDetune", -8.0f);
+    setParam("rightDetune", 8.0f);
+    // LFO1: slow filter sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f); // Triangle
+    setParam("lfoRate", 0.15f);
+    setParam("lfoDepthFilt", 0.3f);
+    // LFO2: gentle pitch drift
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f);
+    setParam("lfo2Rate", 0.1f);
+    setParam("lfo2DepthPitch", 0.03f);
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.45f);
+    // Delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 500.0f);
+    setParam("delayTimeR", 750.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.25f);
+    break;
+  }
+
+  case 54: { // Bright Wash - Saw pad + PWM sweep + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 6, 4, 10, 8, 14);
+    setFilters(1400, 4);
+    setParam("leftDetune", -10.0f);
+    setParam("rightDetune", 10.0f);
+    // PWM sweep (affects pulse fallback on paired SID)
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.4f);
+    setParam("pwmSweepDepth", 0.3f);
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    // Delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 400.0f);
+    setParam("delayTimeR", 600.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.25f);
+    // Filter envelope: gentle swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 1.5f);
+    setParam("filterEnvDecay", 1.0f);
+    setParam("filterEnvSustain", 0.6f);
+    setParam("filterEnvRelease", 2.0f);
+    setParam("filterEnvAmount", 0.35f);
+    break;
+  }
+
+  case 55: { // Pipe Organ - Square wave organ + wide detune
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 0, 15);
+    setFilters(1600, 2);
+    setParam("leftDetune", -12.0f);
+    setParam("rightDetune", 12.0f);
+    // Subtle chorus for pipe organ shimmer
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.8f);
+    setParam("chorusDepth", 0.15f);
+    setParam("chorusMix", 0.2f);
+    break;
+  }
+
+  case 56: { // Clav Funk - Clavinet pluck + filter env + chorus
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 10, 4, 2, 16);
+    setFilters(800, 6);
+    // Sharp filter envelope for clav bite
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.15f);
+    setParam("filterEnvSustain", 0.15f);
+    setParam("filterEnvRelease", 0.2f);
+    setParam("filterEnvAmount", 0.75f);
+    // Light chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    // Subtle detune
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    break;
+  }
+
+  case 57: { // Drum Kit - Mixed percussion: noise hi-hats + triangle kicks
+    // Voices 0-2: Hi-Hat (noise, short)
+    configVoice(0, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0, 17);
+    configVoice(1, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0, 17);
+    configVoice(2, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0, 17);
+    // Voices 3-5: Kick Thump (triangle, medium decay)
+    configVoice(3, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 0, 18);
+    configVoice(4, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 0, 18);
+    configVoice(5, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 0, 18);
+    setFilters(1800, 2);
+    break;
+  }
+
+  case 58: { // Wind Noise - White noise + filter LFO sweep
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Noise, 0, 0, 0, 15, 4, 19);
+    setFilters(600, 4);
+    // LFO1: slow triangle filter sweep for wind effect
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f); // Triangle
+    setParam("lfoRate", 0.2f);
+    setParam("lfoDepthFilt", 0.6f);
+    // LFO2: even slower secondary sweep for variation
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f);
+    setParam("lfo2Rate", 0.05f);
+    setParam("lfo2DepthFilt", 0.3f);
+    // Delay for spaciousness
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 600.0f);
+    setParam("delayTimeR", 900.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 59: { // Laser Lead - Zap saw + arp + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 0, 12, 0, 0, 20);
+    setFilters(1800, 6);
+    // Arpeggiator for rapid-fire zaps
+    setParam("arpEnable", 1.0f);
+    setParam("arpRate", 18.0f);
+    setParam("arpOctaves", 3.0f);
+    setParam("arpPattern", 3.0f); // Random
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 125.0f);
+    setParam("delayTimeR", 187.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.4f);
+    // Filter envelope for extra attack bite
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.05f);
+    setParam("filterEnvSustain", 0.0f);
+    setParam("filterEnvRelease", 0.05f);
+    setParam("filterEnvAmount", 0.9f);
+    break;
+  }
+
+  case 60: { // Split Layers - Thin Pulse lead + Pluck Bass mix
+    // Voices 0-2: Thin Pulse lead
+    configVoice(0, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
+    configVoice(1, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
+    configVoice(2, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
+    // Voices 3-5: Pluck Bass
+    configVoice(3, SIDEngine::Waveform::Pulse, 2048, 0, 8, 0, 2, 9);
+    configVoice(4, SIDEngine::Waveform::Pulse, 2048, 0, 8, 0, 2, 9);
+    configVoice(5, SIDEngine::Waveform::Pulse, 2048, 0, 8, 0, 2, 9);
+    setFilters(1200, 4);
+    setParam("leftDetune", -5.0f);
+    setParam("rightDetune", 5.0f);
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    // Filter envelope for pluck accent on bass voices
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.2f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.3f);
+    setParam("filterEnvAmount", 0.5f);
+    break;
+  }
+
+  case 61: { // Texture Morph - 8-step WT using diverse voice timbres
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 4, 4, 10, 6, 15);
+    setFilters(1000, 4);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    // Wavetable: 8-step timbral journey through diverse waveforms/PW
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 8.0f);
+    setParam("wtRate", 6.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);   // Square, root
+      setWTStep(1, 2.0f, 0.0f, 512.0f);    // Thin pulse
+      setWTStep(2, 1.0f, 0.0f, 2048.0f);   // Saw
+      setWTStep(3, 0.0f, 12.0f, 2048.0f);  // Triangle, octave up
+      setWTStep(4, 2.0f, 0.0f, 3584.0f);   // Wide pulse
+      setWTStep(5, 1.0f, -12.0f, 2048.0f); // Saw, octave down
+      setWTStep(6, 2.0f, 7.0f, 1536.0f);   // Pulse, 5th, clav PW
+      setWTStep(7, 3.0f, 0.0f, 2048.0f);   // Noise hit
+    }
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    // Delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 333.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
   }
 
   // Refresh UI for current voice
@@ -5202,6 +5562,10 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(19, "Sync Lead");
     sub.addItem(20, "Acid Squelch");
     sub.addItem(46, "Filter Scream");
+    sub.addItem(47, "Thin Lead");
+    sub.addItem(51, "Saw Stack");
+    sub.addItem(56, "Clav Funk");
+    sub.addItem(59, "Laser Lead");
     root->addSubMenu("Leads", sub);
   }
 
@@ -5213,6 +5577,8 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(32, "Cobra Bass");
     sub.addItem(40, "Wobble Bass");
     sub.addItem(45, "Arp Bass");
+    sub.addItem(50, "Deep Sub");
+    sub.addItem(60, "Split Layers");
     root->addSubMenu("Bass", sub);
   }
 
@@ -5225,6 +5591,10 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(24, "PWM Strings");
     sub.addItem(38, "Drift Pad");
     sub.addItem(42, "Poly Chord");
+    sub.addItem(48, "Wide Organ");
+    sub.addItem(53, "Ethereal Pad");
+    sub.addItem(54, "Bright Wash");
+    sub.addItem(55, "Pipe Organ");
     root->addSubMenu("Pads & Keys", sub);
   }
 
@@ -5238,6 +5608,9 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(25, "Chip Sequence");
     sub.addItem(39, "Arp Machine");
     sub.addItem(41, "Sequence Morph");
+    sub.addItem(49, "Pluck Sequence");
+    sub.addItem(52, "Stab Machine");
+    sub.addItem(61, "Texture Morph");
     root->addSubMenu("Arps & Sequences", sub);
   }
 
@@ -5249,6 +5622,8 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(7, "Mod Madness");
     sub.addItem(26, "S&H Glitch");
     sub.addItem(27, "Ring Bell");
+    sub.addItem(57, "Drum Kit");
+    sub.addItem(58, "Wind Noise");
     root->addSubMenu("FX & Modulation", sub);
   }
 
