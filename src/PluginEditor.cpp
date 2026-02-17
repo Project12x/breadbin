@@ -3776,6 +3776,12 @@ void BreadbinEditor::applyPreset(int presetId) {
     break;
   case 29: // Bell Triangle - Daglish's metallic ring mod bell
     configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8);
+    {
+      juce::String rp = "v" + juce::String(selectedVoice) + "_ringMod";
+      auto *ringParam = processor.apvts.getParameter(rp);
+      if (ringParam)
+        ringParam->setValueNotifyingHost(ringParam->convertTo0to1(1.0f));
+    }
     break;
   case 30: // Delta Sustain - Hubbard's sustained narrow pulse
     configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15,
@@ -4440,8 +4446,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 15: { // SID Brass - Hard sync brass with chorus and filter env
     // Hard sync gives harmonically rich brass-like timbre
+    // Voices 0,3: Brass Saw voice for timbral variety; others: sync lead
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 2, 4, 12, 4, 3);
+      int vpId = (v == 0 || v == 3) ? 31 : 3;
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 2, 4, 12, 4, vpId);
       setParam("v" + juce::String(v) + "_sync", 1.0f);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
@@ -4574,7 +4582,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 21: { // Sub Bass - Deep triangle, minimal filtering
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 12, 4, 6);
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 12, 4, 10);
       setParam("v" + juce::String(v) + "_filter",
                0.0f); // No filter for clean sub
     }
@@ -5126,7 +5134,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 45: { // Arp Bass - Hubbard-style bass arpeggiation with WT
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1400, 0, 4, 8, 2, 2);
+      configVoice(v, SIDEngine::Waveform::Pulse, 1400, 0, 4, 8, 2, 9);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(600, 5);
