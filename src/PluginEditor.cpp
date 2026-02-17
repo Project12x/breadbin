@@ -2276,35 +2276,70 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(presetLabel);
 
   presetSelector.addItem("-- Select --", 1);
-  presetSelector.addItem("Classic Lead (Monty)", 2);
-  presetSelector.addItem("Fat Bass (Ocean)", 3);
-  presetSelector.addItem("PWM Pad (Hubbard)", 4);
-  presetSelector.addItem("Noise Snare", 5);
-  presetSelector.addItem("Retro Triangle", 6);
-  presetSelector.addItem("Thin Pulse", 7);
-  presetSelector.addItem("Wide Pulse", 8);
-  presetSelector.addItem("Pluck Bass", 9);
-  presetSelector.addItem("Sub Bass", 10);
-  presetSelector.addItem("Saw Lead", 11);
-  presetSelector.addItem("Staccato Saw", 12);
-  presetSelector.addItem("Soft Pad", 13);
-  presetSelector.addItem("Bright Pad", 14);
-  presetSelector.addItem("Organ", 15);
-  presetSelector.addItem("Clavinet", 16);
-  presetSelector.addItem("Hi-Hat", 17);
-  presetSelector.addItem("Kick Thump", 18);
-  presetSelector.addItem("White Noise", 19);
-  presetSelector.addItem("Zap", 20);
-  presetSelector.addItem("Commando Pluck", 21);
-  presetSelector.addItem("Punchy Saw", 22);
-  presetSelector.addItem("Buzz Saw", 23);
-  presetSelector.addItem("Driving Saw", 24);
-  presetSelector.addItem("Wide Lead", 25);
-  presetSelector.addItem("Gentle Triangle", 26);
-  presetSelector.addItem("Short Pluck", 27);
-  presetSelector.addItem("Punch Bass", 28);
-  presetSelector.addItem("Bell Triangle", 29);
-  presetSelector.addItem("Delta Sustain", 30);
+  // Build categorized voice preset menu using PopupMenu submenus
+  auto *vpRoot = presetSelector.getRootMenu();
+  // -- Leads --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(2, "Classic Lead (Monty)");
+    sub.addItem(7, "Thin Pulse");
+    sub.addItem(8, "Wide Pulse");
+    sub.addItem(11, "Saw Lead");
+    sub.addItem(25, "Wide Lead");
+    sub.addItem(21, "Commando Pluck");
+    sub.addItem(30, "Delta Sustain");
+    sub.addItem(31, "Brass Saw");
+    vpRoot->addSubMenu("Leads", sub);
+  }
+  // -- Bass --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(3, "Fat Bass (Ocean)");
+    sub.addItem(9, "Pluck Bass");
+    sub.addItem(10, "Sub Bass");
+    sub.addItem(22, "Punchy Saw");
+    sub.addItem(28, "Punch Bass");
+    sub.addItem(23, "Buzz Saw");
+    sub.addItem(24, "Driving Saw");
+    vpRoot->addSubMenu("Bass", sub);
+  }
+  // -- Pads & Keys --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(4, "PWM Pad (Hubbard)");
+    sub.addItem(13, "Soft Pad");
+    sub.addItem(14, "Bright Pad");
+    sub.addItem(26, "Gentle Triangle");
+    sub.addItem(37, "Ambient Swell");
+    sub.addItem(32, "String Ensemble");
+    sub.addItem(15, "Organ");
+    sub.addItem(16, "Clavinet");
+    sub.addItem(33, "Electric Piano");
+    sub.addItem(34, "Harpsichord");
+    vpRoot->addSubMenu("Pads & Keys", sub);
+  }
+  // -- Percussion --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(5, "Noise Snare");
+    sub.addItem(17, "Hi-Hat");
+    sub.addItem(18, "Kick Thump");
+    sub.addItem(35, "Snare Roll");
+    sub.addItem(36, "Tom");
+    vpRoot->addSubMenu("Percussion", sub);
+  }
+  // -- FX & Utility --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(6, "Retro Triangle");
+    sub.addItem(19, "White Noise");
+    sub.addItem(20, "Zap");
+    sub.addItem(29, "Bell Triangle");
+    sub.addItem(27, "Short Pluck");
+    sub.addItem(12, "Staccato Saw");
+    sub.addItem(38, "Rising Noise");
+    vpRoot->addSubMenu("FX & Utility", sub);
+  }
   presetSelector.setSelectedId(1);
   presetSelector.setTooltip("Applies preset to currently selected voice");
   presetSelector.onChange = [this]() {
@@ -3745,6 +3780,33 @@ void BreadbinEditor::applyPreset(int presetId) {
   case 30: // Delta Sustain - Hubbard's sustained narrow pulse
     configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1200, 0, 0, 15,
                    6);
+    break;
+  case 31: // Brass Saw - Medium attack saw for brass stabs
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 2, 4, 12,
+                   4);
+    break;
+  case 32: // String Ensemble - Slow attack saw for string sections
+    configureVoice(selectedVoice, SIDEngine::Waveform::Sawtooth, 0, 8, 4, 12,
+                   8);
+    break;
+  case 33: // Electric Piano - Bell-like pulse decay
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 1800, 0, 8, 6, 4);
+    break;
+  case 34: // Harpsichord - Very fast thin pulse pluck
+    configureVoice(selectedVoice, SIDEngine::Waveform::Pulse, 768, 0, 3, 0, 2);
+    break;
+  case 35: // Snare Roll - Medium noise decay
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 0, 6, 2, 3);
+    break;
+  case 36: // Tom - Melodic triangle percussion
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 0, 8, 0, 3);
+    break;
+  case 37: // Ambient Swell - Max attack triangle drone
+    configureVoice(selectedVoice, SIDEngine::Waveform::Triangle, 0, 15, 0, 15,
+                   15);
+    break;
+  case 38: // Rising Noise - Slow attack noise for FX risers
+    configureVoice(selectedVoice, SIDEngine::Waveform::Noise, 0, 12, 4, 6, 8);
     break;
   }
 
@@ -5474,6 +5536,259 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayMix", 0.3f);
     break;
   }
+
+  case 62: { // Brass Section - Brass saw voices + velocity->filter + chorus
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 2, 4, 12, 4, 31);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1000, 5);
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    // Filter envelope: brass attack burst
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.02f);
+    setParam("filterEnvDecay", 0.3f);
+    setParam("filterEnvSustain", 0.5f);
+    setParam("filterEnvRelease", 0.5f);
+    setParam("filterEnvAmount", 0.6f);
+    // Mod matrix: Velocity -> Filter for expressive dynamics
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.6f);
+    }
+    // Vibrato
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Rate", 5.0f);
+    setParam("lfo2DepthPitch", 0.05f);
+    // Chorus for section width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    break;
+  }
+
+  case 63: { // String Machine - String ensemble + PWM sweep + dual LFOs
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 8, 4, 12, 8, 32);
+    setFilters(1000, 3);
+    setParam("leftDetune", -12.0f);
+    setParam("rightDetune", 12.0f);
+    // PWM sweep for string shimmer
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.3f);
+    setParam("pwmSweepDepth", 0.35f);
+    // LFO1: slow filter for warmth
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.15f);
+    setParam("lfoDepthFilt", 0.2f);
+    // LFO2: gentle pitch for ensemble effect
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f);
+    setParam("lfo2Rate", 0.1f);
+    setParam("lfo2DepthPitch", 0.02f);
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.35f);
+    setParam("chorusMix", 0.4f);
+    break;
+  }
+
+  case 64: { // Retro EP - Electric piano + stereo delay + velocity
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 8, 6, 4, 33);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1200, 3);
+    setParam("leftDetune", -2.0f);
+    setParam("rightDetune", 2.0f);
+    // Filter envelope for bell-like attack
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.4f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.5f);
+    setParam("filterEnvAmount", 0.5f);
+    // Mod matrix: Velocity -> Filter for touch sensitivity
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.5f);
+    }
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 250.0f);
+    setParam("delayTimeR", 375.0f);
+    setParam("delayFeedback", 0.3f);
+    setParam("delayMix", 0.25f);
+    // Subtle chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.5f);
+    setParam("chorusDepth", 0.15f);
+    setParam("chorusMix", 0.2f);
+    break;
+  }
+
+  case 65: { // Ring Mod Pad - Ring modulated triangle pad + filter sweep
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 6, 4, 12, 8, 26);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(800, 5);
+    setParam("leftDetune", -8.0f);
+    setParam("rightDetune", 8.0f);
+    // LFO1: slow filter sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.2f);
+    setParam("lfoDepthFilt", 0.35f);
+    // Chorus for width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.7f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    // Delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 400.0f);
+    setParam("delayTimeR", 600.0f);
+    setParam("delayFeedback", 0.45f);
+    setParam("delayMix", 0.25f);
+    break;
+  }
+
+  case 66: { // Velocity Keys - EP with velocity->filter + velocity->PW
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 6, 8, 3, 33);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(900, 4);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    // Filter envelope for attack character
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.3f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 0.4f);
+    setParam("filterEnvAmount", 0.5f);
+    // Mod matrix: Velocity -> Filter + Velocity -> PW (dual velocity mapping)
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.6f);
+      auto *s1src = processor.apvts.getParameter("mod1_src");
+      auto *s1dst = processor.apvts.getParameter("mod1_dst");
+      if (s1src)
+        s1src->setValueNotifyingHost(s1src->convertTo0to1(5.0f)); // Velocity
+      if (s1dst)
+        s1dst->setValueNotifyingHost(s1dst->convertTo0to1(2.0f)); // PW
+      setParam("mod1_amt", 0.4f);
+    }
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    break;
+  }
+
+  case 67: { // Chord Pad - Chord memory + ambient swell + delay
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 15, 0, 15, 15, 37);
+    setFilters(800, 3);
+    setParam("leftDetune", -10.0f);
+    setParam("rightDetune", 10.0f);
+    // Chord memory: major 7th voicing
+    setParam("chordEnable", 1.0f);
+    setParam("chordSlot", 0.0f);
+    setParam("chord_s0_i0", 4.0f);  // major 3rd
+    setParam("chord_s0_i1", 7.0f);  // perfect 5th
+    setParam("chord_s1_i0", 3.0f);  // minor 3rd
+    setParam("chord_s1_i1", 7.0f);  // perfect 5th
+    setParam("chord_s2_i0", 5.0f);  // perfect 4th
+    setParam("chord_s2_i1", 7.0f);  // perfect 5th
+    setParam("chord_s3_i0", 7.0f);  // perfect 5th
+    setParam("chord_s3_i1", 12.0f); // octave
+    // LFO1: very slow filter
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.08f);
+    setParam("lfoDepthFilt", 0.2f);
+    // Chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.6f);
+    setParam("chorusDepth", 0.4f);
+    setParam("chorusMix", 0.45f);
+    // Long delay for ambient wash
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 600.0f);
+    setParam("delayTimeR", 900.0f);
+    setParam("delayFeedback", 0.55f);
+    setParam("delayMix", 0.35f);
+    break;
+  }
+
+  case 68: { // Harpsichord Suite - Harpsichord pluck + chorus + delay
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Pulse, 768, 0, 3, 0, 2, 34);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setFilters(1600, 4);
+    setParam("leftDetune", -2.0f);
+    setParam("rightDetune", 2.0f);
+    // Filter envelope for bright attack
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.1f);
+    setParam("filterEnvSustain", 0.1f);
+    setParam("filterEnvRelease", 0.15f);
+    setParam("filterEnvAmount", 0.6f);
+    // Chorus for doubled harpsichord effect
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 2.0f);
+    setParam("chorusDepth", 0.15f);
+    setParam("chorusMix", 0.25f);
+    // Stereo delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 200.0f);
+    setParam("delayTimeR", 300.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.2f);
+    break;
+  }
+
+  case 69: { // Percussion Ensemble - Tom + Snare + Hi-Hat layered kit
+    // Voices 0-1: Tom (melodic percussion)
+    configVoice(0, SIDEngine::Waveform::Triangle, 0, 0, 8, 0, 3, 36);
+    configVoice(1, SIDEngine::Waveform::Triangle, 0, 0, 8, 0, 3, 36);
+    // Voices 2-3: Snare Roll (medium noise)
+    configVoice(2, SIDEngine::Waveform::Noise, 0, 0, 6, 2, 3, 35);
+    configVoice(3, SIDEngine::Waveform::Noise, 0, 0, 6, 2, 3, 35);
+    // Voices 4-5: Hi-Hat (short noise)
+    configVoice(4, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0, 17);
+    configVoice(5, SIDEngine::Waveform::Noise, 0, 0, 4, 0, 0, 17);
+    for (int v = 0; v < 6; ++v)
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    setFilters(1600, 3);
+    break;
+  }
   }
 
   // Refresh UI for current voice
@@ -5613,6 +5928,8 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(51, "Saw Stack");
     sub.addItem(56, "Clav Funk");
     sub.addItem(59, "Laser Lead");
+    sub.addItem(62, "Brass Section");
+    sub.addItem(66, "Velocity Keys");
     root->addSubMenu("Leads", sub);
   }
 
@@ -5642,6 +5959,10 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(53, "Ethereal Pad");
     sub.addItem(54, "Bright Wash");
     sub.addItem(55, "Pipe Organ");
+    sub.addItem(63, "String Machine");
+    sub.addItem(64, "Retro EP");
+    sub.addItem(67, "Chord Pad");
+    sub.addItem(68, "Harpsichord Suite");
     root->addSubMenu("Pads & Keys", sub);
   }
 
@@ -5671,6 +5992,8 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(27, "Ring Bell");
     sub.addItem(57, "Drum Kit");
     sub.addItem(58, "Wind Noise");
+    sub.addItem(65, "Ring Mod Pad");
+    sub.addItem(69, "Percussion Ensemble");
     root->addSubMenu("FX & Modulation", sub);
   }
 
