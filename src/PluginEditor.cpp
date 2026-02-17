@@ -865,7 +865,8 @@ void BreadbinEditor::timerCallback() {
     else if (cpu > 50.0f)
       cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
     else
-      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF888888));
+      cpuLoadLabel.setColour(juce::Label::textColourId,
+                             juce::Colour(0xFF888888));
     cpuLoadLabel.setText(txt, juce::dontSendNotification);
   }
 
@@ -1494,8 +1495,6 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     }
   }
 
-
-
   // Chord preset browser
   presetSelector.addItem("Major Triad", 1);
   presetSelector.addItem("Minor Triad", 2);
@@ -1507,7 +1506,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   presetSelector.setTextWhenNothingSelected("Presets...");
   presetSelector.onChange = [this]() {
     int idx = presetSelector.getSelectedId();
-    if (idx > 0) applyChordPresetByIndex(idx);
+    if (idx > 0)
+      applyChordPresetByIndex(idx);
   };
   addAndMakeVisible(presetSelector);
 
@@ -1515,7 +1515,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   presetPrevButton.setTooltip("Previous chord preset");
   presetPrevButton.onClick = [this]() {
     int id = presetSelector.getSelectedId();
-    if (id <= 1) id = presetSelector.getNumItems() + 1;
+    if (id <= 1)
+      id = presetSelector.getNumItems() + 1;
     presetSelector.setSelectedId(id - 1);
   };
   addAndMakeVisible(presetPrevButton);
@@ -1524,7 +1525,8 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   presetNextButton.setTooltip("Next chord preset");
   presetNextButton.onClick = [this]() {
     int id = presetSelector.getSelectedId();
-    if (id <= 0 || id >= presetSelector.getNumItems()) id = 0;
+    if (id <= 0 || id >= presetSelector.getNumItems())
+      id = 0;
     presetSelector.setSelectedId(id + 1);
   };
   addAndMakeVisible(presetNextButton);
@@ -1765,8 +1767,6 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   setupActionButton(clearButton, "Reset active steps to Pulse / 0 st / PW 2048",
                     [this]() { clearActiveSteps(); });
 
-
-
   // Wavetable preset browser
   presetSelector.addItem("Classic Sweep", 1);
   presetSelector.addItem("Arp Up", 2);
@@ -1774,11 +1774,14 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   presetSelector.addItem("PWM Cycle", 4);
   presetSelector.addItem("Octave Bounce", 5);
   presetSelector.addItem("Waveform Morph", 6);
+  presetSelector.addItem("Noise Rhythm", 7);
+  presetSelector.addItem("Chip Drum", 8);
   presetSelector.setTooltip("Factory wavetable presets");
   presetSelector.setTextWhenNothingSelected("Presets...");
   presetSelector.onChange = [this]() {
     int idx = presetSelector.getSelectedId();
-    if (idx > 0) applyWavetablePresetByIndex(idx);
+    if (idx > 0)
+      applyWavetablePresetByIndex(idx);
   };
   addAndMakeVisible(presetSelector);
 
@@ -1786,7 +1789,8 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   presetPrevButton.setTooltip("Previous wavetable preset");
   presetPrevButton.onClick = [this]() {
     int id = presetSelector.getSelectedId();
-    if (id <= 1) id = presetSelector.getNumItems() + 1;
+    if (id <= 1)
+      id = presetSelector.getNumItems() + 1;
     presetSelector.setSelectedId(id - 1);
   };
   addAndMakeVisible(presetPrevButton);
@@ -1795,7 +1799,8 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   presetNextButton.setTooltip("Next wavetable preset");
   presetNextButton.onClick = [this]() {
     int id = presetSelector.getSelectedId();
-    if (id <= 0 || id >= presetSelector.getNumItems()) id = 0;
+    if (id <= 0 || id >= presetSelector.getNumItems())
+      id = 0;
     presetSelector.setSelectedId(id + 1);
   };
   addAndMakeVisible(presetNextButton);
@@ -2207,18 +2212,26 @@ void BreadbinEditor::setupControls() {
   presetPrevButton.setTooltip("Previous preset");
   presetPrevButton.onClick = [this]() {
     // Ordered list of all factory preset IDs for sequential navigation
-    static const int ids[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
-                              19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,
-                              34,35,36,37,38,39,40,41,42,43,44,45,46};
+    static const int ids[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+                              13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                              25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                              37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
     static const int count = sizeof(ids) / sizeof(ids[0]);
     int cur = globalPresetSelector.getSelectedId();
     // Remap favorites to real IDs
-    constexpr int favMap[][2] = {{500,1},{501,10},{502,38},{503,22},{504,25}};
-    for (auto& f : favMap)
-      if (cur == f[0]) { cur = f[1]; break; }
+    constexpr int favMap[][2] = {
+        {500, 1}, {501, 10}, {502, 38}, {503, 22}, {504, 25}};
+    for (auto &f : favMap)
+      if (cur == f[0]) {
+        cur = f[1];
+        break;
+      }
     int idx = 0;
     for (int i = 0; i < count; ++i)
-      if (ids[i] == cur) { idx = i; break; }
+      if (ids[i] == cur) {
+        idx = i;
+        break;
+      }
     idx = (idx - 1 + count) % count;
     globalPresetSelector.setSelectedId(ids[idx]);
   };
@@ -2227,17 +2240,25 @@ void BreadbinEditor::setupControls() {
   presetNextButton.setButtonText(">");
   presetNextButton.setTooltip("Next preset");
   presetNextButton.onClick = [this]() {
-    static const int ids[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,
-                              19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,
-                              34,35,36,37,38,39,40,41,42,43,44,45,46};
+    static const int ids[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+                              13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                              25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                              37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
     static const int count = sizeof(ids) / sizeof(ids[0]);
     int cur = globalPresetSelector.getSelectedId();
-    constexpr int favMap[][2] = {{500,1},{501,10},{502,38},{503,22},{504,25}};
-    for (auto& f : favMap)
-      if (cur == f[0]) { cur = f[1]; break; }
+    constexpr int favMap[][2] = {
+        {500, 1}, {501, 10}, {502, 38}, {503, 22}, {504, 25}};
+    for (auto &f : favMap)
+      if (cur == f[0]) {
+        cur = f[1];
+        break;
+      }
     int idx = 0;
     for (int i = 0; i < count; ++i)
-      if (ids[i] == cur) { idx = i; break; }
+      if (ids[i] == cur) {
+        idx = i;
+        break;
+      }
     idx = (idx + 1) % count;
     globalPresetSelector.setSelectedId(ids[idx]);
   };
@@ -2420,7 +2441,8 @@ void BreadbinEditor::setupControls() {
   noiseGateSlider.setRange(0.0, 0.1, 0.001);
   noiseGateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   noiseGateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
-  noiseGateSlider.setTooltip("Noise gate threshold (0 = off, higher = more gating)");
+  noiseGateSlider.setTooltip(
+      "Noise gate threshold (0 = off, higher = more gating)");
   addAndMakeVisible(noiseGateSlider);
 
   // External Audio Input
@@ -5333,23 +5355,46 @@ void ChordMemoryPanel::applyChordPresetByIndex(int presetIndex) {
     int intervals[4][5]; // 4 slots x 5 notes
   };
   static const ChordPresetData presets[] = {
-    {"Major Triad",  {{4,7,0,0,0}, {4,7,12,0,0}, {4,7,12,16,0}, {4,7,12,16,19}}},
-    {"Minor Triad",  {{3,7,0,0,0}, {3,7,12,0,0}, {3,7,12,15,0}, {3,7,12,15,19}}},
-    {"7th Chord",    {{4,7,10,0,0}, {4,7,11,0,0}, {3,7,10,0,0}, {3,7,11,0,0}}},
-    {"Sus4",         {{5,7,0,0,0}, {5,7,12,0,0}, {2,7,0,0,0}, {2,7,12,0,0}}},
-    {"Power Chord",  {{7,0,0,0,0}, {7,12,0,0,0}, {7,12,19,0,0}, {7,12,19,24,0}}},
-    {"Octaves",      {{12,0,0,0,0}, {12,24,0,0,0}, {-12,12,0,0,0}, {-12,12,24,0,0}}},
+      {"Major Triad",
+       {{4, 7, 0, 0, 0},
+        {4, 7, 12, 0, 0},
+        {4, 7, 12, 16, 0},
+        {4, 7, 12, 16, 19}}},
+      {"Minor Triad",
+       {{3, 7, 0, 0, 0},
+        {3, 7, 12, 0, 0},
+        {3, 7, 12, 15, 0},
+        {3, 7, 12, 15, 19}}},
+      {"7th Chord",
+       {{4, 7, 10, 0, 0},
+        {4, 7, 11, 0, 0},
+        {3, 7, 10, 0, 0},
+        {3, 7, 11, 0, 0}}},
+      {"Sus4",
+       {{5, 7, 0, 0, 0}, {5, 7, 12, 0, 0}, {2, 7, 0, 0, 0}, {2, 7, 12, 0, 0}}},
+      {"Power Chord",
+       {{7, 0, 0, 0, 0},
+        {7, 12, 0, 0, 0},
+        {7, 12, 19, 0, 0},
+        {7, 12, 19, 24, 0}}},
+      {"Octaves",
+       {{12, 0, 0, 0, 0},
+        {12, 24, 0, 0, 0},
+        {-12, 12, 0, 0, 0},
+        {-12, 12, 24, 0, 0}}},
   };
   int idx = presetIndex - 1;
-  if (idx < 0 || idx >= 6) return;
+  if (idx < 0 || idx >= 6)
+    return;
   auto &data = presets[idx];
 
   for (int s = 0; s < 4; ++s) {
     for (int i = 0; i < 5; ++i) {
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
       auto *p = processor.apvts.getParameter(id);
-      if (p) p->setValueNotifyingHost(
-              p->convertTo0to1(static_cast<float>(data.intervals[s][i])));
+      if (p)
+        p->setValueNotifyingHost(
+            p->convertTo0to1(static_cast<float>(data.intervals[s][i])));
     }
   }
 }
@@ -5357,7 +5402,11 @@ void ChordMemoryPanel::applyChordPresetByIndex(int presetIndex) {
 // ========== WAVETABLE FACTORY PRESETS ==========
 void WavetablePanel::applyWavetablePresetByIndex(int presetIndex) {
   // wave: 1=Tri,2=Saw,3=Pulse,4=Noise  pitch: semitones  pw: 0-4095
-  struct WTPresetStep { int wave; int pitch; int pw; };
+  struct WTPresetStep {
+    int wave;
+    int pitch;
+    int pw;
+  };
   struct WTPresetData {
     const char *name;
     int numSteps;
@@ -5366,46 +5415,177 @@ void WavetablePanel::applyWavetablePresetByIndex(int presetIndex) {
     WTPresetStep steps[16];
   };
   static const WTPresetData presets[] = {
-    {"Classic Sweep", 8, 8.0f, true,
-      {{1,0,2048},{1,2,2048},{1,4,2048},{1,7,2048},
-       {1,12,2048},{1,7,2048},{1,4,2048},{1,2,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048}}},
-    {"Arp Up", 4, 12.0f, true,
-      {{2,0,1024},{2,4,1024},{2,7,1024},{2,12,1024},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048}}},
-    {"Pluck Sequence", 8, 6.0f, true,
-      {{1,0,2048},{2,0,2048},{0,7,2048},{2,5,2048},
-       {1,12,2048},{0,3,2048},{2,7,2048},{1,-5,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048}}},
-    {"PWM Cycle", 8, 4.0f, true,
-      {{2,0,512},{2,0,1024},{2,0,1536},{2,0,2048},
-       {2,0,2560},{2,0,3072},{2,0,3584},{2,0,4095},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048}}},
-    {"Octave Bounce", 4, 10.0f, true,
-      {{1,0,2048},{1,12,2048},{1,0,2048},{1,-12,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048}}},
-    {"Waveform Morph", 6, 3.0f, true,
-      {{0,0,2048},{1,0,2048},{2,0,512},{2,0,2048},
-       {2,0,3500},{1,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048},{0,0,2048},{0,0,2048},
-       {0,0,2048},{0,0,2048}}},
+      {"Classic Sweep",
+       8,
+       8.0f,
+       true,
+       {{1, 0, 2048},
+        {1, 2, 2048},
+        {1, 4, 2048},
+        {1, 7, 2048},
+        {1, 12, 2048},
+        {1, 7, 2048},
+        {1, 4, 2048},
+        {1, 2, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Arp Up",
+       4,
+       12.0f,
+       true,
+       {{2, 0, 1024},
+        {2, 4, 1024},
+        {2, 7, 1024},
+        {2, 12, 1024},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Pluck Sequence",
+       8,
+       6.0f,
+       true,
+       {{1, 0, 2048},
+        {2, 0, 2048},
+        {0, 7, 2048},
+        {2, 5, 2048},
+        {1, 12, 2048},
+        {0, 3, 2048},
+        {2, 7, 2048},
+        {1, -5, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"PWM Cycle",
+       8,
+       4.0f,
+       true,
+       {{2, 0, 512},
+        {2, 0, 1024},
+        {2, 0, 2048},
+        {2, 0, 3072},
+        {2, 0, 4095},
+        {2, 0, 3072},
+        {2, 0, 2048},
+        {2, 0, 1024},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Octave Bounce",
+       4,
+       10.0f,
+       true,
+       {{1, 0, 2048},
+        {1, 12, 2048},
+        {1, 0, 2048},
+        {1, -12, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Waveform Morph",
+       6,
+       3.0f,
+       true,
+       {{0, 0, 2048},
+        {1, 0, 2048},
+        {2, 0, 512},
+        {2, 0, 2048},
+        {2, 0, 3500},
+        {1, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Noise Rhythm",
+       8,
+       10.0f,
+       true,
+       {{2, 0, 2048},
+        {2, 0, 2048},
+        {3, 0, 2048},
+        {2, 0, 2048},
+        {2, 0, 2048},
+        {3, 0, 2048},
+        {2, 0, 2048},
+        {2, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048},
+        {0, 0, 2048}}},
+      {"Chip Drum",
+       16,
+       16.0f,
+       true,
+       {{2, 0, 1024},
+        {2, 0, 1024},
+        {3, 0, 2048},
+        {2, 0, 1024},
+        {2, -12, 1024},
+        {2, 0, 1024},
+        {3, 0, 2048},
+        {2, 12, 1024},
+        {2, 0, 1024},
+        {2, 0, 1024},
+        {3, 0, 2048},
+        {2, 0, 1024},
+        {2, 7, 1024},
+        {2, 0, 1024},
+        {3, 0, 2048},
+        {3, 0, 2048}}},
   };
 
   int idx = presetIndex - 1;
-  if (idx < 0 || idx >= 6) return;
+  if (idx < 0 || idx >= 8)
+    return;
   auto &data = presets[idx];
 
   auto setPar = [&](const juce::String &id, float val) {
     auto *p = processor.apvts.getParameter(id);
-    if (p) p->setValueNotifyingHost(p->convertTo0to1(val));
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(val));
   };
 
   setPar("wtNumSteps", static_cast<float>(data.numSteps));
@@ -5427,13 +5607,15 @@ void ChordMemoryPanel::saveChordPreset() {
     for (int i = 0; i < 5; ++i) {
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
       auto *p = processor.apvts.getParameter(id);
-      if (p) state.setProperty(juce::Identifier(id),
-              p->convertFrom0to1(p->getValue()), nullptr);
+      if (p)
+        state.setProperty(juce::Identifier(id),
+                          p->convertFrom0to1(p->getValue()), nullptr);
     }
   }
   auto *slotP = processor.apvts.getParameter("chordSlot");
-  if (slotP) state.setProperty("chordSlot",
-              slotP->convertFrom0to1(slotP->getValue()), nullptr);
+  if (slotP)
+    state.setProperty("chordSlot", slotP->convertFrom0to1(slotP->getValue()),
+                      nullptr);
 
   auto chooser = std::make_unique<juce::FileChooser>(
       "Save Chord Preset",
@@ -5448,7 +5630,8 @@ void ChordMemoryPanel::saveChordPreset() {
       if (!file.hasFileExtension(".chords"))
         file = file.withFileExtension(".chords");
       auto xml = state.createXml();
-      if (xml) xml->writeTo(file);
+      if (xml)
+        xml->writeTo(file);
     }
   });
   static std::unique_ptr<juce::FileChooser> saved;
@@ -5474,8 +5657,8 @@ void ChordMemoryPanel::loadChordPreset() {
               auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
               auto *p = processor.apvts.getParameter(id);
               if (p && state.hasProperty(juce::Identifier(id)))
-                p->setValueNotifyingHost(
-                    p->convertTo0to1(static_cast<float>(state[juce::Identifier(id)])));
+                p->setValueNotifyingHost(p->convertTo0to1(
+                    static_cast<float>(state[juce::Identifier(id)])));
             }
           }
           auto *slotP = processor.apvts.getParameter("chordSlot");
@@ -5495,8 +5678,9 @@ void WavetablePanel::saveWavetablePreset() {
   juce::ValueTree state("WavetablePreset");
   auto savePar = [&](const juce::String &id) {
     auto *p = processor.apvts.getParameter(id);
-    if (p) state.setProperty(juce::Identifier(id),
-            p->convertFrom0to1(p->getValue()), nullptr);
+    if (p)
+      state.setProperty(juce::Identifier(id), p->convertFrom0to1(p->getValue()),
+                        nullptr);
   };
   savePar("wtNumSteps");
   savePar("wtRate");
@@ -5521,7 +5705,8 @@ void WavetablePanel::saveWavetablePreset() {
       if (!file.hasFileExtension(".wtsteps"))
         file = file.withFileExtension(".wtsteps");
       auto xml = state.createXml();
-      if (xml) xml->writeTo(file);
+      if (xml)
+        xml->writeTo(file);
     }
   });
   static std::unique_ptr<juce::FileChooser> saved;
@@ -5545,8 +5730,8 @@ void WavetablePanel::loadWavetablePreset() {
           auto loadPar = [&](const juce::String &id) {
             auto *p = processor.apvts.getParameter(id);
             if (p && state.hasProperty(juce::Identifier(id)))
-              p->setValueNotifyingHost(
-                  p->convertTo0to1(static_cast<float>(state[juce::Identifier(id)])));
+              p->setValueNotifyingHost(p->convertTo0to1(
+                  static_cast<float>(state[juce::Identifier(id)])));
           };
           loadPar("wtNumSteps");
           loadPar("wtRate");
