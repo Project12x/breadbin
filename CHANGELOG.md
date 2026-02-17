@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Popup Panel Styling**: Standardized SID File Player with title decoration
   (glow pill + divider). Wavetable title font matched to 14pt bold.
 
+- **Chord Memory Presets**: Save/Load buttons in Chord Memory popup.
+  Saves all 4 chord slots (20 intervals) to .chords files via XML.
+
+- **Wavetable Presets**: Save/Load buttons in Wavetable popup.
+  Saves all 16 steps (wave/pitch/PW) + settings to .wtsteps files via XML.
+
 - **Universal MIDI Learn**: All interactive controls now support right-click MIDI Learn/Unlearn.
   Extended `ControlParam` enum with 37 new entries. Created `MappableToggle` and `MappableComboBox`
   widget classes. Converted all FX sliders, filter envelope ADSR+amount, pan sliders, PWM sweep

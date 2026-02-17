@@ -1502,6 +1502,14 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     }
   }
 
+
+  // Chord preset save/load
+  saveButton.setTooltip("Save chord memory to file");
+  saveButton.onClick = [this]() { saveChordPreset(); };
+  addAndMakeVisible(saveButton);
+  loadButton.setTooltip("Load chord memory from file");
+  loadButton.onClick = [this]() { loadChordPreset(); };
+  addAndMakeVisible(loadButton);
   startTimer(33);
   setSize(panelWidth, panelHeight);
 }
@@ -1588,6 +1596,8 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
 void ChordMemoryPanel::resized() {
   // Header row
   enableButton.setBounds(155, 4, 80, 24);
+  saveButton.setBounds(panelWidth - 110, 6, 50, 20);
+  loadButton.setBounds(panelWidth - 56, 6, 50, 20);
   for (int s = 0; s < 4; ++s)
     slotButtons[s].setBounds(250 + s * 65, 4, 56, 22);
 
@@ -1725,6 +1735,14 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   setupActionButton(clearButton, "Reset active steps to Pulse / 0 st / PW 2048",
                     [this]() { clearActiveSteps(); });
 
+
+  // Wavetable preset save/load
+  saveButton.setTooltip("Save wavetable to file");
+  saveButton.onClick = [this]() { saveWavetablePreset(); };
+  addAndMakeVisible(saveButton);
+  loadButton.setTooltip("Load wavetable from file");
+  loadButton.onClick = [this]() { loadWavetablePreset(); };
+  addAndMakeVisible(loadButton);
   startTimer(33);
   setSize(panelWidth, panelHeight);
 }
@@ -1806,6 +1824,8 @@ void WavetablePanel::paint(juce::Graphics &g) {
 void WavetablePanel::resized() {
   // Header row (y=24..42) — wider layout for 820px panel
   enableButton.setBounds(10, 24, 65, 20);
+  saveButton.setBounds(panelWidth - 120, 26, 55, 20);
+  loadButton.setBounds(panelWidth - 62, 26, 55, 20);
   stepsLabel.setBounds(80, 24, 40, 18);
   numStepsSlider.setBounds(122, 22, 100, 34);
   rateLabel.setBounds(230, 24, 60, 18);
@@ -5223,6 +5243,151 @@ void BreadbinEditor::loadVoicePresetFromFile() {
 
   static std::unique_ptr<juce::FileChooser> savedVoiceChooser;
   savedVoiceChooser = std::move(chooser);
+}
+
+// ========== CHORD MEMORY PRESET SAVE/LOAD ==========
+void ChordMemoryPanel::saveChordPreset() {
+  juce::ValueTree state("ChordPreset");
+  for (int s = 0; s < 4; ++s) {
+    for (int i = 0; i < 5; ++i) {
+      auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+      auto *p = processor.apvts.getParameter(id);
+      if (p) state.setProperty(juce::Identifier(id),
+              p->convertFrom0to1(p->getValue()), nullptr);
+    }
+  }
+  auto *slotP = processor.apvts.getParameter("chordSlot");
+  if (slotP) state.setProperty("chordSlot",
+              slotP->convertFrom0to1(slotP->getValue()), nullptr);
+
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Save Chord Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.chords", true);
+  auto flags = juce::FileBrowserComponent::saveMode |
+               juce::FileBrowserComponent::canSelectFiles |
+               juce::FileBrowserComponent::warnAboutOverwriting;
+  chooser->launchAsync(flags, [state](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file != juce::File{}) {
+      if (!file.hasFileExtension(".chords"))
+        file = file.withFileExtension(".chords");
+      auto xml = state.createXml();
+      if (xml) xml->writeTo(file);
+    }
+  });
+  static std::unique_ptr<juce::FileChooser> saved;
+  saved = std::move(chooser);
+}
+
+void ChordMemoryPanel::loadChordPreset() {
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Load Chord Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.chords", true);
+  auto flags = juce::FileBrowserComponent::openMode |
+               juce::FileBrowserComponent::canSelectFiles;
+  chooser->launchAsync(flags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file.existsAsFile()) {
+      auto xml = juce::XmlDocument::parse(file);
+      if (xml) {
+        auto state = juce::ValueTree::fromXml(*xml);
+        if (state.isValid()) {
+          for (int s = 0; s < 4; ++s) {
+            for (int i = 0; i < 5; ++i) {
+              auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
+              auto *p = processor.apvts.getParameter(id);
+              if (p && state.hasProperty(juce::Identifier(id)))
+                p->setValueNotifyingHost(
+                    p->convertTo0to1(static_cast<float>(state[juce::Identifier(id)])));
+            }
+          }
+          auto *slotP = processor.apvts.getParameter("chordSlot");
+          if (slotP && state.hasProperty("chordSlot"))
+            slotP->setValueNotifyingHost(
+                slotP->convertTo0to1(static_cast<float>(state["chordSlot"])));
+        }
+      }
+    }
+  });
+  static std::unique_ptr<juce::FileChooser> saved;
+  saved = std::move(chooser);
+}
+
+// ========== WAVETABLE PRESET SAVE/LOAD ==========
+void WavetablePanel::saveWavetablePreset() {
+  juce::ValueTree state("WavetablePreset");
+  auto savePar = [&](const juce::String &id) {
+    auto *p = processor.apvts.getParameter(id);
+    if (p) state.setProperty(juce::Identifier(id),
+            p->convertFrom0to1(p->getValue()), nullptr);
+  };
+  savePar("wtNumSteps");
+  savePar("wtRate");
+  savePar("wtLoop");
+  for (int i = 0; i < 16; ++i) {
+    auto prefix = "wt_s" + juce::String(i) + "_";
+    savePar(prefix + "wave");
+    savePar(prefix + "pitch");
+    savePar(prefix + "pw");
+  }
+
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Save Wavetable Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.wtsteps", true);
+  auto flags = juce::FileBrowserComponent::saveMode |
+               juce::FileBrowserComponent::canSelectFiles |
+               juce::FileBrowserComponent::warnAboutOverwriting;
+  chooser->launchAsync(flags, [state](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file != juce::File{}) {
+      if (!file.hasFileExtension(".wtsteps"))
+        file = file.withFileExtension(".wtsteps");
+      auto xml = state.createXml();
+      if (xml) xml->writeTo(file);
+    }
+  });
+  static std::unique_ptr<juce::FileChooser> saved;
+  saved = std::move(chooser);
+}
+
+void WavetablePanel::loadWavetablePreset() {
+  auto chooser = std::make_unique<juce::FileChooser>(
+      "Load Wavetable Preset",
+      juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+      "*.wtsteps", true);
+  auto flags = juce::FileBrowserComponent::openMode |
+               juce::FileBrowserComponent::canSelectFiles;
+  chooser->launchAsync(flags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file.existsAsFile()) {
+      auto xml = juce::XmlDocument::parse(file);
+      if (xml) {
+        auto state = juce::ValueTree::fromXml(*xml);
+        if (state.isValid()) {
+          auto loadPar = [&](const juce::String &id) {
+            auto *p = processor.apvts.getParameter(id);
+            if (p && state.hasProperty(juce::Identifier(id)))
+              p->setValueNotifyingHost(
+                  p->convertTo0to1(static_cast<float>(state[juce::Identifier(id)])));
+          };
+          loadPar("wtNumSteps");
+          loadPar("wtRate");
+          loadPar("wtLoop");
+          for (int i = 0; i < 16; ++i) {
+            auto prefix = "wt_s" + juce::String(i) + "_";
+            loadPar(prefix + "wave");
+            loadPar(prefix + "pitch");
+            loadPar(prefix + "pw");
+          }
+        }
+      }
+    }
+  });
+  static std::unique_ptr<juce::FileChooser> saved;
+  saved = std::move(chooser);
 }
 
 juce::Path BreadbinEditor::makeDiskPath() {

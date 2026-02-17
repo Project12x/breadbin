@@ -440,6 +440,9 @@ private:
   std::array<SlotRow, 4> slots;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       enableAttach;
+  juce::TextButton saveButton{"Save"}, loadButton{"Load"};
+  void saveChordPreset();
+  void loadChordPreset();
   void applyLearnedChord(int slot, const std::vector<int> &notes);
 };
 
@@ -486,6 +489,9 @@ private:
   juce::TextButton randomizeButton{"Randomize"};
   juce::TextButton clearButton{"Clear"};
 
+  juce::TextButton saveButton{"Save"}, loadButton{"Load"};
+  void saveWavetablePreset();
+  void loadWavetablePreset();
   int lastHighlightedStep = -1;
   void shiftActiveSteps(bool right);
   void randomizeActiveSteps();
