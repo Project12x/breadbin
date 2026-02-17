@@ -32,6 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and 4 bonus distinct sounds (Follin Complex, Noise Drums, Arp Bass, Filter Scream).
   Total factory presets: 46.
 
+- **Preset Expansion**: 23 additional global presets (47-69), including velocity-sensitive
+  sounds (Brass Section, Retro EP, Velocity Keys), chord memory presets (Chord Pad),
+  ring mod presets (Ring Mod Pad), strings (String Machine), harpsichord, and percussion
+  ensemble. Total global presets: 69.
+
+- **Voice Preset Expansion**: 18 new voice presets (21-38), including 10 promoted from
+  iconic C64 ADSR shapes (Commando Pluck, Punchy Saw, Buzz Saw, etc.) and 8 gap-filling
+  presets (Brass Saw, String Ensemble, Electric Piano, Harpsichord, Snare Roll, Tom,
+  Ambient Swell, Rising Noise). Total voice presets: 37.
+
+- **Voice Preset Submenus**: Categorized voice presets into 5 submenus
+  (Leads, Bass, Pads & Keys, Percussion, FX & Utility).
+
 - **Preset Menu Submenus**: Converted flat preset dropdown to categorized submenus
   (Leads, Bass, Pads & Keys, Arps & Sequences, FX & Modulation, Classic C64).
   5 curated favorites (Dual Lead, Commando, Drift Pad, Growl Bass, Chip Sequence)
@@ -41,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Color-coded: grey (<50%), orange (<80%), red (>=80%).
 
 - **Preset Navigation**: Previous/next buttons flanking the preset selector
-  for sequential browsing through all 46 factory presets with wrapping.
+  for sequential browsing through all presets with wrapping.
 
 - **Tooltip Audit**: Added tooltips to mod matrix source/destination/amount
   controls and LFO depth sliders.

@@ -77,7 +77,7 @@
 - [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
 - [ ] macOS build (AU format)
 - [ ] Linux build (LV2 format)
-- [ ] Factory preset pack (curated patches showcasing all features)
+- [x] Factory preset pack (69 global presets, 37 voice presets, categorized submenus)
 - [ ] User documentation / manual
 - [ ] Marketing assets (screenshots, demo audio)
 
@@ -96,7 +96,7 @@
 
 | Date | Feature | Resolution | Commit |
 |------|---------|------------|--------|
-| 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
+| 2026-02-17 | Preset expansion | 69 global presets (velocity, chord, ring mod), 37 voice presets (categorized submenus), headless sound fix | `83a830b` |`n| 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
 | 2026-02-11 | Per-SID pan UI + dead code removal | Added leftPan/rightPan sliders to SID panels, removed all per-voice pan dead code (APVTS param, VoiceSettings, VoiceParamPtrs, serialization, preset lambdas) | `65113ae` |
 | 2026-02-11 | NTSC frequency fix | `midiNoteToFrequency`/`noteOn`/`setFrequency` now use `getClockHz()` instead of hardcoded PAL | v0.9.2 |
 | 2026-02-11 | Chip model cache churn | `processBlock` updates caches after applying models | v0.9.2 |

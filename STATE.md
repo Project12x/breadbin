@@ -1,6 +1,6 @@
 # Project State
 
-**Last Updated**: 2026-02-11
+**Last Updated**: 2026-02-17
 
 ## Current Status: Alpha
 
@@ -31,7 +31,8 @@
 - Second LFO (LFO2, independent from LFO1)
 - Wavetable step sequencer (16 steps, per-step waveform/PW/pitch, popup step editor)
 - 4-slot Mod Matrix (LFO1/LFO2/FilterEnv/ModWheel/Velocity -> Filter/PW/Pitch/Resonance)
-- Global presets with full parameter reset
+- 69 global presets (categorized: Leads, Bass, Pads & Keys, Arps & Sequences, FX & Modulation, Classic C64)
+- 37 voice presets (categorized: Leads, Bass, Pads & Keys, Percussion, FX & Utility)
 - Pitch bend range selector (APVTS-exposed, ±2–12 semitones)
 - Modulation popup (LFO1/LFO2, PWM sweep, pitch bend range, mod matrix in single dialog)
 - PWM Sweep (dedicated triangle oscillator for pulse width automation)
@@ -55,7 +56,7 @@
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations | 5.6% survival |
-| BreadbinIntegrationTests | 347 | Pass |
+| BreadbinIntegrationTests | 382 | Pass |
 
 ## Directory Structure
 
