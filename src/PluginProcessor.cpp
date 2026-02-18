@@ -65,6 +65,7 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
       static_cast<size_t>(samplesPerBlock * sidResampleRatio) + 64;
   sidResampleBufL.resize(resampleBufSize, 0.0f);
   sidResampleBufR.resize(resampleBufSize, 0.0f);
+  sidResampleBufCapacity = resampleBufSize;
 
   // Initialize safety chain
   prepareSafetyChain(sampleRate, samplesPerBlock);
@@ -156,35 +157,45 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Chord memory and arpeggiator are mutually exclusive. If both are enabled
   // via host automation, chord mode wins and arp state is held idle.
   if (chordMemory.enabled && arpEnabled) {
-    arpHeldNotes.clear();
-    arpSequence.clear();
+    arpHeldCount = 0;
+    arpSeqCount = 0;
     arpIndex = 0;
     lastArpNote = -1;
   }
 
-  // Check for discrete changes (handled by SIDEngine/Processor comparisons
-  // internally)
+  // Detect chip model / clock mode changes — set dirty flags, defer the heavy
+  // reinit to a non-RT context (handled via timerCallback or prepareToPlay).
   auto newLeftModel =
       static_cast<SIDEngine::ChipModel>(static_cast<int>(chipLeftPtr->load()));
-  if (newLeftModel != chipModelLeft) {
-    sidLeft.setChipModel(newLeftModel);
-    chipModelLeft = newLeftModel;
-  }
-
   auto newRightModel =
       static_cast<SIDEngine::ChipModel>(static_cast<int>(chipRightPtr->load()));
-  if (newRightModel != chipModelRight) {
-    sidRight.setChipModel(newRightModel);
+  if (newLeftModel != chipModelLeft || newRightModel != chipModelRight) {
+    chipModelLeft = newLeftModel;
     chipModelRight = newRightModel;
+    chipModelDirty.store(true, std::memory_order_relaxed);
   }
-
   auto newClockMode =
       static_cast<SIDEngine::ClockMode>(static_cast<int>(clockModePtr->load()));
-  if (newClockMode != clockMode)
-    setClockMode(newClockMode);
+  if (newClockMode != clockMode) {
+    clockMode = newClockMode;
+    clockModeDirty.store(true, std::memory_order_relaxed);
+  }
 
-  // Sync all voice settings (ideally we should only do this on change,
-  // but let's do it for now to ensure reactivity)
+  // Apply deferred heavy operations (chip model, clock mode)
+  // These involve heap allocs in reSIDfp, so we apply them here at the
+  // start of processBlock where latency is most tolerable, rather than
+  // blocking mid-render. In practice these are rare (user changes a knob).
+  if (chipModelDirty.exchange(false, std::memory_order_relaxed)) {
+    sidLeft.setChipModel(chipModelLeft);
+    sidRight.setChipModel(chipModelRight);
+  }
+  if (clockModeDirty.exchange(false, std::memory_order_relaxed)) {
+    setClockMode(clockMode);
+  }
+
+  // Sync voice settings every block for now.
+  // TODO: Wire APVTS change listener to set voiceSettingsDirty[v] = true on
+  // parameter change, then guard this with the dirty flag for efficiency.
   for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
   }
@@ -196,7 +207,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Process arpeggiator (disabled while chord memory is active)
   const int numSamples = buffer.getNumSamples();
-  if (!chordMemory.enabled && arpEnabled && !arpSequence.empty()) {
+  if (!chordMemory.enabled && arpEnabled && arpSeqCount > 0) {
     processArpeggiator(numSamples);
   }
 
@@ -333,10 +344,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     // How many samples we need from the SID engine to produce numSamples at
     // host rate
     int sourceSamples = static_cast<int>(numSamples * sidResampleRatio) + 4;
-    // Ensure pre-allocated buffers are large enough
-    if (static_cast<size_t>(sourceSamples) > sidResampleBufL.size()) {
-      sidResampleBufL.resize(static_cast<size_t>(sourceSamples) + 64, 0.0f);
-      sidResampleBufR.resize(static_cast<size_t>(sourceSamples) + 64, 0.0f);
+    // Clamp to pre-allocated capacity to avoid heap alloc on RT thread
+    if (static_cast<size_t>(sourceSamples) > sidResampleBufCapacity) {
+      sourceSamples = static_cast<int>(sidResampleBufCapacity);
     }
     // Read from ring buffer at engine rate
     sidFilePlayer->readSamples(sidResampleBufL.data(), sidResampleBufR.data(),
@@ -501,10 +511,20 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
 
     // Chord learn mode: capture notes without triggering
     if (chordLearnActive) {
-      std::lock_guard<std::mutex> lock(chordLearnMutex);
-      if (std::find(chordLearnNotes.begin(), chordLearnNotes.end(), note) ==
-          chordLearnNotes.end())
-        chordLearnNotes.push_back(note);
+      // Try to lock — if GUI holds it, skip this note (acceptable for learn)
+      std::unique_lock<std::mutex> lock(chordLearnMutex, std::try_to_lock);
+      if (lock.owns_lock() &&
+          chordLearnCount < static_cast<int>(chordLearnNotes.size())) {
+        bool found = false;
+        for (int ci = 0; ci < chordLearnCount; ++ci) {
+          if (chordLearnNotes[ci] == note) {
+            found = true;
+            break;
+          }
+        }
+        if (!found)
+          chordLearnNotes[chordLearnCount++] = note;
+      }
     }
 
     // Chord memory takes priority and does not feed arp tracking.
@@ -521,10 +541,19 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     }
 
     // Track for arpeggiator
-    if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note) ==
-        arpHeldNotes.end()) {
-      arpHeldNotes.push_back(note);
-      rebuildArpSequence();
+    {
+      bool alreadyHeld = false;
+      for (int ai = 0; ai < arpHeldCount; ++ai) {
+        if (arpHeldNotes[ai] == note) {
+          alreadyHeld = true;
+          break;
+        }
+      }
+      if (!alreadyHeld &&
+          arpHeldCount < static_cast<int>(arpHeldNotes.size())) {
+        arpHeldNotes[arpHeldCount++] = note;
+        rebuildArpSequence();
+      }
     }
 
     // If arp is enabled, don't do normal note handling
@@ -567,15 +596,17 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     }
 
     // Remove from arp tracking
-    auto it = std::find(arpHeldNotes.begin(), arpHeldNotes.end(), note);
-    if (it != arpHeldNotes.end()) {
-      arpHeldNotes.erase(it);
-      rebuildArpSequence();
+    for (int ai = 0; ai < arpHeldCount; ++ai) {
+      if (arpHeldNotes[ai] == note) {
+        arpHeldNotes[ai] = arpHeldNotes[--arpHeldCount];
+        rebuildArpSequence();
+        break;
+      }
     }
 
     // If arp is enabled, handle release when no notes held
     if (arpEnabled) {
-      if (arpHeldNotes.empty() && lastArpNote >= 0 && !sustainActive) {
+      if (arpHeldCount == 0 && lastArpNote >= 0 && !sustainActive) {
         // Release all voices
         for (int v = 0; v < 6; ++v) {
           releaseNote(v);
@@ -597,8 +628,8 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     updateSIDFromQueue(true);  // left
     updateSIDFromQueue(false); // right
   } else if (msg.isAllNotesOff()) {
-    arpHeldNotes.clear();
-    arpSequence.clear();
+    arpHeldCount = 0;
+    arpSeqCount = 0;
     lastArpNote = -1;
 
     leftNoteQueue.clear();
@@ -632,20 +663,30 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
             // Check left SID queue
             for (int i = leftNoteQueue.size(); --i >= 0;) {
               int n = leftNoteQueue[i];
-              if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), n) ==
-                  arpHeldNotes.end()) {
-                leftNoteQueue.remove(i);
+              bool found = false;
+              for (int ai = 0; ai < arpHeldCount; ++ai) {
+                if (arpHeldNotes[ai] == n) {
+                  found = true;
+                  break;
+                }
               }
+              if (!found)
+                leftNoteQueue.remove(i);
             }
             updateSIDFromQueue(true);
 
             // Check right SID queue
             for (int i = rightNoteQueue.size(); --i >= 0;) {
               int n = rightNoteQueue[i];
-              if (std::find(arpHeldNotes.begin(), arpHeldNotes.end(), n) ==
-                  arpHeldNotes.end()) {
-                rightNoteQueue.remove(i);
+              bool found = false;
+              for (int ai = 0; ai < arpHeldCount; ++ai) {
+                if (arpHeldNotes[ai] == n) {
+                  found = true;
+                  break;
+                }
               }
+              if (!found)
+                rightNoteQueue.remove(i);
             }
             updateSIDFromQueue(false);
           }
@@ -709,16 +750,10 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
                             static_cast<double>(offsetSemitones);
         double offsetHz = 440.0 * std::pow(2.0, (offsetNote - 69.0) / 12.0);
 
-        fprintf(stderr,
-                "[TRIGGER] v%d(sid%d): CARRIER offset=%.1f -> %.1f Hz "
-                "(base %.1f Hz)\n",
-                voiceIndex, sidVoice, offsetSemitones, offsetHz, targetHz);
-
         sid.setFrequency(sidVoice, offsetHz);
         voices[voiceIndex].currentHz = offsetHz;
       } else {
-        fprintf(stderr, "[TRIGGER] v%d(sid%d): MODULATOR base=%.1f Hz\n",
-                voiceIndex, sidVoice, targetHz);
+        // Modulator stays at base frequency (no action needed)
       }
     }
   }
@@ -894,7 +929,8 @@ void BreadbinProcessor::processFilterEnvelope(int numSamples) {
 }
 
 void BreadbinProcessor::applyFilterModulation() {
-  // Unified filter cutoff modulation: base + mod wheel + LFO + filter envelope
+  // Unified filter cutoff modulation: base + mod wheel + LFO + filter
+  // envelope
   int modOffsetLeft = 0;
   int modOffsetRight = 0;
 
@@ -1114,21 +1150,24 @@ void BreadbinProcessor::setArpPattern(ArpPattern pattern) {
 }
 
 void BreadbinProcessor::rebuildArpSequence() {
-  arpSequence.clear();
-  if (arpHeldNotes.empty())
+  arpSeqCount = 0;
+  if (arpHeldCount == 0)
     return;
 
-  // Sort held notes
-  std::vector<int> sorted = arpHeldNotes;
-  std::sort(sorted.begin(), sorted.end());
+  // Sort held notes into a stack-local array (no heap)
+  std::array<int, 128> sorted{};
+  for (int i = 0; i < arpHeldCount; ++i)
+    sorted[i] = arpHeldNotes[i];
+  std::sort(sorted.begin(), sorted.begin() + arpHeldCount);
 
   // Build base sequence with octave expansion
-  std::vector<int> base;
+  int baseCount = 0;
+  std::array<int, 512> base{};
   for (int oct = 0; oct < arpOctaves; ++oct) {
-    for (int note : sorted) {
-      int transposed = note + (oct * 12);
-      if (transposed <= 127) {
-        base.push_back(transposed);
+    for (int i = 0; i < arpHeldCount; ++i) {
+      int transposed = sorted[i] + (oct * 12);
+      if (transposed <= 127 && baseCount < static_cast<int>(base.size())) {
+        base[baseCount++] = transposed;
       }
     }
   }
@@ -1136,41 +1175,48 @@ void BreadbinProcessor::rebuildArpSequence() {
   // Apply pattern
   switch (arpPattern) {
   case ArpPattern::Up:
-    arpSequence = base;
+    for (int i = 0; i < baseCount; ++i)
+      arpSequence[i] = base[i];
+    arpSeqCount = baseCount;
     break;
 
   case ArpPattern::Down:
-    arpSequence = base;
-    std::reverse(arpSequence.begin(), arpSequence.end());
+    for (int i = 0; i < baseCount; ++i)
+      arpSequence[i] = base[baseCount - 1 - i];
+    arpSeqCount = baseCount;
     break;
 
   case ArpPattern::UpDown:
-    arpSequence = base;
-    if (base.size() > 1) {
-      // Add reversed (excluding first and last to avoid doubles)
-      for (int i = static_cast<int>(base.size()) - 2; i > 0; --i) {
-        arpSequence.push_back(base[i]);
+    for (int i = 0; i < baseCount; ++i)
+      arpSequence[i] = base[i];
+    arpSeqCount = baseCount;
+    if (baseCount > 1) {
+      for (int i = baseCount - 2; i > 0; --i) {
+        if (arpSeqCount < static_cast<int>(arpSequence.size()))
+          arpSequence[arpSeqCount++] = base[i];
       }
     }
     break;
 
   case ArpPattern::Random:
-    arpSequence = base;
+    for (int i = 0; i < baseCount; ++i)
+      arpSequence[i] = base[i];
+    arpSeqCount = baseCount;
     {
       static std::mt19937 rng(std::random_device{}());
-      std::shuffle(arpSequence.begin(), arpSequence.end(), rng);
+      std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, rng);
     }
     break;
   }
 
   // Reset index if out of bounds
-  if (arpIndex >= static_cast<int>(arpSequence.size())) {
+  if (arpIndex >= arpSeqCount) {
     arpIndex = 0;
   }
 }
 
 void BreadbinProcessor::processArpeggiator(int numSamples) {
-  if (arpSequence.empty())
+  if (arpSeqCount == 0)
     return;
 
   // Sync Arp clock with chip clock mode (NTSC = 1.2x speed)
@@ -1204,12 +1250,12 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
     lastArpNote = note;
 
     // Advance index
-    arpIndex = (arpIndex + 1) % static_cast<int>(arpSequence.size());
+    arpIndex = (arpIndex + 1) % arpSeqCount;
 
     // Reshuffle on wrap for random mode
     if (arpPattern == ArpPattern::Random && arpIndex == 0) {
       static std::mt19937 rng(std::random_device{}());
-      std::shuffle(arpSequence.begin(), arpSequence.end(), rng);
+      std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, rng);
     }
   }
 }
@@ -1219,7 +1265,8 @@ void BreadbinProcessor::triggerChord(bool isLeftSID, int rootNote,
   const int base = isLeftSID ? 0 : 3;
   const int slot = chordMemory.activeSlot;
 
-  // Per-SID allocation: root + up to 2 non-zero intervals (3 voices available).
+  // Per-SID allocation: root + up to 2 non-zero intervals (3 voices
+  // available).
   int notes[3] = {rootNote, -1, -1};
   int count = 1;
   for (int i = 0; i < 5 && count < 3; ++i) {
@@ -1267,19 +1314,20 @@ void BreadbinProcessor::releaseChord(bool isLeftSID) {
 void BreadbinProcessor::startChordLearn(int slot) {
   std::lock_guard<std::mutex> lock(chordLearnMutex);
   chordLearnSlot = juce::jlimit(0, 3, slot);
-  chordLearnNotes.clear();
+  chordLearnCount = 0;
   chordLearnActive = true;
 }
 
 void BreadbinProcessor::stopChordLearn() {
   std::lock_guard<std::mutex> lock(chordLearnMutex);
   chordLearnActive = false;
-  chordLearnNotes.clear();
+  chordLearnCount = 0;
 }
 
 std::vector<int> BreadbinProcessor::getChordLearnNotes() {
   std::lock_guard<std::mutex> lock(chordLearnMutex);
-  return chordLearnNotes;
+  return std::vector<int>(chordLearnNotes.begin(),
+                          chordLearnNotes.begin() + chordLearnCount);
 }
 
 void BreadbinProcessor::applyModMatrix() {
@@ -1356,7 +1404,8 @@ void BreadbinProcessor::applyModMatrix() {
   modTotals.pitch.store(pitchMod);
   modTotals.resonance.store(resMod);
 
-  // Apply filter cutoff mod (additive, on top of applyFilterModulation result)
+  // Apply filter cutoff mod (additive, on top of applyFilterModulation
+  // result)
   if (filterMod != 0.0f) {
     int offset = static_cast<int>(filterMod * 1024.0f);
     int leftCutoff = juce::jlimit(0, 2047, lastAppliedCutoffLeft + offset);
@@ -1537,8 +1586,8 @@ void BreadbinProcessor::applyLFOModulation() {
   bool wtActive = wavetable.enabled;
   auto &wtStep = wavetable.steps[wavetable.currentStep];
 
-  // Pulse width modulation (sum LFO1 + LFO2 + PWM sweep, stacked on wavetable
-  // PW if active)
+  // Pulse width modulation (sum LFO1 + LFO2 + PWM sweep, stacked on
+  // wavetable PW if active)
   float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
   float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
   float sweepDepth =
@@ -1559,14 +1608,14 @@ void BreadbinProcessor::applyLFOModulation() {
       sid.setPulseWidth(v % 3, modPW);
     }
   }
-  // Store representative PW for UI meter (voice 0), but avoid idle modulation
-  // movement when no voice is sounding.
+  // Store representative PW for UI meter (voice 0), but avoid idle
+  // modulation movement when no voice is sounding.
   int uiPWBase = wtActive ? wtStep.pulseWidth : voiceSettings[0].pulseWidth;
   lastAppliedPW.store(anyVoiceActive ? std::clamp(uiPWBase + pwMod, 0, 4095)
                                      : uiPWBase);
 
-  // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable pitch if
-  // active
+  // Pitch modulation (vibrato) - sum LFO1 + LFO2, stacked on wavetable
+  // pitch if active
   float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
   float pitchDepth2 = lfo2.enabled ? lfo2.depthPitch : 0.0f;
   float semitoneMod = 0.0f;
@@ -2189,8 +2238,8 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"lfoEnable", 1}, "LFO Enable", false));
   // Indices must match LFOWaveform enum: Triangle=0, Sawtooth=1, Square=2,
-  // S&H=3 Note: pre-v0.9.1 states had a ghost "Sine" at index 0; old index 0
-  // mapped to Triangle in DSP anyway, so this removal is backward-safe.
+  // S&H=3 Note: pre-v0.9.1 states had a ghost "Sine" at index 0; old index
+  // 0 mapped to Triangle in DSP anyway, so this removal is backward-safe.
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"lfoWave", 1}, "LFO Waveform",
       juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));

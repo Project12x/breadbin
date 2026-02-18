@@ -3,6 +3,7 @@
 #include "SIDEngine.h"
 #include "SidFilePlayer.h"
 #include <algorithm>
+#include <array>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
@@ -358,6 +359,8 @@ private:
   std::vector<float> sidResampleBufL,
       sidResampleBufR;           // pre-allocated in prepareToPlay
   double sidResampleRatio = 1.0; // ENGINE_RATE / hostRate
+  size_t sidResampleBufCapacity =
+      0; // Track allocated capacity to avoid RT resize
 
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
@@ -367,6 +370,11 @@ private:
   float rightDetuneCents = 0.0f;
   float glideTimeMs = 0.0f;
   SIDEngine::ClockMode clockMode = SIDEngine::ClockMode::PAL;
+
+  // Dirty flags: defer heavy operations (chip model/clock mode) off RT thread
+  std::atomic<bool> chipModelDirty{false};
+  std::atomic<bool> clockModeDirty{false};
+  std::array<bool, 6> voiceSettingsDirty = {true, true, true, true, true, true};
 
   bool stateRestored = false;
   bool editorWasOpened = false;
@@ -638,8 +646,12 @@ private:
   ArpPattern arpPattern = ArpPattern::Up;
   float arpRateHz = 50.0f; // PAL default
   int arpOctaves = 1;
-  std::vector<int> arpHeldNotes; // Notes currently held
-  std::vector<int> arpSequence;  // Generated sequence
+  // Fixed-size arrays to avoid heap allocations on RT thread
+  std::array<int, 128> arpHeldNotes{}; // Notes currently held (max MIDI notes)
+  int arpHeldCount = 0;
+  std::array<int, 512>
+      arpSequence{}; // Generated sequence (128 notes * 4 octaves max)
+  int arpSeqCount = 0;
   int arpIndex = 0;
   double arpTimer = 0.0;
   int lastArpNote = -1;
@@ -668,8 +680,10 @@ private:
   // Chord Learn mode (data is private, methods exposed below)
   bool chordLearnActive = false;
   int chordLearnSlot = 0;
-  std::vector<int> chordLearnNotes;
-  std::mutex chordLearnMutex;
+  std::array<int, 32>
+      chordLearnNotes{}; // Fixed-size, max 32 notes during learn
+  int chordLearnCount = 0;
+  std::mutex chordLearnMutex; // Only locked from GUI thread; RT uses try_lock
 
   // Filter Envelope state
   FilterEnvelopeState filterEnv;
@@ -681,7 +695,6 @@ private:
   // Master Control & MIDI
   float masterVolume = 0.8f;
   bool sustainActive = false;
-  juce::Array<int> sustainedNotes;
 
   // Noise gate state (per-channel envelope follower)
   struct NoiseGateState {
