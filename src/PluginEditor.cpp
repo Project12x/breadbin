@@ -271,6 +271,44 @@ void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
   auto accentColour = button.findColour(juce::TextButton::textColourOnId);
   g.setColour(accentColour.withAlpha(highlighted ? 0.6f : 0.3f));
   g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+  g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+}
+
+void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
+                                         juce::TextButton &button,
+                                         bool /*shouldDrawButtonAsHighlighted*/,
+                                         bool /*shouldDrawButtonAsDown*/) {
+  auto text = button.getButtonText();
+  auto leftArrow = juce::String::charToString(0x25C0);
+  auto rightArrow = juce::String::charToString(0x25B6);
+
+  if (text == leftArrow || text == rightArrow) {
+    auto bounds = button.getLocalBounds().toFloat();
+    float h = bounds.getHeight();
+    float cx = bounds.getCentreX();
+    float cy = bounds.getCentreY();
+    float s = h * 0.25f; // Arrow size
+
+    juce::Path p;
+    if (text == leftArrow) {
+      // Left pointing triangle
+      p.addTriangle(cx + s * 0.5f, cy - s, cx + s * 0.5f, cy + s, cx - s * 0.5f,
+                    cy);
+    } else {
+      // Right pointing triangle
+      p.addTriangle(cx - s * 0.5f, cy - s, cx - s * 0.5f, cy + s, cx + s * 0.5f,
+                    cy);
+    }
+
+    g.setColour(button.findColour(juce::TextButton::textColourOffId)
+                    .withAlpha(button.isEnabled() ? 1.0f : 0.5f));
+    if (button.getToggleState() || button.isDown())
+      g.setColour(button.findColour(juce::TextButton::textColourOnId));
+
+    g.fillPath(p);
+  } else {
+    juce::LookAndFeel_V4::drawButtonText(g, button, false, false);
+  }
 }
 
 void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
@@ -2208,7 +2246,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(cpuLoadLabel);
 
   // Preset prev/next navigation
-  presetPrevButton.setButtonText("<");
+  presetPrevButton.setButtonText(juce::String::charToString(0x25C0));
   presetPrevButton.setTooltip("Previous preset");
   presetPrevButton.onClick = [this]() {
     // Ordered list of all factory preset IDs for sequential navigation
@@ -2237,7 +2275,7 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(presetPrevButton);
 
-  presetNextButton.setButtonText(">");
+  presetNextButton.setButtonText(juce::String::charToString(0x25B6));
   presetNextButton.setTooltip("Next preset");
   presetNextButton.onClick = [this]() {
     static const int ids[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DC Offset / Drone**: Replaced 20Hz single-pole subsonic filter with a 5Hz 2nd-order
   Butterworth DC blocker. Eliminates the persistent background drone caused by SID's
   inherent DC offset while preserving sub-bass content.
+- **Chip Defaults**: Fixed right SID defaulting to MOS 6581 R4 instead of MOS 8580 (bumped APVTS version to clear stale state).
+- **UI Rendering**: Fixed preset navigation buttons showing "..." truncation by implementing custom vector arrow drawing.
 
 ### Fixed
 
