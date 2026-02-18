@@ -178,30 +178,89 @@ void testWaveformsProduceDifferentOutput() {
 }
 
 void testChipModels() {
-  SIDEngine sid6581, sid8580;
-  sid6581.prepare(44100.0);
-  sid8580.prepare(44100.0);
+  std::printf("--- Chip Model Differentiation (4 variants) ---\n");
 
-  sid6581.setChipModel(SIDEngine::ChipModel::MOS6581);
-  sid8580.setChipModel(SIDEngine::ChipModel::MOS8580);
+  // All 4 models
+  static constexpr SIDEngine::ChipModel models[] = {
+      SIDEngine::ChipModel::MOS6581, SIDEngine::ChipModel::MOS6581R4,
+      SIDEngine::ChipModel::MOS8580, SIDEngine::ChipModel::MOS8580D};
+  static constexpr const char *names[] = {"MOS6581", "MOS6581R4", "MOS8580",
+                                          "MOS8580D"};
 
-  for (auto *s : {&sid6581, &sid8580}) {
-    s->setVolume(15);
-    s->setWaveform(0, SIDEngine::Waveform::Pulse);
-    s->setPulseWidth(0, 2048);
-    s->setAttack(0, 0);
-    s->setSustain(0, 15);
-    s->noteOn(0, 60, 127);
+  constexpr int numSamples = 4096;
+  float peaks[4] = {};
+  float rmsVals[4] = {};
+  float centroids[4] = {}; // spectral centroid approximation
+  std::vector<float> buffers[4];
+
+  for (int m = 0; m < 4; ++m) {
+    SIDEngine sid;
+    sid.prepare(44100.0);
+    sid.setChipModel(models[m]);
+    sid.setVolume(15);
+    // Use pulse waveform with filter - where chip differences are strongest
+    sid.setWaveform(0, SIDEngine::Waveform::Pulse);
+    sid.setPulseWidth(0, 2048);
+    sid.setAttack(0, 0);
+    sid.setSustain(0, 15);
+    sid.setFilterCutoff(600);
+    sid.setFilterResonance(8);
+    sid.noteOn(0, 60, 127);
+
+    buffers[m].resize(numSamples);
+    float sumSq = 0.0f;
+    for (int i = 0; i < numSamples; ++i) {
+      float s = sid.clock();
+      buffers[m][i] = s;
+      float a = std::abs(s);
+      if (a > peaks[m])
+        peaks[m] = a;
+      sumSq += s * s;
+    }
+    rmsVals[m] = std::sqrt(sumSq / numSamples);
+
+    // Spectral centroid: weighted average of zero-crossing rate and energy
+    // distribution. Count zero crossings as a quick frequency estimate.
+    int zeroCrossings = 0;
+    for (int i = 1; i < numSamples; ++i) {
+      if ((buffers[m][i] >= 0.0f) != (buffers[m][i - 1] >= 0.0f))
+        ++zeroCrossings;
+    }
+    centroids[m] = static_cast<float>(zeroCrossings) /
+                   (static_cast<float>(numSamples) / 44100.0f);
   }
 
-  float max6581 = 0, max8580 = 0;
-  for (int i = 0; i < 2048; ++i) {
-    max6581 = std::max(max6581, std::abs(sid6581.clock()));
-    max8580 = std::max(max8580, std::abs(sid8580.clock()));
+  // Print results
+  for (int m = 0; m < 4; ++m) {
+    std::printf("  %s: peak=%.4f rms=%.4f centroid=%.0f Hz\n", names[m],
+                peaks[m], rmsVals[m], centroids[m]);
   }
 
-  ASSERT_TRUE(max6581 > 0.01f, "MOS6581 produces output");
-  ASSERT_TRUE(max8580 > 0.01f, "MOS8580 produces output");
+  // Every model must produce output
+  for (int m = 0; m < 4; ++m) {
+    ASSERT_TRUE(peaks[m] > 0.01f,
+                (std::string(names[m]) + " produces output").c_str());
+  }
+
+  // Check pairwise differences: at least 4 of 6 pairs should differ
+  // in either RMS or spectral centroid by a meaningful margin
+  int distinctPairs = 0;
+  for (int a = 0; a < 4; ++a) {
+    for (int b = a + 1; b < 4; ++b) {
+      float rmsDiff = std::abs(rmsVals[a] - rmsVals[b]);
+      float centDiff = std::abs(centroids[a] - centroids[b]);
+      bool distinct =
+          (rmsDiff > 0.001f) || (centDiff > 50.0f); // RMS or ~50Hz difference
+      if (distinct)
+        ++distinctPairs;
+      std::printf("  %s vs %s: rms_diff=%.4f cent_diff=%.0f Hz %s\n", names[a],
+                  names[b], rmsDiff, centDiff,
+                  distinct ? "[DISTINCT]" : "[SIMILAR]");
+    }
+  }
+
+  ASSERT_TRUE(distinctPairs >= 4,
+              "At least 4 of 6 chip model pairs are sonically distinct");
 }
 
 // ============================================================================
