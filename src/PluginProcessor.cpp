@@ -426,14 +426,60 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   ultrasonicFilter.process(context);
   safetyLimiter.process(context);
 
-  // Simple noise gate to silence residual drone (-40dB threshold)
-  const float noiseGateThreshold =
+  // Envelope-following noise gate with attack/hold/release smoothing
+  const float gateThreshold =
       noiseGateThresholdPtr->load(std::memory_order_relaxed);
-  for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
-    auto *channelData = buffer.getWritePointer(ch);
-    for (int i = 0; i < numSamples; ++i) {
-      if (std::abs(channelData[i]) < noiseGateThreshold) {
-        channelData[i] = 0.0f;
+  if (gateThreshold > 0.0001f) {
+    const float sr = static_cast<float>(getSampleRate());
+    const float attackMs = gateAttackPtr->load(std::memory_order_relaxed);
+    const float releaseMs = gateReleasePtr->load(std::memory_order_relaxed);
+    const float holdMs = gateHoldPtr->load(std::memory_order_relaxed);
+
+    // Time constants: coeff = 1 - exp(-1 / (time_seconds * sampleRate))
+    const float envAttackCoeff =
+        1.0f - std::exp(-1.0f / (0.001f * sr)); // Fast envelope attack (~1ms)
+    const float envReleaseCoeff =
+        1.0f - std::exp(-1.0f / (0.05f * sr)); // Envelope release (~50ms)
+    const float gainAttackCoeff =
+        1.0f - std::exp(-1.0f / (attackMs * 0.001f * sr));
+    const float gainReleaseCoeff =
+        1.0f - std::exp(-1.0f / (releaseMs * 0.001f * sr));
+    const int holdSamples = static_cast<int>(holdMs * 0.001f * sr);
+    const float closeThreshold = gateThreshold * 0.5f; // 6dB hysteresis
+
+    for (int ch = 0; ch < buffer.getNumChannels() && ch < 2; ++ch) {
+      auto *channelData = buffer.getWritePointer(ch);
+      auto &gs = gateState[static_cast<size_t>(ch)];
+
+      for (int i = 0; i < numSamples; ++i) {
+        const float inputLevel = std::abs(channelData[i]);
+
+        // Peak envelope follower
+        if (inputLevel > gs.envelope)
+          gs.envelope += envAttackCoeff * (inputLevel - gs.envelope);
+        else
+          gs.envelope += envReleaseCoeff * (inputLevel - gs.envelope);
+
+        // Gate state with hysteresis
+        bool gateOpen;
+        if (gs.envelope >= gateThreshold) {
+          gateOpen = true;
+          gs.holdCounter = holdSamples;
+        } else if (gs.holdCounter > 0) {
+          gs.holdCounter--;
+          gateOpen = true;
+        } else {
+          gateOpen = gs.envelope >= closeThreshold;
+        }
+
+        // Smooth gain transition
+        const float targetGain = gateOpen ? 1.0f : 0.0f;
+        if (targetGain > gs.gain)
+          gs.gain += gainAttackCoeff * (targetGain - gs.gain);
+        else
+          gs.gain += gainReleaseCoeff * (targetGain - gs.gain);
+
+        channelData[i] *= gs.gain;
       }
     }
   }
@@ -639,42 +685,40 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
     voices[voiceIndex].isGliding = false;
     sid.noteOn(sidVoice, midiNote, velocity, detune);
 
-    // Apply frequency offsets for sync/ring mod audibility.
-    // Hard sync: carrier (voice N, sync enabled) must be HIGHER than modulator
-    //   (N-1) for dramatic harmonics.  We offset the carrier UP.
-    // Ring mod: modulator (voice N-1) at a different freq creates sidebands.
-    //   We offset the modulator UP.
-    // SID voice pairing: v0<-v2, v1<-v0, v2<-v1.
-    int sidBase = (voiceIndex < 3) ? 0 : 3;
-    for (int sv = 0; sv < 3; ++sv) {
-      int globalV = sidBase + sv;
-      bool hasSync = voiceParamPtrs[globalV].sync->load() > 0.5f;
-      bool hasRing = voiceParamPtrs[globalV].ringMod->load() > 0.5f;
-      float offsetSemitones = voiceParamPtrs[globalV].modOffset->load();
-      if (std::abs(offsetSemitones) < 0.01f)
-        continue;
+    // Apply frequency offset for sync/ring mod on THIS voice only.
+    //
+    // How sync works on the real C64: composers would dedicate one voice as
+    // the modulator (base freq, no sync bit) and another as the carrier
+    // (higher freq, sync bit ON). The carrier's oscillator resets when the
+    // modulator completes a cycle, creating distinctive harmonics.
+    //
+    // SID sync pairing: v0 syncs to v2, v1 syncs to v0, v2 syncs to v1.
+    // When all voices have sync=1 (for consistent timbre), we need exactly
+    // ONE voice to run at the offset frequency while its modulator stays
+    // at the base note. We pick SID voice 2 as the carrier (syncs to v1).
+    // Voices 0 and 1 stay at base frequency.
+    bool hasSync = voiceParamPtrs[voiceIndex].sync->load() > 0.5f;
+    bool hasRing = voiceParamPtrs[voiceIndex].ringMod->load() > 0.5f;
+    float offsetSemitones = voiceParamPtrs[voiceIndex].modOffset->load();
 
-      if (hasSync) {
-        // Offset the CARRIER (voice sv) UP so it's higher than the modulator
-        double carrierDetune =
-            (globalV < 3) ? leftDetuneCents : rightDetuneCents;
-        double carrierNote = static_cast<double>(midiNote) +
-                             (carrierDetune / 100.0) +
-                             static_cast<double>(offsetSemitones);
-        double carrierHz = 440.0 * std::pow(2.0, (carrierNote - 69.0) / 12.0);
-        sid.setFrequency(sv, carrierHz);
-      }
-      if (hasRing) {
-        // Offset the MODULATOR (voice N-1, i.e. (sv+2)%3) for ring mod
-        // sidebands
-        int modulatorSidVoice = (sv + 2) % 3;
-        int modulatorGlobal = sidBase + modulatorSidVoice;
-        double modDetune =
-            (modulatorGlobal < 3) ? leftDetuneCents : rightDetuneCents;
-        double modNote = static_cast<double>(midiNote) + (modDetune / 100.0) +
-                         static_cast<double>(offsetSemitones);
-        double modHz = 440.0 * std::pow(2.0, (modNote - 69.0) / 12.0);
-        sid.setFrequency(modulatorSidVoice, modHz);
+    if ((hasSync || hasRing) && std::abs(offsetSemitones) > 0.01f) {
+      // Only SID voice 2 gets the offset (carrier). Voices 0,1 stay at
+      // base frequency to serve as modulators.
+      if (sidVoice == 2) {
+        double offsetNote = static_cast<double>(midiNote) + (detune / 100.0) +
+                            static_cast<double>(offsetSemitones);
+        double offsetHz = 440.0 * std::pow(2.0, (offsetNote - 69.0) / 12.0);
+
+        fprintf(stderr,
+                "[TRIGGER] v%d(sid%d): CARRIER offset=%.1f -> %.1f Hz "
+                "(base %.1f Hz)\n",
+                voiceIndex, sidVoice, offsetSemitones, offsetHz, targetHz);
+
+        sid.setFrequency(sidVoice, offsetHz);
+        voices[voiceIndex].currentHz = offsetHz;
+      } else {
+        fprintf(stderr, "[TRIGGER] v%d(sid%d): MODULATOR base=%.1f Hz\n",
+                voiceIndex, sidVoice, targetHz);
       }
     }
   }
@@ -1535,8 +1579,9 @@ void BreadbinProcessor::applyLFOModulation() {
     for (int v = 0; v < 6; ++v) {
       if (!voices[v].active)
         continue;
-      double baseHz =
-          voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
+      // Use currentHz which includes sync/ring-mod offset from triggerNote.
+      // targetHz is always the base note without offset.
+      double baseHz = voices[v].currentHz;
       double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
       SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
       sid.setFrequency(v % 3, modHz);
@@ -2096,6 +2141,15 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"noiseGateThreshold", 1}, "Noise Gate Threshold", 0.0f,
       0.1f, 0.01f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"gateAttack", 1}, "Gate Attack",
+      juce::NormalisableRange<float>(0.1f, 50.0f, 0.1f), 1.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"gateRelease", 1}, "Gate Release",
+      juce::NormalisableRange<float>(1.0f, 500.0f, 1.0f), 50.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"gateHold", 1}, "Gate Hold",
+      juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f), 10.0f));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"dualMode", 1}, "Dual SID Mode",
       juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
@@ -2332,6 +2386,9 @@ BreadbinProcessor::createParameterLayout() {
 void BreadbinProcessor::initializeParameterPointers() {
   masterVolPtr = apvts.getRawParameterValue("masterVol");
   noiseGateThresholdPtr = apvts.getRawParameterValue("noiseGateThreshold");
+  gateAttackPtr = apvts.getRawParameterValue("gateAttack");
+  gateReleasePtr = apvts.getRawParameterValue("gateRelease");
+  gateHoldPtr = apvts.getRawParameterValue("gateHold");
   dualModePtr = apvts.getRawParameterValue("dualMode");
   chipLeftPtr = apvts.getRawParameterValue("chipLeft");
   chipRightPtr = apvts.getRawParameterValue("chipRight");

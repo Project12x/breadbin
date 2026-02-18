@@ -277,6 +277,7 @@ void SIDEngine::updateVoiceRegisters(int voice) {
     control |= 0x02; // Bit 1: hard sync
   if (vc.ringMod)
     control |= 0x04; // Bit 2: ring modulation
+
   writeRegister(baseReg + 4, control);
 
   // Attack/Decay

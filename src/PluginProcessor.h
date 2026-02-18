@@ -476,6 +476,9 @@ private:
   // APVTS Parameter Pointers for fast access in audio thread
   std::atomic<float> *masterVolPtr = nullptr;
   std::atomic<float> *noiseGateThresholdPtr = nullptr;
+  std::atomic<float> *gateAttackPtr = nullptr;
+  std::atomic<float> *gateReleasePtr = nullptr;
+  std::atomic<float> *gateHoldPtr = nullptr;
   std::atomic<float> *dualModePtr = nullptr;
   std::atomic<float> *chipLeftPtr = nullptr;
   std::atomic<float> *chipRightPtr = nullptr;
@@ -679,6 +682,14 @@ private:
   float masterVolume = 0.8f;
   bool sustainActive = false;
   juce::Array<int> sustainedNotes;
+
+  // Noise gate state (per-channel envelope follower)
+  struct NoiseGateState {
+    float envelope = 0.0f;
+    float gain = 0.0f;
+    int holdCounter = 0;
+  };
+  std::array<NoiseGateState, 2> gateState;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

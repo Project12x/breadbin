@@ -2501,7 +2501,9 @@ void BreadbinEditor::setupControls() {
   noiseGateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   noiseGateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
   noiseGateSlider.setTooltip(
-      "Noise gate threshold (0 = off, higher = more gating)");
+      "Noise gate threshold. Silences residual SID drone below this level.\n"
+      "Uses envelope following with smooth attack/release transitions.\n"
+      "0 = gate off, higher = more aggressive gating.");
   addAndMakeVisible(noiseGateSlider);
 
   // External Audio Input
@@ -3879,6 +3881,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     processor.getVoiceSettings(v).presetId = 1; // "-- Select --"
   }
 
+  setParam("noiseGateThreshold", 0.01f);
+  setParam("gateAttack", 1.0f);
+  setParam("gateRelease", 50.0f);
+  setParam("gateHold", 10.0f);
+
   // Dual mode: StereoSplit (0)
   setParam("dualMode", 0.0f);
 
@@ -4609,10 +4616,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
   }
 
-  case 22: { // Growl Bass - Pulse + ring mod + filter env attack
+  case 22: { // Growl Bass - Triangle ring mod + filter env attack
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 5, 6, 2, 2);
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 5, 6, 2, 2);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset",
+               3.0f); // Minor 3rd for growl
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(500, 8);
@@ -4786,6 +4795,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 8, 0, 10, 6);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset",
+               6.0f); // Tritone for inharmonic bell
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1600, 2);
@@ -4901,6 +4912,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 6, 0, 8, 29);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset",
+               11.0f); // Maj 7th for bright metallic bell
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(1500, 3);
@@ -4988,8 +5001,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   case 40: { // Wobble Bass - LFO saw->filter dubstep wobble + ring mod
     for (int v = 0; v < 6; ++v) {
-      configVoice(v, SIDEngine::Waveform::Pulse, 1200, 0, 4, 10, 2, 2);
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 0, 4, 10, 2, 2);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset",
+               4.0f); // Maj 3rd for metallic wobble
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(300, 10);
@@ -5669,6 +5684,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 6, 4, 12, 8, 26);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset",
+               5.0f); // Maj 3rd for shimmery pad
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(800, 5);
