@@ -2203,11 +2203,11 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"dualMode", 1}, "Dual SID Mode",
       juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
-      juce::ParameterID{"chipLeft", 1}, "Left Chip Model",
+      juce::ParameterID{"chipLeft", 2}, "Left Chip Model",
       juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
       0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
-      juce::ParameterID{"chipRight", 1}, "Right Chip Model",
+      juce::ParameterID{"chipRight", 2}, "Right Chip Model",
       juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
       2));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
