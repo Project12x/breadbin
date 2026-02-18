@@ -1126,9 +1126,9 @@ void BreadbinProcessor::prepareSafetyChain(double sampleRate,
   spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
   spec.numChannels = 2;
 
-  // 20Hz high-pass (subsonic filter)
-  *subsonicFilter.state =
-      *juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, 20.0f);
+  // 5Hz 2nd-order Butterworth DC blocker (kills SID DC offset)
+  *subsonicFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(
+      sampleRate, 5.0f, 0.707f);
   subsonicFilter.prepare(spec);
 
   // 20kHz low-pass (ultrasonic filter)
@@ -2204,10 +2204,12 @@ BreadbinProcessor::createParameterLayout() {
       juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"chipLeft", 1}, "Left Chip Model",
-      juce::StringArray{"MOS6581", "MOS8580"}, 0));
+      juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
+      0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"chipRight", 1}, "Right Chip Model",
-      juce::StringArray{"MOS6581", "MOS8580"}, 0));
+      juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
+      2));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"aging", 1}, "Chip Age", 0.0f, 1.0f, 0.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(

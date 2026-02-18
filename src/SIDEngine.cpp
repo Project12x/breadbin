@@ -44,10 +44,40 @@ void SIDEngine::prepare(double sampleRate) {
 }
 
 void SIDEngine::setChipModel(ChipModel model) {
-  if (model == ChipModel::MOS6581) {
+  // Set base silicon model
+  if (model == ChipModel::MOS6581 || model == ChipModel::MOS6581R4) {
     sid->setChipModel(reSIDfp::ChipModel::MOS6581);
   } else {
     sid->setChipModel(reSIDfp::ChipModel::MOS8580);
+  }
+  // Apply variant-specific filter and waveform tuning
+  applyChipProfile(model);
+}
+
+void SIDEngine::applyChipProfile(ChipModel model) {
+  switch (model) {
+  case ChipModel::MOS6581:
+    // Classic early 6581: warm, gritty, iconic filter sweep
+    sid->setFilter6581Curve(0.5);
+    sid->setFilter6581Range(0.5);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::AVERAGE);
+    break;
+  case ChipModel::MOS6581R4:
+    // Later 6581 revision: brighter filter, stronger combined waveforms
+    sid->setFilter6581Curve(0.8);
+    sid->setFilter6581Range(0.7);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::STRONG);
+    break;
+  case ChipModel::MOS8580:
+    // Standard 8580: cleaner, tighter bass, balanced
+    sid->setFilter8580Curve(0.5);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::AVERAGE);
+    break;
+  case ChipModel::MOS8580D:
+    // Digiboost-era 8580: mellower, weaker combined waveforms
+    sid->setFilter8580Curve(0.35);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::WEAK);
+    break;
   }
 }
 

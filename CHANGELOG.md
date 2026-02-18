@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **4 Chip Model Variants**: Expanded from 2 to 4 SID models — MOS 6581 (classic warm),
+  MOS 6581 R4 (brighter filter, stronger combined waveforms), MOS 8580 (clean, tight bass),
+  and MOS 8580D (mellow digiboost era). Each variant uses reSIDfp's filter curve and
+  combined waveform tuning APIs for distinct sonic personalities.
+- **Stereo Chip Defaults**: Left SID defaults to MOS 6581, right to MOS 8580 for immediate
+  stereo width and tonal contrast out of the box.
+
+### Fixed
+
+- **DC Offset / Drone**: Replaced 20Hz single-pole subsonic filter with a 5Hz 2nd-order
+  Butterworth DC blocker. Eliminates the persistent background drone caused by SID's
+  inherent DC offset while preserving sub-bass content.
+
 ### Fixed
 
 - **Editor State Restoration**: Filter cutoff/resonance, preset selection, and voice

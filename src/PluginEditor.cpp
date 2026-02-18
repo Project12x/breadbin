@@ -2758,15 +2758,20 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftSIDLabel);
 
   leftChipSelector.addItem("MOS 6581", 1);
-  leftChipSelector.addItem("MOS 8580", 2);
+  leftChipSelector.addItem("MOS 6581 R4", 2);
+  leftChipSelector.addItem("MOS 8580", 3);
+  leftChipSelector.addItem("MOS 8580D", 4);
   leftChipSelector.setSelectedId(1);
   leftChipSelector.onChange = [this]() {
-    processor.setLeftChipModel(leftChipSelector.getSelectedId() == 1
-                                   ? SIDEngine::ChipModel::MOS6581
-                                   : SIDEngine::ChipModel::MOS8580);
+    static constexpr SIDEngine::ChipModel models[] = {
+        SIDEngine::ChipModel::MOS6581, SIDEngine::ChipModel::MOS6581R4,
+        SIDEngine::ChipModel::MOS8580, SIDEngine::ChipModel::MOS8580D};
+    int idx = leftChipSelector.getSelectedId() - 1;
+    if (idx >= 0 && idx < 4)
+      processor.setLeftChipModel(models[idx]);
   };
   leftChipSelector.setTooltip(
-      "6581: Classic warm sound, 8580: Cleaner with better filters");
+      "6581: Classic warm, 6581 R4: Brighter, 8580: Clean, 8580D: Mellow");
   addAndMakeVisible(leftChipSelector);
 
   // Voice buttons and enables for L SID (voices 0-2)
@@ -2895,15 +2900,20 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightSIDLabel);
 
   rightChipSelector.addItem("MOS 6581", 1);
-  rightChipSelector.addItem("MOS 8580", 2);
-  rightChipSelector.setSelectedId(1);
+  rightChipSelector.addItem("MOS 6581 R4", 2);
+  rightChipSelector.addItem("MOS 8580", 3);
+  rightChipSelector.addItem("MOS 8580D", 4);
+  rightChipSelector.setSelectedId(3);
   rightChipSelector.onChange = [this]() {
-    processor.setRightChipModel(rightChipSelector.getSelectedId() == 1
-                                    ? SIDEngine::ChipModel::MOS6581
-                                    : SIDEngine::ChipModel::MOS8580);
+    static constexpr SIDEngine::ChipModel models[] = {
+        SIDEngine::ChipModel::MOS6581, SIDEngine::ChipModel::MOS6581R4,
+        SIDEngine::ChipModel::MOS8580, SIDEngine::ChipModel::MOS8580D};
+    int idx = rightChipSelector.getSelectedId() - 1;
+    if (idx >= 0 && idx < 4)
+      processor.setRightChipModel(models[idx]);
   };
   rightChipSelector.setTooltip(
-      "6581: Classic warm sound, 8580: Cleaner with better filters");
+      "6581: Classic warm, 6581 R4: Brighter, 8580: Clean, 8580D: Mellow");
   addAndMakeVisible(rightChipSelector);
 
   // Voice buttons and enables for R SID (voices 3-5)

@@ -11,7 +11,7 @@ class SID;
 
 class SIDEngine {
 public:
-  enum class ChipModel { MOS6581, MOS8580 };
+  enum class ChipModel { MOS6581, MOS6581R4, MOS8580, MOS8580D };
   enum class ClockMode { PAL, NTSC };
   enum class Waveform {
     Triangle = 0x10,
@@ -109,6 +109,7 @@ private:
   void writeRegister(uint8_t reg, uint8_t value);
   void updateVoiceRegisters(int voice);
   void updateFilterRegisters();
+  void applyChipProfile(ChipModel model);
   uint16_t midiNoteToFrequency(int midiNote);
   double getClockHz() const;
 

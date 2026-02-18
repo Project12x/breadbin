@@ -364,7 +364,7 @@ private:
 
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
-  SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS6581;
+  SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS8580;
   float agingFactor = 0.0f;
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
