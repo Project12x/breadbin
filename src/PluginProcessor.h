@@ -19,7 +19,7 @@ public:
 
   // Arpeggiator patterns
   enum class ArpPattern { Up, Down, UpDown, Random };
-  enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold };
+  enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold, Sine };
   struct LFOState {
     bool enabled = false;
     LFOWaveform waveform = LFOWaveform::Triangle;

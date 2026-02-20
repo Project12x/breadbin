@@ -1018,6 +1018,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   lfoWaveformSelector.addItem("Saw", 2);
   lfoWaveformSelector.addItem("Sq", 3);
   lfoWaveformSelector.addItem("S&H", 4);
+  lfoWaveformSelector.addItem("Sin", 5);
   lfoWaveformSelector.setTooltip("LFO1 waveform shape");
   addAndMakeVisible(lfoWaveformSelector);
 
@@ -1067,6 +1068,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   lfo2WaveformSelector.addItem("Saw", 2);
   lfo2WaveformSelector.addItem("Sq", 3);
   lfo2WaveformSelector.addItem("S&H", 4);
+  lfo2WaveformSelector.addItem("Sin", 5);
   lfo2WaveformSelector.setTooltip("LFO2 waveform shape");
   addAndMakeVisible(lfo2WaveformSelector);
 

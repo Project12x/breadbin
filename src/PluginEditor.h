@@ -400,8 +400,10 @@ public:
         return t < 0.97f ? (-1.0f + (t / 0.97f) * 2.0f) : -1.0f;
       } else if (waveType == 3) { // Square
         return t < 0.5f ? 1.0f : -1.0f;
-      } else { // S&H: 8 fixed steps per cycle
+      } else if (waveType == 4) { // S&H: 8 fixed steps per cycle
         return shVals[static_cast<int>(t * 8) % 16];
+      } else { // Sine (waveType == 5)
+        return std::sin(t * juce::MathConstants<float>::twoPi);
       }
     };
 

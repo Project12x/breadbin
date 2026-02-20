@@ -1535,6 +1535,9 @@ void BreadbinProcessor::processLFO(int numSamples) {
     }
     lfo.currentValue = lfo.shValue;
     break;
+  case LFOWaveform::Sine:
+    lfo.currentValue = std::sin(p * juce::MathConstants<float>::twoPi);
+    break;
   }
 }
 
@@ -1563,6 +1566,9 @@ void BreadbinProcessor::processLFO2(int numSamples) {
       lfo2.shValue = dist(rng2);
     }
     lfo2.currentValue = lfo2.shValue;
+    break;
+  case LFOWaveform::Sine:
+    lfo2.currentValue = std::sin(p * juce::MathConstants<float>::twoPi);
     break;
   }
 }
@@ -2240,11 +2246,10 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"lfoEnable", 1}, "LFO Enable", false));
   // Indices must match LFOWaveform enum: Triangle=0, Sawtooth=1, Square=2,
-  // S&H=3 Note: pre-v0.9.1 states had a ghost "Sine" at index 0; old index
-  // 0 mapped to Triangle in DSP anyway, so this removal is backward-safe.
+  // S&H=3, Sine=4. Adding Sine at the end is backwards-compatible.
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"lfoWave", 1}, "LFO Waveform",
-      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
+      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H", "Sine"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfoRate", 2}, "LFO Rate", 0.1f, 10.0f, 2.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -2261,7 +2266,7 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"lfo2Enable", 1}, "LFO2 Enable", false));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"lfo2Wave", 1}, "LFO2 Waveform",
-      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
+      juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H", "Sine"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfo2Rate", 2}, "LFO2 Rate", 0.1f, 10.0f, 3.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
