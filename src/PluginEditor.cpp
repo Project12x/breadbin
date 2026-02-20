@@ -1032,7 +1032,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     slider->setValue(defaultVal);
     slider->setDoubleClickReturnValue(true, static_cast<double>(defaultVal));
     slider->setSliderStyle(style);
-    slider->setTextBoxStyle(textPos, false, 40, 14);
+    slider->setTextBoxStyle(textPos, false, 40, 16); // 16px: default LAF 15px font fits
     slider->setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
     slider->setColour(juce::Slider::textBoxOutlineColourId,
                       juce::Colours::transparentBlack);
@@ -1045,7 +1045,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   };
 
   setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 20.0f, 2.0f,
-                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
   setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -1070,7 +1070,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(lfo2WaveformSelector);
 
   setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 20.0f, 3.0f,
-                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
   setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -1319,7 +1319,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   };
   drawSectionBg(0, 54);   // LFO1
   drawSectionBg(55, 54);  // LFO2
-  drawSectionBg(112, 28); // PWM
+  drawSectionBg(112, 34); // PWM (covers full slider area to y=146)
 
   // Section labels with glow pill
   auto drawGlowLabel = [&](const juce::String &text, int x, int y,
@@ -1348,11 +1348,11 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
     g.setGradientFill(grad);
     g.fillRect(4, y, static_cast<int>(pw) - 8, 1);
   };
-  drawSeparator(140);
-  drawSeparator(168);
+  drawSeparator(148);
+  drawSeparator(172);
 
   // Mod matrix column headers
-  const int mmTop = 172;
+  const int mmTop = 176;
   g.setColour(juce::Colours::cyan);
   g.setFont(panelBoldFont.withHeight(12.0f));
   g.drawText("On", 30, mmTop, 40, 16, juce::Justification::centred);
@@ -1364,10 +1364,10 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   g.drawText("Out", 447, mmTop, 45, 16, juce::Justification::centred);
 
   g.setColour(juce::Colour(55, 55, 65));
-  g.drawHorizontalLine(338, 6.0f, static_cast<float>(panelWidth - 6));
+  g.drawHorizontalLine(342, 6.0f, static_cast<float>(panelWidth - 6));
   g.setColour(juce::Colour(130, 130, 145));
   g.setFont(panelProFont.withHeight(10.0f));
-  g.drawText("Destination Totals", 8, 342, 160, 14,
+  g.drawText("Destination Totals", 8, 346, 160, 14,
              juce::Justification::centredLeft);
 }
 
@@ -1425,11 +1425,11 @@ void ModMatrixPanel::resized() {
   }
 
   // PB Range row: y=144..166
-  pitchBendRangeLabel.setBounds(4, 146, 60, 18);
-  pitchBendRangeSelector.setBounds(66, 146, 90, 20);
+  pitchBendRangeLabel.setBounds(4, 150, 60, 18);
+  pitchBendRangeSelector.setBounds(66, 150, 90, 20);
 
-  // Mod matrix slots: y=190 onward (header at 172)
-  const int mmTop = 190;
+  // Mod matrix slots: y=194 onward (header at 176)
+  const int mmTop = 194;
   const int rowH = 35;
   for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
     auto &s = slots[i];
@@ -1444,10 +1444,10 @@ void ModMatrixPanel::resized() {
     s.contributionLabel.setBounds(447, y + 6, 45, 22);
   }
 
-  totalFilterLabel.setBounds(8, 356, 120, 16);
-  totalPWLabel.setBounds(132, 356, 120, 16);
-  totalPitchLabel.setBounds(256, 356, 120, 16);
-  totalResLabel.setBounds(380, 356, 132, 16);
+  totalFilterLabel.setBounds(8, 360, 120, 16);
+  totalPWLabel.setBounds(132, 360, 120, 16);
+  totalPitchLabel.setBounds(256, 360, 120, 16);
+  totalResLabel.setBounds(380, 360, 132, 16);
 }
 
 void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
@@ -1478,6 +1478,13 @@ void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
   pitchBendRangeLabel.setFont(pro.withHeight(11.0f));
   pwmSweepRateLabel.setFont(pro.withHeight(10.0f));
   pwmSweepDepthLabel.setFont(pro.withHeight(10.0f));
+
+  // LFO rate sliders: force text box recreation with BreadbinLookAndFeel active.
+  // Initial setup used h=16; passing h=20 triggers JUCE to recreate via
+  // createSliderTextBox, applying Lato 11px font. TextBoxRight avoids
+  // the height-split issue of TextBoxBelow on a 20px-tall slider.
+  lfoRateSlider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+  lfo2RateSlider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
 
   repaint();
 }
@@ -1719,9 +1726,10 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   // Subtitle
   g.setColour(juce::Colour(120, 120, 135));
   g.setFont(panelProFont.withHeight(10.0f));
-  g.drawText("Play a chord and click Learn, or set intervals manually (up to 6 "
-             "notes total; 3 per SID in Multitimbral)",
-             10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
+  // Hint text is left of the slot buttons (x=155+); limit width to avoid overlap
+  g.drawFittedText("Play a chord and click Learn, or set intervals manually "
+                   "(up to 6 notes; 3 per SID in Multitimbral)",
+                   10, 28, 140, 28, juce::Justification::centredLeft, 2);
 
   // Divider below header
   g.setColour(juce::Colour(55, 55, 65));
@@ -1956,27 +1964,27 @@ void WavetablePanel::paint(juce::Graphics &g) {
   // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
   g.setFont(panelProFont.withHeight(11.0f));
-  g.drawText("Waveform", 2, 62, 50, 14, juce::Justification::centredRight);
-  g.drawText("Pitch", 2, 92, 50, 14, juce::Justification::centredRight);
+  g.drawText("Waveform", 2, 76, 50, 14, juce::Justification::centredRight);
+  g.drawText("Pitch", 2, 106, 50, 14, juce::Justification::centredRight);
   g.setFont(panelProFont.withHeight(9.0f));
   g.setColour(juce::Colour(140, 140, 150));
-  g.drawText("(semitones)", 2, 104, 50, 12, juce::Justification::centredRight);
+  g.drawText("(semitones)", 2, 118, 50, 12, juce::Justification::centredRight);
   g.setFont(panelProFont.withHeight(11.0f));
   g.setColour(juce::Colours::lightgrey);
-  g.drawText("Pulse", 2, 216, 50, 14, juce::Justification::centredRight);
-  g.drawText("Width", 2, 228, 50, 14, juce::Justification::centredRight);
+  g.drawText("Pulse", 2, 230, 50, 14, juce::Justification::centredRight);
+  g.drawText("Width", 2, 242, 50, 14, juce::Justification::centredRight);
   g.setFont(panelProFont.withHeight(9.0f));
   g.setColour(juce::Colour(140, 140, 150));
-  g.drawText("(0-4095)", 2, 242, 50, 12, juce::Justification::centredRight);
+  g.drawText("(0-4095)", 2, 256, 50, 12, juce::Justification::centredRight);
 
   // Horizontal dividers between sections
   g.setColour(juce::Colour(55, 55, 65));
-  g.drawHorizontalLine(43, 10.0f,
+  g.drawHorizontalLine(57, 10.0f,
                        static_cast<float>(panelWidth - 10)); // below header
-  g.drawHorizontalLine(84, 55.0f,
+  g.drawHorizontalLine(98, 55.0f,
                        static_cast<float>(panelWidth - 10)); // below waveform
   g.drawHorizontalLine(
-      208, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
+      222, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
 
   // Step number headers and column glow
   int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
@@ -1994,15 +2002,15 @@ void WavetablePanel::paint(juce::Graphics &g) {
     // Full column glow for current step
     if (isCurrent) {
       g.setColour(juce::Colours::cyan.withAlpha(0.08f));
-      g.fillRoundedRectangle(static_cast<float>(x - 1), 44.0f,
-                             static_cast<float>(colW), 300.0f, 4.0f);
+      g.fillRoundedRectangle(static_cast<float>(x - 1), 58.0f,
+                             static_cast<float>(colW), 286.0f, 4.0f);
     }
 
     // Step number header
     g.setFont(panelProFont.withHeight(10.0f));
     if (isCurrent) {
       g.setColour(juce::Colours::cyan);
-      g.fillRoundedRectangle(static_cast<float>(x), 44.0f,
+      g.fillRoundedRectangle(static_cast<float>(x), 58.0f,
                              static_cast<float>(colW - 3), 14.0f, 3.0f);
       g.setColour(juce::Colours::black);
     } else if (isActive) {
@@ -2010,7 +2018,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
     } else {
       g.setColour(juce::Colour(70, 70, 80));
     }
-    g.drawText(juce::String(i + 1), x, 44, colW - 3, 14,
+    g.drawText(juce::String(i + 1), x, 58, colW - 3, 14,
                juce::Justification::centred);
   }
 }
@@ -2024,7 +2032,7 @@ void WavetablePanel::resized() {
   saveButton.setBounds(250, 25, 46, 20);
   loadButton.setBounds(300, 25, 46, 20);
 
-  // Header row 2 (y=24..42): Steps/Rate/Loop + utility buttons
+  // Header row 2 (y=22..56): Steps/Rate/Loop + utility buttons
   stepsLabel.setBounds(360, 24, 40, 18);
   numStepsSlider.setBounds(402, 22, 80, 34);
   rateLabel.setBounds(488, 24, 35, 18);
@@ -2042,9 +2050,9 @@ void WavetablePanel::resized() {
   for (int i = 0; i < 16; ++i) {
     int x = leftMargin + i * colW;
     auto &step = steps[i];
-    step.waveBox.setBounds(x, 62, ctrlW, 22);
-    step.pitchSlider.setBounds(x, 86, ctrlW, 120);
-    step.pwSlider.setBounds(x, 210, ctrlW, 120);
+    step.waveBox.setBounds(x, 76, ctrlW, 22);
+    step.pitchSlider.setBounds(x, 100, ctrlW, 120);
+    step.pwSlider.setBounds(x, 224, ctrlW, 120);
   }
 }
 
