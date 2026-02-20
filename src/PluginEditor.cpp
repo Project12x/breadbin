@@ -307,7 +307,14 @@ void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
 
     g.fillPath(p);
   } else {
-    juce::LookAndFeel_V4::drawButtonText(g, button, false, false);
+    auto bounds = button.getLocalBounds().toFloat().reduced(4.0f, 2.0f);
+    g.setFont(proFont.withHeight(juce::jmin(15.0f, bounds.getHeight() * 0.7f)));
+    g.setColour(button.findColour(button.getToggleState()
+                                      ? juce::TextButton::textColourOnId
+                                      : juce::TextButton::textColourOffId)
+                    .withAlpha(button.isEnabled() ? 1.0f : 0.5f));
+    g.drawText(button.getButtonText(), bounds, juce::Justification::centred,
+               true);
   }
 }
 
@@ -376,7 +383,7 @@ void BreadbinLookAndFeel::drawPopupMenuItem(
   if (isTicked) {
     auto tickArea = textArea.removeFromLeft(16);
     g.setColour(juce::Colours::cyan);
-    g.setFont(14.0f);
+    g.setFont(proFont.withHeight(14.0f));
     g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x9c\x93")), tickArea,
                juce::Justification::centred);
     g.setColour(isActive ? juce::Colours::white : juce::Colours::grey);
@@ -529,8 +536,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                             juce::Colour(20, 20, 25));
   registerDisplay.setColour(juce::TextEditor::textColourId,
                             juce::Colours::cyan);
-  registerDisplay.setFont(
-      juce::Font(juce::Font::getDefaultMonospacedFontName(), 12.0f, 0));
+  registerDisplay.setFont(panelMonoFont.withHeight(12.0f));
   registerDisplay.setText("Registers will appear during playback...");
   addAndMakeVisible(registerDisplay);
 
@@ -583,6 +589,11 @@ void SidPlayerPanel::resized() {
 
 void SidPlayerPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+}
+
+void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
+  panelMonoFont = mono;
+  registerDisplay.setFont(panelMonoFont.withHeight(12.0f));
 }
 
 void SidPlayerPanel::timerCallback() { updateRegisterDisplay(); }
@@ -672,14 +683,23 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       BinaryData::PressStart2PRegular_ttfSize);
   retroFont = juce::Font(juce::FontOptions(retroTypeface).withHeight(12.0f));
 
-  // Load professional font (Roboto Bold) from binary assets
-  auto proTypeface = juce::Typeface::createSystemTypefaceFor(
-      BinaryData::RobotoBold_ttf, BinaryData::RobotoBold_ttfSize);
-  proFont = juce::Font(juce::FontOptions(proTypeface).withHeight(14.0f));
+  // Load professional fonts (Lato) and monospaced font (JetBrains Mono)
+  auto latoTypeface = juce::Typeface::createSystemTypefaceFor(
+      BinaryData::LatoRegular_ttf, BinaryData::LatoRegular_ttfSize);
+  proFont = juce::Font(juce::FontOptions(latoTypeface).withHeight(14.0f));
 
-  // Setup custom look and feel with Roboto Bold font for ComboBoxes
-  customLookAndFeel.setProFont(proFont);
+  auto latoBoldTypeface = juce::Typeface::createSystemTypefaceFor(
+      BinaryData::LatoBold_ttf, BinaryData::LatoBold_ttfSize);
+  boldFont = juce::Font(juce::FontOptions(latoBoldTypeface).withHeight(14.0f));
+
+  auto monoTypeface = juce::Typeface::createSystemTypefaceFor(
+      BinaryData::JetBrainsMonoRegular_ttf,
+      BinaryData::JetBrainsMonoRegular_ttfSize);
+  monoFont = juce::Font(juce::FontOptions(monoTypeface).withHeight(12.0f));
+
+  customLookAndFeel.setFonts(proFont, boldFont, monoFont);
   setLookAndFeel(&customLookAndFeel);
+  midiLearnOverlay.refreshFonts(proFont, boldFont);
 
   keyboardState.addListener(this);
   processor.getMidiMessageCollector().reset(p.getSampleRate());
@@ -1184,7 +1204,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 
   auto setupTotalLabel = [this](juce::Label &label, juce::Colour colour) {
     label.setColour(juce::Label::textColourId, colour);
-    label.setFont(juce::Font(juce::FontOptions(10.0f)));
+    label.setFont(juce::Font(10.0f)); // overridden by refreshFonts()
     label.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(label);
   };
@@ -1309,7 +1329,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
     g.fillRoundedRectangle(static_cast<float>(x), static_cast<float>(y),
                            static_cast<float>(pillW), 14.0f, 3.0f);
     g.setColour(colour);
-    g.setFont(11.0f);
+    g.setFont(panelProFont.withHeight(11.0f));
     g.drawText(text, x + 4, y, pillW, 14, juce::Justification::centredLeft);
   };
   drawGlowLabel("LFO 1", 4, 2, juce::Colours::cyan);
@@ -1334,7 +1354,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   // Mod matrix column headers
   const int mmTop = 172;
   g.setColour(juce::Colours::cyan);
-  g.setFont(12.0f);
+  g.setFont(panelBoldFont.withHeight(12.0f));
   g.drawText("On", 30, mmTop, 40, 16, juce::Justification::centred);
   g.drawText("Source", 70, mmTop, 90, 16, juce::Justification::centred);
   g.drawText("Dest", 170, mmTop, 90, 16, juce::Justification::centred);
@@ -1346,7 +1366,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colour(55, 55, 65));
   g.drawHorizontalLine(338, 6.0f, static_cast<float>(panelWidth - 6));
   g.setColour(juce::Colour(130, 130, 145));
-  g.setFont(10.0f);
+  g.setFont(panelProFont.withHeight(10.0f));
   g.drawText("Destination Totals", 8, 342, 160, 14,
              juce::Justification::centredLeft);
 }
@@ -1428,6 +1448,38 @@ void ModMatrixPanel::resized() {
   totalPWLabel.setBounds(132, 356, 120, 16);
   totalPitchLabel.setBounds(256, 356, 120, 16);
   totalResLabel.setBounds(380, 356, 132, 16);
+}
+
+void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
+                                  const juce::Font &mono) {
+  panelProFont  = pro;
+  panelBoldFont = bold;
+  panelMonoFont = mono;
+
+  // Numeric value labels → JetBrains Mono
+  for (auto &s : slots) {
+    s.sourceValueLabel.setFont(mono.withHeight(10.0f));
+    s.contributionLabel.setFont(mono.withHeight(10.0f));
+  }
+  totalFilterLabel.setFont(mono.withHeight(10.0f));
+  totalPWLabel.setFont(mono.withHeight(10.0f));
+  totalPitchLabel.setFont(mono.withHeight(10.0f));
+  totalResLabel.setFont(mono.withHeight(10.0f));
+
+  // Control labels → Lato Regular
+  lfoRateLabel.setFont(pro.withHeight(9.0f));
+  lfoDepthFilterLabel.setFont(pro.withHeight(9.0f));
+  lfoDepthPWLabel.setFont(pro.withHeight(9.0f));
+  lfoDepthPitchLabel.setFont(pro.withHeight(9.0f));
+  lfo2RateLabel.setFont(pro.withHeight(9.0f));
+  lfo2DepthFilterLabel.setFont(pro.withHeight(9.0f));
+  lfo2DepthPWLabel.setFont(pro.withHeight(9.0f));
+  lfo2DepthPitchLabel.setFont(pro.withHeight(9.0f));
+  pitchBendRangeLabel.setFont(pro.withHeight(11.0f));
+  pwmSweepRateLabel.setFont(pro.withHeight(10.0f));
+  pwmSweepDepthLabel.setFont(pro.withHeight(10.0f));
+
+  repaint();
 }
 
 void ModMatrixPanel::timerCallback() {
@@ -1626,6 +1678,15 @@ void ChordMemoryPanel::applyLearnedChord(int slot,
   }
 }
 
+void ChordMemoryPanel::refreshFonts(const juce::Font &pro,
+                                    const juce::Font &bold) {
+  panelProFont = pro;
+  panelBoldFont = bold;
+  for (auto &s : slots)
+    s.label.setFont(pro.withHeight(11.0f));
+  repaint();
+}
+
 void ChordMemoryPanel::timerCallback() {
   bool learning = processor.isChordLearning();
   int learnSlot = processor.getChordLearnSlot();
@@ -1652,12 +1713,12 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colours::cyan.withAlpha(0.15f));
   g.fillRoundedRectangle(8.0f, 4.0f, 140.0f, 22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
-  g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
+  g.setFont(panelBoldFont.withHeight(14.0f));
   g.drawText("CHORD MEMORY", 14, 6, 130, 20, juce::Justification::centredLeft);
 
   // Subtitle
   g.setColour(juce::Colour(120, 120, 135));
-  g.setFont(juce::Font(juce::FontOptions(10.0f)));
+  g.setFont(panelProFont.withHeight(10.0f));
   g.drawText("Play a chord and click Learn, or set intervals manually (up to 6 "
              "notes total; 3 per SID in Multitimbral)",
              10, 28, panelWidth - 20, 14, juce::Justification::centredLeft);
@@ -1673,14 +1734,14 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
 
   // Column headers
   g.setColour(juce::Colours::lightgrey);
-  g.setFont(juce::Font(juce::FontOptions(11.0f)));
+  g.setFont(panelProFont.withHeight(11.0f));
   for (int i = 0; i < 5; ++i)
     g.drawText("Note " + juce::String(i + 2), 140 + i * 72, 62, 66, 14,
                juce::Justification::centred);
 
   // Sub-header
   g.setColour(juce::Colour(100, 100, 110));
-  g.setFont(juce::Font(juce::FontOptions(9.0f)));
+  g.setFont(panelProFont.withHeight(9.0f));
   g.drawText("(semitones from root)", 140, 74, 360, 12,
              juce::Justification::centredLeft);
 }
@@ -1888,23 +1949,23 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.fillRoundedRectangle(10.0f, 2.0f, static_cast<float>(panelWidth - 20),
                          22.0f, 4.0f);
   g.setColour(juce::Colours::cyan);
-  g.setFont(juce::Font(juce::FontOptions(14.0f)).boldened());
+  g.setFont(panelBoldFont.withHeight(14.0f));
   g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
              juce::Justification::centred);
 
   // Row labels (descriptive, left margin)
   g.setColour(juce::Colours::lightgrey);
-  g.setFont(11.0f);
+  g.setFont(panelProFont.withHeight(11.0f));
   g.drawText("Waveform", 2, 62, 50, 14, juce::Justification::centredRight);
   g.drawText("Pitch", 2, 92, 50, 14, juce::Justification::centredRight);
-  g.setFont(9.0f);
+  g.setFont(panelProFont.withHeight(9.0f));
   g.setColour(juce::Colour(140, 140, 150));
   g.drawText("(semitones)", 2, 104, 50, 12, juce::Justification::centredRight);
-  g.setFont(11.0f);
+  g.setFont(panelProFont.withHeight(11.0f));
   g.setColour(juce::Colours::lightgrey);
   g.drawText("Pulse", 2, 216, 50, 14, juce::Justification::centredRight);
   g.drawText("Width", 2, 228, 50, 14, juce::Justification::centredRight);
-  g.setFont(9.0f);
+  g.setFont(panelProFont.withHeight(9.0f));
   g.setColour(juce::Colour(140, 140, 150));
   g.drawText("(0-4095)", 2, 242, 50, 12, juce::Justification::centredRight);
 
@@ -1938,7 +1999,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
     }
 
     // Step number header
-    g.setFont(10.0f);
+    g.setFont(panelProFont.withHeight(10.0f));
     if (isCurrent) {
       g.setColour(juce::Colours::cyan);
       g.fillRoundedRectangle(static_cast<float>(x), 44.0f,
@@ -1985,6 +2046,15 @@ void WavetablePanel::resized() {
     step.pitchSlider.setBounds(x, 86, ctrlW, 120);
     step.pwSlider.setBounds(x, 210, ctrlW, 120);
   }
+}
+
+void WavetablePanel::refreshFonts(const juce::Font &pro,
+                                  const juce::Font &bold) {
+  panelProFont  = pro;
+  panelBoldFont = bold;
+  stepsLabel.setFont(pro.withHeight(10.0f));
+  rateLabel.setFont(pro.withHeight(10.0f));
+  repaint();
 }
 
 void WavetablePanel::timerCallback() {
@@ -2094,6 +2164,7 @@ void BreadbinEditor::showChordMemoryPopup() {
 
   auto *panel = new ChordMemoryPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->refreshFonts(proFont, boldFont);
 
   auto *window =
       new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
@@ -2119,6 +2190,7 @@ void BreadbinEditor::showSidPlayerPopup() {
 
   auto *panel = new SidPlayerPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->refreshFonts(monoFont);
 
   auto *window =
       new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
@@ -2144,6 +2216,7 @@ void BreadbinEditor::showModMatrixPopup() {
 
   auto *panel = new ModMatrixPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->refreshFonts(proFont, boldFont, monoFont);
 
   auto *window =
       new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
@@ -2169,6 +2242,7 @@ void BreadbinEditor::showWavetablePopup() {
 
   auto *panel = new WavetablePanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->refreshFonts(proFont, boldFont);
 
   auto *window = new NonModalPopup("Wavetable Step Sequencer",
                                    juce::Colour(30, 30, 35), true);
@@ -2266,7 +2340,7 @@ void BreadbinEditor::setupControls() {
 
   // CPU load display
   cpuLoadLabel.setText("CPU: 0%", juce::dontSendNotification);
-  cpuLoadLabel.setFont(juce::FontOptions(10.0f));
+  cpuLoadLabel.setFont(monoFont.withHeight(10.0f));
   cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF888888));
   cpuLoadLabel.setJustificationType(juce::Justification::centredRight);
   cpuLoadLabel.setTooltip("DSP CPU usage (% of audio buffer time budget)");
@@ -2331,7 +2405,7 @@ void BreadbinEditor::setupControls() {
 
   // Preset dirty indicator
   presetDirtyLabel.setColour(juce::Label::textColourId, juce::Colours::gold);
-  presetDirtyLabel.setFont(juce::Font(juce::FontOptions(16.0f)).boldened());
+  presetDirtyLabel.setFont(boldFont.withHeight(16.0f));
   presetDirtyLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(presetDirtyLabel);
 
@@ -2458,12 +2532,12 @@ void BreadbinEditor::setupControls() {
 
   agingStartLabel.setText("Fresh", juce::dontSendNotification);
   agingStartLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingStartLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  agingStartLabel.setFont(proFont.withHeight(10.0f));
   addAndMakeVisible(agingStartLabel);
 
   agingEndLabel.setText("Vintage", juce::dontSendNotification);
   agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingEndLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  agingEndLabel.setFont(proFont.withHeight(10.0f));
   addAndMakeVisible(agingEndLabel);
 
   agingSlider.setRange(0.0, 1.0, 0.01);
@@ -2533,7 +2607,7 @@ void BreadbinEditor::setupControls() {
   // Glide/Portamento
   glideTimeLabel.setText("Glide", juce::dontSendNotification);
   glideTimeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  glideTimeLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  glideTimeLabel.setFont(proFont.withHeight(10.0f));
   addAndMakeVisible(glideTimeLabel);
 
   glideTimeSlider.setRange(0.0, 2000.0, 1.0);
@@ -2550,7 +2624,7 @@ void BreadbinEditor::setupControls() {
   // Master Volume
   masterVolLabel.setText("Master", juce::dontSendNotification);
   masterVolLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  masterVolLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
+  masterVolLabel.setFont(proFont.withHeight(12.0f));
   addAndMakeVisible(masterVolLabel);
 
   masterVolSlider.setRange(0.0, 1.0, 0.01);
@@ -2563,7 +2637,7 @@ void BreadbinEditor::setupControls() {
 
   noiseGateLabel.setText("Gate", juce::dontSendNotification);
   noiseGateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  noiseGateLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
+  noiseGateLabel.setFont(proFont.withHeight(12.0f));
   addAndMakeVisible(noiseGateLabel);
 
   noiseGateSlider.setRange(0.0, 0.1, 0.001);
@@ -2584,7 +2658,7 @@ void BreadbinEditor::setupControls() {
 
   extInputLabel.setText("Level", juce::dontSendNotification);
   extInputLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  extInputLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  extInputLabel.setFont(proFont.withHeight(10.0f));
   addAndMakeVisible(extInputLabel);
 
   extInputLevelSlider.setRange(0.0, 2.0, 0.01);
@@ -2804,7 +2878,7 @@ void BreadbinEditor::setupControls() {
     lbl.setColour(juce::Label::textColourId, juce::Colours::cyan);
     lbl.setColour(juce::Label::backgroundColourId,
                   juce::Colours::black.withAlpha(0.7f));
-    lbl.setFont(juce::Font(juce::FontOptions(9.0f)));
+    lbl.setFont(proFont.withHeight(9.0f));
     lbl.setJustificationType(juce::Justification::centred);
     lbl.setVisible(false);
     addAndMakeVisible(lbl);
@@ -3161,7 +3235,7 @@ void BreadbinEditor::setupVoiceEditor() {
                           int defaultVal) {
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(juce::Font(juce::FontOptions(10.0f)));
+    label.setFont(proFont.withHeight(10.0f));
     addAndMakeVisible(label);
 
     slider.setRange(0, 15, 1);
@@ -3215,7 +3289,7 @@ void BreadbinEditor::setupVoiceEditor() {
       "Default: 7 (perfect fifth). Set to 0 for no offset.");
   addAndMakeVisible(modOffsetSlider);
   modOffsetLabel.setJustificationType(juce::Justification::centredRight);
-  modOffsetLabel.setFont(juce::Font(11.0f));
+  modOffsetLabel.setFont(proFont.withHeight(11.0f));
   addAndMakeVisible(modOffsetLabel);
 
   // Update Ring Mod enable state when waveform changes

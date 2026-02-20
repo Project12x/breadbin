@@ -12,12 +12,21 @@ class MappableSlider; // Forward declaration
 class BreadbinLookAndFeel : public juce::LookAndFeel_V4 {
 public:
   BreadbinLookAndFeel();
-  void setProFont(const juce::Font &font) { proFont = font; }
+  void setFonts(const juce::Font &pro, const juce::Font &bold,
+                const juce::Font &mono) {
+    proFont = pro; boldFont = bold; monoFont = mono;
+  }
+  const juce::Font &getProFont()  const { return proFont; }
+  const juce::Font &getBoldFont() const { return boldFont; }
+  const juce::Font &getMonoFont() const { return monoFont; }
 
   juce::Font getComboBoxFont(juce::ComboBox &) override {
     return proFont.withHeight(14.0f);
   }
   juce::Font getPopupMenuFont() override { return proFont.withHeight(14.0f); }
+  juce::Font getSliderPopupFont(juce::Slider &) override {
+    return proFont.withHeight(12.0f);
+  }
 
   void drawRotarySlider(juce::Graphics &, int x, int y, int width, int height,
                         float sliderPosProportional, float rotaryStartAngle,
@@ -61,7 +70,7 @@ public:
       const juce::PopupMenu::Options &) override;
 
 private:
-  juce::Font proFont;
+  juce::Font proFont, boldFont, monoFont;
 };
 
 // Non-modal popup window that hides on close (instead of staying allocated)
@@ -109,6 +118,10 @@ public:
     return processor.isLearning() || successFrames > 0;
   }
 
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold) {
+    panelProFont = pro; panelBoldFont = bold;
+  }
+
   void paint(juce::Graphics &g) override {
     bool learning = processor.isLearning();
     bool showingSuccess = successFrames > 0 && !learning;
@@ -132,10 +145,7 @@ public:
       g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
 
       g.setColour(juce::Colours::white);
-      auto font = g.getCurrentFont();
-      font.setHeight(16.0f);
-      font.setBold(true);
-      g.setFont(font);
+      g.setFont(panelBoldFont.withHeight(16.0f));
 
       juce::String paramName =
           processor.getParamName(processor.getLearningParam());
@@ -143,9 +153,7 @@ public:
                  popupRect.removeFromTop(35).reduced(10, 0),
                  juce::Justification::centred);
 
-      font.setHeight(12.0f);
-      font.setBold(false);
-      g.setFont(font);
+      g.setFont(panelProFont.withHeight(12.0f));
       g.drawText("Move any MIDI hardware control to map...",
                  popupRect.reduced(10, 0), juce::Justification::centred);
     } else {
@@ -155,18 +163,13 @@ public:
       g.drawRoundedRectangle(popupRect.toFloat(), 6.0f, 2.0f);
 
       g.setColour(juce::Colours::limegreen.withAlpha(alpha));
-      auto font = g.getCurrentFont();
-      font.setHeight(16.0f);
-      font.setBold(true);
-      g.setFont(font);
+      g.setFont(panelBoldFont.withHeight(16.0f));
 
       g.drawText("MAPPED: " + successParamName,
                  popupRect.removeFromTop(35).reduced(10, 0),
                  juce::Justification::centred);
 
-      font.setHeight(12.0f);
-      font.setBold(false);
-      g.setFont(font);
+      g.setFont(panelProFont.withHeight(12.0f));
       g.setColour(juce::Colours::white.withAlpha(alpha));
       g.drawText("MIDI mapping saved successfully", popupRect.reduced(10, 0),
                  juce::Justification::centred);
@@ -178,7 +181,8 @@ private:
   bool wasLearning = false;
   juce::String lastLearningParamName;
   juce::String successParamName;
-  int successFrames = 0; // countdown for success flash
+  int successFrames = 0;
+  juce::Font panelProFont, panelBoldFont;
 };
 
 class MappableSlider : public juce::Slider {
@@ -224,10 +228,10 @@ public:
       g.setColour(juce::Colours::gold.withAlpha(0.4f));
       g.drawRect(getLocalBounds(), 2);
 
-      auto font = g.getCurrentFont();
-      font.setHeight(10.0f);
-      font.setBold(true);
-      g.setFont(font);
+      if (auto *laf = dynamic_cast<BreadbinLookAndFeel *>(&getLookAndFeel()))
+        g.setFont(laf->getBoldFont().withHeight(10.0f));
+      else
+        g.setFont(10.0f);
       g.drawText("LEARN", getLocalBounds(), juce::Justification::centred);
     }
   }
@@ -422,11 +426,14 @@ public:
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold,
+                    const juce::Font &mono);
   static constexpr int panelWidth = 520;
   static constexpr int panelHeight = 410;
 
 private:
   BreadbinProcessor &processor;
+  juce::Font panelProFont, panelBoldFont, panelMonoFont;
 
   // ========== LFO1 ==========
   MappableToggle lfoEnableButton{"LFO", processor,
@@ -511,11 +518,13 @@ public:
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold);
   static constexpr int panelWidth = 520;
   static constexpr int panelHeight = 340;
 
 private:
   BreadbinProcessor &processor;
+  juce::Font panelProFont, panelBoldFont;
   juce::ToggleButton enableButton{"Enable"};
   std::array<juce::TextButton, 4> slotButtons;
   std::array<juce::TextButton, 4> learnButtons;
@@ -550,11 +559,13 @@ public:
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold);
   static constexpr int panelWidth = 820;
   static constexpr int panelHeight = 380;
 
 private:
   BreadbinProcessor &processor;
+  juce::Font panelProFont, panelBoldFont;
 
   // Global controls (moved from main editor)
   juce::ToggleButton enableButton{"Enable"};
@@ -605,11 +616,13 @@ public:
   void resized() override;
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
+  void refreshFonts(const juce::Font &mono);
   static constexpr int panelWidth = 520;
   static constexpr int panelHeight = 370;
 
 private:
   BreadbinProcessor &processor;
+  juce::Font panelMonoFont;
 
   juce::TextButton loadButton{"Load SID"};
   juce::TextButton playButton{"Play"};
@@ -766,8 +779,12 @@ private:
 
   // Retro font for section headers (Press Start 2P)
   juce::Font retroFont;
-  // Professional font for UI controls (Inter)
+  // Professional font for UI controls (Lato Regular)
   juce::Font proFont;
+  // Bold font for panel titles (Lato Bold)
+  juce::Font boldFont;
+  // Monospaced font for numeric displays (JetBrains Mono)
+  juce::Font monoFont;
   // Custom look and feel for ComboBox fonts
   BreadbinLookAndFeel customLookAndFeel;
 

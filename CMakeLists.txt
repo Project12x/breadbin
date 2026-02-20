@@ -110,7 +110,9 @@ juce_add_binary_data(BreadbinAssets
     SOURCES
         assets/background.jpg
         assets/PressStart2P-Regular.ttf
-        assets/Roboto-Bold.ttf
+        assets/Lato-Regular.ttf
+        assets/Lato-Bold.ttf
+        assets/JetBrainsMono-Regular.ttf
 )
 
 juce_add_plugin(Breadbin
