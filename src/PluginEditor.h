@@ -189,6 +189,24 @@ public:
   void mouseDown(const juce::MouseEvent &e) override {
     if (e.mods.isRightButtonDown()) {
       juce::PopupMenu m;
+      m.addItem("Set to Default", [this] {
+        setValue(getDoubleClickReturnValue(), juce::sendNotification);
+      });
+      m.addSeparator();
+      m.addItem("Copy Value", [this] {
+        s_clipboard     = static_cast<float>(getValue());
+        s_hasClipboard  = true;
+      });
+      {
+        juce::PopupMenu::Item pasteItem;
+        pasteItem.text      = "Paste Value";
+        pasteItem.isEnabled = s_hasClipboard;
+        pasteItem.action    = [this] {
+          setValue(static_cast<double>(s_clipboard), juce::sendNotification);
+        };
+        m.addItem(pasteItem);
+      }
+      m.addSeparator();
       m.addItem("MIDI Learn",
                 [this] { processor.startLearning(controlParam); });
       m.addItem("Unlearn",
@@ -215,6 +233,8 @@ public:
   }
 
 private:
+  static inline float s_clipboard    = 0.0f;
+  static inline bool  s_hasClipboard = false;
   BreadbinProcessor &processor;
   BreadbinProcessor::ControlParam controlParam;
 };
@@ -326,6 +346,71 @@ private:
   float baseValue = 0.0f, modulatedValue = 0.0f;
 };
 
+// Waveform shape preview for LFO rows in the Modulation popup
+class LFODisplay : public juce::Component {
+public:
+  void setWaveType(int type) {
+    if (waveType != type) { waveType = type; repaint(); }
+  }
+  void paint(juce::Graphics &g) override {
+    auto b = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(20, 20, 25));
+    g.fillRoundedRectangle(b, 3.0f);
+    g.setColour(juce::Colour(50, 50, 60));
+    g.drawRoundedRectangle(b.reduced(0.5f), 3.0f, 0.5f);
+
+    const float padX = 4.0f;
+    float w   = b.getWidth() - padX * 2.0f;
+    float cy  = b.getCentreY();
+    float amp = (b.getHeight() - 6.0f) * 0.5f;
+    float x0  = b.getX() + padX;
+    auto yFor = [&](float n) { return cy - n * amp; };
+
+    g.setColour(juce::Colour(55, 55, 68));
+    g.drawHorizontalLine(static_cast<int>(cy), x0, x0 + w);
+
+    juce::Path path;
+    if (waveType == 1) {                               // Triangle
+      path.startNewSubPath(x0,              yFor(0));
+      path.lineTo(x0 + w * 0.25f,          yFor(1));
+      path.lineTo(x0 + w * 0.75f,          yFor(-1));
+      path.lineTo(x0 + w,                  yFor(0));
+    } else if (waveType == 2) {                        // Sawtooth
+      path.startNewSubPath(x0,             yFor(-1));
+      path.lineTo(x0 + w * 0.97f,          yFor(1));
+      path.startNewSubPath(x0 + w * 0.97f, yFor(1));
+      path.lineTo(x0 + w * 0.97f,          yFor(-1));
+      path.lineTo(x0 + w,                  yFor(-1));
+    } else if (waveType == 3) {                        // Square
+      float mid = x0 + w * 0.5f;
+      path.startNewSubPath(x0,  yFor(1));
+      path.lineTo(mid,          yFor(1));
+      path.lineTo(mid,          yFor(-1));
+      path.lineTo(x0 + w,       yFor(-1));
+    } else {                                           // S&H
+      juce::Random rng(42);
+      const int N = 8;
+      float sw  = w / N;
+      float val = rng.nextFloat() * 2.0f - 1.0f;
+      path.startNewSubPath(x0, yFor(val));
+      for (int i = 0; i < N; ++i) {
+        float ex = x0 + static_cast<float>(i + 1) * sw;
+        path.lineTo(ex, yFor(val));
+        if (i < N - 1) {
+          val = rng.nextFloat() * 2.0f - 1.0f;
+          path.lineTo(ex, yFor(val));
+        }
+      }
+    }
+    g.setColour(juce::Colours::cyan.withAlpha(0.25f));
+    g.strokePath(path, juce::PathStrokeType(2.5f));
+    g.setColour(juce::Colours::cyan);
+    g.strokePath(path, juce::PathStrokeType(1.0f));
+  }
+private:
+  int waveType = 1;
+};
+
 // Modulation popup panel (LFO1/LFO2, Pitch Bend Range, Mod Matrix)
 class ModMatrixPanel : public juce::Component, private juce::Timer {
 public:
@@ -412,6 +497,7 @@ private:
   };
   std::array<SlotRow, BreadbinProcessor::kModSlots> slots;
   juce::Label totalFilterLabel, totalPWLabel, totalPitchLabel, totalResLabel;
+  LFODisplay lfoDisplay1, lfoDisplay2;
 };
 
 // Chord Memory popup panel
@@ -547,6 +633,123 @@ private:
   void updateRegisterDisplay();
 };
 
+// Interactive filter frequency response display for SID filter sections
+class FilterDisplay : public juce::Component {
+public:
+  FilterDisplay(MappableSlider &cutoff, MappableSlider &res)
+      : cutoffSlider(cutoff), resSlider(res) {}
+
+  void setCutoff(int val) {
+    if (currentCutoff != val) { currentCutoff = val; repaint(); }
+  }
+  void setResonance(int val) {
+    if (currentResonance != val) { currentResonance = val; repaint(); }
+  }
+  void setModes(bool lp, bool bp, bool hp) {
+    if (lpOn != lp || bpOn != bp || hpOn != hp) {
+      lpOn = lp; bpOn = bp; hpOn = hp; repaint();
+    }
+  }
+
+  void paint(juce::Graphics &g) override {
+    auto b = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(18, 18, 22));
+    g.fillRoundedRectangle(b, 3.0f);
+    g.setColour(juce::Colour(50, 50, 62));
+    g.drawRoundedRectangle(b.reduced(0.5f), 3.0f, 0.5f);
+
+    if (!lpOn && !bpOn && !hpOn) {
+      g.setColour(juce::Colours::grey.withAlpha(0.4f));
+      g.setFont(juce::Font(juce::FontOptions(9.0f)));
+      g.drawText("filter off", b, juce::Justification::centred);
+      return;
+    }
+
+    const float px = 4.0f, py = 4.0f;
+    const float pw = b.getWidth() - px * 2.0f;
+    const float ph = b.getHeight() - py * 2.0f;
+    const float kMinHz = 30.0f, kMaxHz = 12000.0f;
+    const float logRange = std::log(kMaxHz / kMinHz);
+
+    float fcHz = kMinHz * std::pow(kMaxHz / kMinHz,
+                                   static_cast<float>(currentCutoff) / 2047.0f);
+    float Q = 0.5f + (static_cast<float>(currentResonance) / 15.0f) * 9.5f;
+
+    // 0 dB reference line  (maps to norm = 30/42 in [-30..+12] range)
+    float y0db = b.getY() + py + ph * (1.0f - 30.0f / 42.0f);
+    g.setColour(juce::Colour(55, 55, 68));
+    g.drawHorizontalLine(static_cast<int>(y0db), b.getX() + px,
+                         b.getX() + px + pw);
+
+    // Build response curve pixel-by-pixel
+    juce::Path curve;
+    const int N = static_cast<int>(pw);
+    for (int i = 0; i < N; ++i) {
+      float t   = static_cast<float>(i) / static_cast<float>(juce::jmax(1, N - 1));
+      float fHz = kMinHz * std::exp(t * logRange);
+      float xr  = fHz / fcHz;
+      float xr2 = xr * xr;
+      float d2  = (1.0f - xr2) * (1.0f - xr2) + (xr / Q) * (xr / Q);
+      float d   = std::sqrt(juce::jmax(d2, 1e-12f));
+      float mag = 0.0f;
+      if (lpOn) mag += 1.0f / d;
+      if (bpOn) mag += (xr / Q) / d;
+      if (hpOn) mag += xr2 / d;
+      mag       = juce::jlimit(0.001f, 20.0f, mag);
+      float db  = 20.0f * std::log10(mag);
+      float norm = (juce::jlimit(-30.0f, 12.0f, db) + 30.0f) / 42.0f;
+      float cx  = b.getX() + px + static_cast<float>(i);
+      float cy  = b.getY() + py + ph * (1.0f - norm);
+      if (i == 0) curve.startNewSubPath(cx, cy);
+      else        curve.lineTo(cx, cy);
+    }
+    g.setColour(juce::Colours::cyan.withAlpha(0.18f));
+    g.strokePath(curve, juce::PathStrokeType(3.0f));
+    g.setColour(juce::Colours::cyan.withAlpha(0.85f));
+    g.strokePath(curve, juce::PathStrokeType(1.2f));
+
+    // Cutoff frequency vertical marker
+    float cxMark = b.getX() + px + pw * std::log(fcHz / kMinHz) / logRange;
+    if (cxMark > b.getX() + px && cxMark < b.getX() + px + pw) {
+      g.setColour(juce::Colours::cyan.withAlpha(0.35f));
+      g.drawVerticalLine(static_cast<int>(cxMark), b.getY() + py,
+                         b.getY() + py + ph);
+    }
+    g.setColour(juce::Colours::grey.withAlpha(0.4f));
+    g.setFont(juce::Font(juce::FontOptions(7.5f)));
+    g.drawText("drag", b.reduced(3).removeFromBottom(9.0f),
+               juce::Justification::centredRight);
+  }
+
+  void mouseDown(const juce::MouseEvent &e) override {
+    dragStart         = e.getPosition();
+    dragStartCutoff   = currentCutoff;
+    dragStartRes      = currentResonance;
+    setMouseCursor(juce::MouseCursor::CrosshairCursor);
+  }
+  void mouseDrag(const juce::MouseEvent &e) override {
+    int newCutoff = juce::jlimit(0, 2047,
+        dragStartCutoff + (e.x - dragStart.x) * 2047 / juce::jmax(1, getWidth()));
+    int newRes = juce::jlimit(0, 15,
+        dragStartRes - (e.y - dragStart.y) * 15 / juce::jmax(1, getHeight()));
+    cutoffSlider.setValue(static_cast<double>(newCutoff), juce::sendNotification);
+    resSlider.setValue(static_cast<double>(newRes), juce::sendNotification);
+  }
+  void mouseUp(const juce::MouseEvent &) override {
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+  }
+
+private:
+  MappableSlider &cutoffSlider;
+  MappableSlider &resSlider;
+  int  currentCutoff    = 1024;
+  int  currentResonance = 0;
+  bool lpOn = true, bpOn = false, hpOn = false;
+  juce::Point<int> dragStart;
+  int  dragStartCutoff  = 0;
+  int  dragStartRes     = 0;
+};
+
 class BreadbinEditor : public juce::AudioProcessorEditor,
                        private juce::MidiKeyboardState::Listener,
                        private juce::Timer {
@@ -652,6 +855,10 @@ private:
   MappableSlider rightPanSlider{processor,
                                 BreadbinProcessor::ControlParam::RightPan};
   juce::Label rightPanLabel;
+
+  // Filter response displays (interactive, one per SID)
+  FilterDisplay filterDisplay_L{leftCutoffSlider, leftResonanceSlider};
+  FilterDisplay filterDisplay_R{rightCutoffSlider, rightResonanceSlider};
 
   // ========== VOICE EDITOR (edits selected voice) ==========
   juce::Label voiceEditorLabel;

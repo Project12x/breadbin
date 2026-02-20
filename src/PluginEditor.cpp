@@ -719,6 +719,9 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   addAndMakeVisible(midiLearnOverlay);
   midiLearnOverlay.setAlwaysOnTop(true);
 
+  addAndMakeVisible(filterDisplay_L);
+  addAndMakeVisible(filterDisplay_R);
+
   startTimerHz(30);
 
   // Initialize Global Attachments
@@ -890,6 +893,21 @@ void BreadbinEditor::timerCallback() {
       static_cast<float>(processor.getLastAppliedResRight()));
   resMeterR.repaint();
 
+  // Update filter response displays
+  filterDisplay_L.setCutoff(processor.getBaseFilterCutoff(true));
+  filterDisplay_L.setResonance(processor.getBaseFilterResonance(true));
+  filterDisplay_L.setModes(leftLPButton.getToggleState(),
+                            leftBPButton.getToggleState(),
+                            leftHPButton.getToggleState());
+  filterDisplay_L.repaint();
+
+  filterDisplay_R.setCutoff(processor.getBaseFilterCutoff(false));
+  filterDisplay_R.setResonance(processor.getBaseFilterResonance(false));
+  filterDisplay_R.setModes(rightLPButton.getToggleState(),
+                            rightBPButton.getToggleState(),
+                            rightHPButton.getToggleState());
+  filterDisplay_R.repaint();
+
   // Preset dirty indicator
   presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
                            juce::dontSendNotification);
@@ -992,6 +1010,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
         processor, BreadbinProcessor::ControlParam::None);
     slider->setRange(minVal, maxVal, 0.01);
     slider->setValue(defaultVal);
+    slider->setDoubleClickReturnValue(true, static_cast<double>(defaultVal));
     slider->setSliderStyle(style);
     slider->setTextBoxStyle(textPos, false, 40, 14);
     slider->setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
@@ -1261,6 +1280,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "pwmSweepDepth", pwmSweepDepthSlider);
 
+  addAndMakeVisible(lfoDisplay1);
+  addAndMakeVisible(lfoDisplay2);
+
   startTimerHz(30);
   setSize(panelWidth, panelHeight);
 }
@@ -1361,12 +1383,14 @@ void ModMatrixPanel::resized() {
                lfoRateLabel, *lfoDepthFilterSlider, lfoDepthFilterLabel,
                *lfoDepthPWSlider, lfoDepthPWLabel, *lfoDepthPitchSlider,
                lfoDepthPitchLabel);
+  lfoDisplay1.setBounds(362, 4, 152, 46);
 
   // LFO2 row: y=55..109
   layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector, *lfo2RateSlider,
                lfo2RateLabel, *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
                *lfo2DepthPWSlider, lfo2DepthPWLabel, *lfo2DepthPitchSlider,
                lfo2DepthPitchLabel);
+  lfoDisplay2.setBounds(362, 59, 152, 46);
 
   // PWM Sweep row: y=112..139
   {
@@ -1436,6 +1460,9 @@ void ModMatrixPanel::timerCallback() {
   totalResLabel.setText("Res " +
                             juce::String(processor.getModTotalResonance(), 2),
                         juce::dontSendNotification);
+
+  lfoDisplay1.setWaveType(lfoWaveformSelector.getSelectedId());
+  lfoDisplay2.setWaveType(lfo2WaveformSelector.getSelectedId());
 }
 
 // ========== CHORD MEMORY PANEL ==========
@@ -2440,6 +2467,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(agingEndLabel);
 
   agingSlider.setRange(0.0, 1.0, 0.01);
+  agingSlider.setDoubleClickReturnValue(true, 0.0);
   agingSlider.setValue(0.0);
   agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   agingSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -2476,6 +2504,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(arpPatternSelector);
 
   arpRateSlider.setRange(1.0, 100.0, 1.0);
+  arpRateSlider.setDoubleClickReturnValue(true, 5.0);
   arpRateSlider.setValue(processor.getArpRate());
   arpRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   arpRateSlider.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 35, 18);
@@ -2508,6 +2537,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(glideTimeLabel);
 
   glideTimeSlider.setRange(0.0, 2000.0, 1.0);
+  glideTimeSlider.setDoubleClickReturnValue(true, 0.0);
   glideTimeSlider.setValue(processor.getGlideTimeMs());
   glideTimeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   glideTimeSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
@@ -2524,6 +2554,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(masterVolLabel);
 
   masterVolSlider.setRange(0.0, 1.0, 0.01);
+  masterVolSlider.setDoubleClickReturnValue(true, 0.8);
   masterVolSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   masterVolSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
   masterVolSlider.setTooltip("Master output volume (affects both SID chips)");
@@ -2536,6 +2567,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(noiseGateLabel);
 
   noiseGateSlider.setRange(0.0, 0.1, 0.001);
+  noiseGateSlider.setDoubleClickReturnValue(true, 0.01);
   noiseGateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   noiseGateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
   noiseGateSlider.setTooltip(
@@ -2556,6 +2588,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(extInputLabel);
 
   extInputLevelSlider.setRange(0.0, 2.0, 0.01);
+  extInputLevelSlider.setDoubleClickReturnValue(true, 1.0);
   extInputLevelSlider.setValue(processor.getExtInputLevel());
   extInputLevelSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   extInputLevelSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40,
@@ -2602,6 +2635,7 @@ void BreadbinEditor::setupControls() {
 
     slider.setRange(minVal, maxVal, step);
     slider.setValue(defaultVal);
+    slider.setDoubleClickReturnValue(true, static_cast<double>(defaultVal));
     slider.setSliderStyle(juce::Slider::LinearHorizontal);
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setTooltip(tooltip);
@@ -2725,6 +2759,7 @@ void BreadbinEditor::setupControls() {
 
     slider.setRange(minVal, maxVal, 0.001);
     slider.setValue(defaultVal);
+    slider.setDoubleClickReturnValue(true, static_cast<double>(defaultVal));
     slider.setSliderStyle(juce::Slider::LinearVertical);
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setTooltip(tooltip);
@@ -2748,6 +2783,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(filterEnvAmountLabel);
 
   filterEnvAmountSlider.setRange(-1.0, 1.0, 0.01);
+  filterEnvAmountSlider.setDoubleClickReturnValue(true, 0.5);
   filterEnvAmountSlider.setValue(0.5);
   filterEnvAmountSlider.setSliderStyle(
       juce::Slider::RotaryHorizontalVerticalDrag);
@@ -2839,6 +2875,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftCutoffLabel);
 
   leftCutoffSlider.setRange(0, 2047, 1);
+  leftCutoffSlider.setDoubleClickReturnValue(true, 1024.0);
   // leftCutoffSlider.setValue(1024);  // Restored by constructor sync
   leftCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -2858,6 +2895,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftResonanceLabel);
 
   leftResonanceSlider.setRange(0, 15, 1);
+  leftResonanceSlider.setDoubleClickReturnValue(true, 0.0);
   // leftResonanceSlider.setValue(0);  // Restored by constructor sync
   leftResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   leftResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -2907,6 +2945,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftDetuneLabel);
 
   leftDetuneSlider.setRange(-50.0, 50.0, 1.0);
+  leftDetuneSlider.setDoubleClickReturnValue(true, 0.0);
   leftDetuneSlider.setValue(0.0);
   leftDetuneSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   leftDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
@@ -2923,6 +2962,7 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftPanLabel);
 
   leftPanSlider.setRange(-1.0, 1.0, 0.01);
+  leftPanSlider.setDoubleClickReturnValue(true, -1.0);
   leftPanSlider.setValue(-1.0);
   leftPanSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   leftPanSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
@@ -2981,6 +3021,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightCutoffLabel);
 
   rightCutoffSlider.setRange(0, 2047, 1);
+  rightCutoffSlider.setDoubleClickReturnValue(true, 1024.0);
   // rightCutoffSlider.setValue(1024);  // Restored by constructor sync
   rightCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightCutoffSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -3001,6 +3042,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightResonanceLabel);
 
   rightResonanceSlider.setRange(0, 15, 1);
+  rightResonanceSlider.setDoubleClickReturnValue(true, 0.0);
   // rightResonanceSlider.setValue(0);  // Restored by constructor sync
   rightResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
   rightResonanceSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -3049,6 +3091,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightDetuneLabel);
 
   rightDetuneSlider.setRange(-50.0, 50.0, 1.0);
+  rightDetuneSlider.setDoubleClickReturnValue(true, 0.0);
   rightDetuneSlider.setValue(0.0);
   rightDetuneSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   rightDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
@@ -3065,6 +3108,7 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightPanLabel);
 
   rightPanSlider.setRange(-1.0, 1.0, 0.01);
+  rightPanSlider.setDoubleClickReturnValue(true, 1.0);
   rightPanSlider.setValue(1.0);
   rightPanSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   rightPanSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
@@ -3097,6 +3141,7 @@ void BreadbinEditor::setupVoiceEditor() {
   addAndMakeVisible(pwLabel);
 
   pulseWidthSlider.setRange(0, 4095, 1);
+  pulseWidthSlider.setDoubleClickReturnValue(true, 2048.0);
   pulseWidthSlider.setValue(2048);
   pulseWidthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   pulseWidthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
@@ -3121,6 +3166,7 @@ void BreadbinEditor::setupVoiceEditor() {
 
     slider.setRange(0, 15, 1);
     slider.setValue(defaultVal);
+    slider.setDoubleClickReturnValue(true, static_cast<double>(defaultVal));
     slider.setSliderStyle(juce::Slider::LinearVertical);
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setTooltip(tooltip);
@@ -3160,6 +3206,7 @@ void BreadbinEditor::setupVoiceEditor() {
   addAndMakeVisible(voiceFilterButton);
 
   // Mod Offset slider (semitones for sync/ring mod modulator voice)
+  modOffsetSlider.setDoubleClickReturnValue(true, 7.0);
   modOffsetSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   modOffsetSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 20);
   modOffsetSlider.setTooltip(
@@ -3393,6 +3440,7 @@ void BreadbinEditor::resized() {
   leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(32));
   leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(55));
   resMeterL.setBounds(leftFilterRow.removeFromLeft(6));
+  filterDisplay_L.setBounds(leftFilterRow.removeFromLeft(120));
 
   auto leftModesRow = leftPanel.removeFromTop(22);
   leftFilterEnableButton.setBounds(leftModesRow.removeFromLeft(45));
@@ -3436,6 +3484,7 @@ void BreadbinEditor::resized() {
   cutoffMeterR.setBounds(rightFilterRow.removeFromRight(6));
   rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(55));
   rightCutoffLabel.setBounds(rightFilterRow.removeFromRight(40));
+  filterDisplay_R.setBounds(rightFilterRow.removeFromRight(120));
 
   auto rightModesRow = rightPanel.removeFromTop(22);
   rightHPButton.setBounds(rightModesRow.removeFromRight(45));
