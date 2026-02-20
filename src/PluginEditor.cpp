@@ -1045,7 +1045,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   };
 
   setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 20.0f, 2.0f,
-                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
   setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -1070,7 +1070,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(lfo2WaveformSelector);
 
   setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 20.0f, 3.0f,
-                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+                 juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
   setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -1385,7 +1385,7 @@ void ModMatrixPanel::resized() {
     waveBox.setBounds(x, y + 14, 68, 20);
     x += 76;
     rateLbl.setBounds(x, y + 2, 40, 12);
-    rateSldr.setBounds(x, y + 14, 80, 20);
+    rateSldr.setBounds(x, y + 14, 80, 34); // h=34: 20px track + 14px text box
     x += 88;
     const int dW = 42;
     fltLbl.setBounds(x, y + 2, dW, 12);
@@ -1403,14 +1403,14 @@ void ModMatrixPanel::resized() {
                lfoRateLabel, *lfoDepthFilterSlider, lfoDepthFilterLabel,
                *lfoDepthPWSlider, lfoDepthPWLabel, *lfoDepthPitchSlider,
                lfoDepthPitchLabel);
-  lfoDisplay1.setBounds(362, 4, 152, 46);
+  lfoDisplay1.setBounds(362, 14, 120, 36);
 
   // LFO2 row: y=55..109
   layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector, *lfo2RateSlider,
                lfo2RateLabel, *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
                *lfo2DepthPWSlider, lfo2DepthPWLabel, *lfo2DepthPitchSlider,
                lfo2DepthPitchLabel);
-  lfoDisplay2.setBounds(362, 59, 152, 46);
+  lfoDisplay2.setBounds(362, 69, 120, 36);
 
   // PWM Sweep row: y=112..139
   {
@@ -1479,12 +1479,12 @@ void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
   pwmSweepRateLabel.setFont(pro.withHeight(10.0f));
   pwmSweepDepthLabel.setFont(pro.withHeight(10.0f));
 
-  // LFO rate sliders: force text box recreation with BreadbinLookAndFeel active.
-  // Initial setup used h=16; passing h=20 triggers JUCE to recreate via
-  // createSliderTextBox, applying Lato 11px font. TextBoxRight avoids
-  // the height-split issue of TextBoxBelow on a 20px-tall slider.
-  lfoRateSlider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
-  lfo2RateSlider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+  // LFO rate sliders: initial text box used h=16 (default LAF).
+  // Pass h=14 so JUCE detects a change and recreates via createSliderTextBox
+  // with BreadbinLookAndFeel active → Lato 11px font.
+  // Slider is h=34 total: 20px track + 14px text box.
+  lfoRateSlider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
+  lfo2RateSlider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
 
   repaint();
 }
@@ -1521,7 +1521,9 @@ void ModMatrixPanel::timerCallback() {
                         juce::dontSendNotification);
 
   lfoDisplay1.setWaveType(lfoWaveformSelector.getSelectedId());
+  lfoDisplay1.setPhase(static_cast<float>(processor.getLFO().phase));
   lfoDisplay2.setWaveType(lfo2WaveformSelector.getSelectedId());
+  lfoDisplay2.setPhase(static_cast<float>(processor.getLFO2().phase));
 }
 
 // ========== CHORD MEMORY PANEL ==========

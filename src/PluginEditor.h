@@ -69,6 +69,12 @@ public:
       const juce::String &sectionName,
       const juce::PopupMenu::Options &) override;
 
+  juce::Label *createSliderTextBox(juce::Slider &slider) override {
+    auto *l = juce::LookAndFeel_V4::createSliderTextBox(slider);
+    l->setFont(proFont.withHeight(11.0f));
+    return l;
+  }
+
 private:
   juce::Font proFont, boldFont, monoFont;
 };
@@ -356,6 +362,10 @@ public:
   void setWaveType(int type) {
     if (waveType != type) { waveType = type; repaint(); }
   }
+  void setPhase(float p) {
+    phase = p;
+    repaint();
+  }
   void paint(juce::Graphics &g) override {
     auto b = getLocalBounds().toFloat();
     g.setColour(juce::Colour(20, 20, 25));
@@ -410,9 +420,17 @@ public:
     g.strokePath(path, juce::PathStrokeType(2.5f));
     g.setColour(juce::Colours::cyan);
     g.strokePath(path, juce::PathStrokeType(1.0f));
+
+    // Phase playhead
+    float px = x0 + juce::jlimit(0.0f, 1.0f, phase) * w;
+    g.setColour(juce::Colours::white.withAlpha(0.2f));
+    g.fillRect(juce::Rectangle<float>(px - 1.0f, b.getY() + 2.0f, 2.0f, b.getHeight() - 4.0f));
+    g.setColour(juce::Colours::white.withAlpha(0.85f));
+    g.fillRect(juce::Rectangle<float>(px - 0.5f, b.getY() + 2.0f, 1.0f, b.getHeight() - 4.0f));
   }
 private:
   int waveType = 1;
+  float phase = 0.0f;
 };
 
 // Modulation popup panel (LFO1/LFO2, Pitch Bend Range, Mod Matrix)
