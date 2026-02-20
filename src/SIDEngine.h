@@ -11,7 +11,8 @@ class SID;
 
 class SIDEngine {
 public:
-  enum class ChipModel { MOS6581, MOS8580 };
+  enum class ChipModel { MOS6581, MOS6581R4, MOS8580, MOS8580D };
+  enum class ClockMode { PAL, NTSC };
   enum class Waveform {
     Triangle = 0x10,
     Sawtooth = 0x20,
@@ -24,6 +25,8 @@ public:
 
   void prepare(double sampleRate);
   void setChipModel(ChipModel model);
+  void setClockMode(ClockMode mode);
+  ClockMode getClockMode() const { return currentClockMode; }
   void setAgingFactor(float aging); // 0.0 = fresh, 1.0 = vintage
 
   // Generate one sample at host sample rate (handles internal clock/resample)
@@ -31,7 +34,10 @@ public:
 
   // Voice control (0-2)
   void noteOn(int voice, int midiNote, int velocity);
+  void noteOn(int voice, int midiNote, int velocity, float detuneCents);
   void noteOff(int voice);
+  void setFrequency(int voice,
+                    double hz); // For portamento - no envelope retrigger
 
   // Per-voice parameters
   void setWaveform(int voice, Waveform waveform);
@@ -41,10 +47,9 @@ public:
   void setSustain(int voice, int sustain); // 0-15
   void setRelease(int voice, int release); // 0-15
 
-  // Ring modulation and Hard sync
-  void setRingMod(int voice,
-                  bool enabled); // Voice ring-mods with previous voice
-  void setHardSync(int voice, bool enabled); // Voice syncs from previous voice
+  // Voice modulation
+  void setRingMod(int voice, bool enabled); // Ring mod with voice N-1
+  void setSync(int voice, bool enabled);    // Hard sync with voice N-1
 
   // Filter parameters
   void setFilterCutoff(int cutoff);       // 0-2047
@@ -55,11 +60,16 @@ public:
   // Master volume
   void setVolume(int volume); // 0-15
 
+  // External audio input (routes through filter)
+  void setExternalInput(float sample); // -1.0 to +1.0
+
 private:
   std::unique_ptr<reSIDfp::SID> sid;
 
   double hostSampleRate = 44100.0;
   static constexpr double SID_CLOCK_PAL = 985248.0;
+  static constexpr double SID_CLOCK_NTSC = 1022727.0;
+  ClockMode currentClockMode = ClockMode::PAL;
 
   // Resampling state
   double clockAccumulator = 0.0;
@@ -83,22 +93,25 @@ private:
     uint8_t sustain = 15;
     uint8_t release = 0;
     bool gateOn = false;
-    bool ringMod = false;
-    bool hardSync = false;
+    bool ringMod = false; // Ring modulation with voice N-1
+    bool sync = false;    // Hard sync with voice N-1
   };
   std::array<VoiceCache, 3> voiceCache;
 
   // Filter state cache
   uint16_t filterCutoff = 1024;
   uint8_t filterResonance = 0;
-  uint8_t filterMode = 0;
+  uint8_t filterMode =
+      0x10; // Default lowpass so filtered voices produce output
   uint8_t filterVoiceMask = 0;
   uint8_t masterVolume = 15;
 
   void writeRegister(uint8_t reg, uint8_t value);
   void updateVoiceRegisters(int voice);
   void updateFilterRegisters();
+  void applyChipProfile(ChipModel model);
   uint16_t midiNoteToFrequency(int midiNote);
+  double getClockHz() const;
 
   // Non-copyable
   SIDEngine(const SIDEngine &) = delete;

@@ -13,17 +13,21 @@ SIDEngine::SIDEngine() {
   setVolume(15);
   setFilterCutoff(1024);
   setFilterResonance(0);
+  setFilterMode(true, false,
+                false); // Default to lowpass so filtered voices produce output
 }
 
 SIDEngine::~SIDEngine() = default;
 
 void SIDEngine::prepare(double sampleRate) {
   hostSampleRate = sampleRate;
-  clockRatio = SID_CLOCK_PAL / hostSampleRate;
+  double clockHz =
+      (currentClockMode == ClockMode::NTSC) ? SID_CLOCK_NTSC : SID_CLOCK_PAL;
+  clockRatio = clockHz / hostSampleRate;
   clockAccumulator = 0.0;
 
   // Configure SID sampling
-  sid->setSamplingParameters(SID_CLOCK_PAL, reSIDfp::SamplingMethod::RESAMPLE,
+  sid->setSamplingParameters(clockHz, reSIDfp::SamplingMethod::RESAMPLE,
                              sampleRate);
 
   // Initialize all voice registers so noteOn will work immediately
@@ -40,11 +44,47 @@ void SIDEngine::prepare(double sampleRate) {
 }
 
 void SIDEngine::setChipModel(ChipModel model) {
-  if (model == ChipModel::MOS6581) {
+  // Set base silicon model
+  if (model == ChipModel::MOS6581 || model == ChipModel::MOS6581R4) {
     sid->setChipModel(reSIDfp::ChipModel::MOS6581);
   } else {
     sid->setChipModel(reSIDfp::ChipModel::MOS8580);
   }
+  // Apply variant-specific filter and waveform tuning
+  applyChipProfile(model);
+}
+
+void SIDEngine::applyChipProfile(ChipModel model) {
+  switch (model) {
+  case ChipModel::MOS6581:
+    // Classic early 6581: warm, gritty, iconic filter sweep
+    sid->setFilter6581Curve(0.5);
+    sid->setFilter6581Range(0.5);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::AVERAGE);
+    break;
+  case ChipModel::MOS6581R4:
+    // Later 6581 revision: brighter filter, stronger combined waveforms
+    sid->setFilter6581Curve(0.8);
+    sid->setFilter6581Range(0.7);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::STRONG);
+    break;
+  case ChipModel::MOS8580:
+    // Standard 8580: cleaner, tighter bass, balanced
+    sid->setFilter8580Curve(0.5);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::AVERAGE);
+    break;
+  case ChipModel::MOS8580D:
+    // Digiboost-era 8580: mellower, weaker combined waveforms
+    sid->setFilter8580Curve(0.35);
+    sid->setCombinedWaveforms(reSIDfp::CombinedWaveforms::WEAK);
+    break;
+  }
+}
+
+void SIDEngine::setClockMode(ClockMode mode) {
+  currentClockMode = mode;
+  if (hostSampleRate > 0)
+    prepare(hostSampleRate);
 }
 
 void SIDEngine::setAgingFactor(float aging) {
@@ -97,11 +137,24 @@ float SIDEngine::clock() {
 }
 
 void SIDEngine::noteOn(int voice, int midiNote, int velocity) {
+  noteOn(voice, midiNote, velocity, 0.0f);
+}
+
+void SIDEngine::noteOn(int voice, int midiNote, int velocity,
+                       float detuneCents) {
   if (voice < 0 || voice > 2)
     return;
 
-  // Calculate SID frequency from MIDI note
-  uint16_t freq = midiNoteToFrequency(midiNote);
+  // Calculate detuned frequency
+  // cents to semitones: cents/100, MIDI note with fractional part
+  double detuneNote = static_cast<double>(midiNote) + (detuneCents / 100.0);
+
+  // MIDI note to Hz: f = 440 * 2^((n-69)/12)
+  double hz = 440.0 * std::pow(2.0, (detuneNote - 69.0) / 12.0);
+
+  // Convert to SID frequency register value
+  double fn = (hz * 16777216.0) / getClockHz();
+  uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
 
   // Set frequency registers
   int baseReg = voice * 7;
@@ -119,6 +172,20 @@ void SIDEngine::noteOff(int voice) {
 
   voiceCache[voice].gateOn = false;
   updateVoiceRegisters(voice);
+}
+
+void SIDEngine::setFrequency(int voice, double hz) {
+  if (voice < 0 || voice > 2)
+    return;
+
+  // Convert Hz to SID frequency register value
+  double fn = (hz * 16777216.0) / getClockHz();
+  uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+
+  // Set frequency registers only - no gate change
+  int baseReg = voice * 7;
+  writeRegister(baseReg + 0, freq & 0xFF);        // Freq Lo
+  writeRegister(baseReg + 1, (freq >> 8) & 0xFF); // Freq Hi
 }
 
 void SIDEngine::setWaveform(int voice, Waveform waveform) {
@@ -170,14 +237,16 @@ void SIDEngine::setRingMod(int voice, bool enabled) {
   if (voice < 0 || voice > 2)
     return;
   voiceCache[voice].ringMod = enabled;
-  updateVoiceRegisters(voice);
+  // Don't call updateVoiceRegisters - ring mod bit will be applied on next
+  // noteOn or waveform change. Calling it here can interfere with gate timing.
 }
 
-void SIDEngine::setHardSync(int voice, bool enabled) {
+void SIDEngine::setSync(int voice, bool enabled) {
   if (voice < 0 || voice > 2)
     return;
-  voiceCache[voice].hardSync = enabled;
-  updateVoiceRegisters(voice);
+  voiceCache[voice].sync = enabled;
+  // Don't call updateVoiceRegisters - sync bit will be applied on next noteOn
+  // or waveform change. Calling it here can interfere with gate timing.
 }
 
 void SIDEngine::setFilterCutoff(int cutoff) {
@@ -217,6 +286,13 @@ void SIDEngine::setVolume(int volume) {
   updateFilterRegisters();
 }
 
+void SIDEngine::setExternalInput(float sample) {
+  // Convert float (-1.0 to +1.0) to 16-bit signed integer
+  // The reSIDfp input() function accepts a 16-bit sample value
+  int value = static_cast<int>(std::clamp(sample, -1.0f, 1.0f) * 32767.0f);
+  sid->input(value);
+}
+
 void SIDEngine::writeRegister(uint8_t reg, uint8_t value) {
   sid->write(reg, value);
 }
@@ -226,12 +302,12 @@ void SIDEngine::updateVoiceRegisters(int voice) {
   auto &vc = voiceCache[voice];
 
   // Control register: waveform + ring mod + sync + gate
-  // Bit 0 = Gate, Bit 1 = Sync, Bit 2 = Ring Mod, Bits 4-7 = Waveform
   uint8_t control = vc.waveform | (vc.gateOn ? 0x01 : 0x00);
-  if (vc.hardSync)
-    control |= 0x02;
+  if (vc.sync)
+    control |= 0x02; // Bit 1: hard sync
   if (vc.ringMod)
-    control |= 0x04;
+    control |= 0x04; // Bit 2: ring modulation
+
   writeRegister(baseReg + 4, control);
 
   // Attack/Decay
@@ -267,7 +343,11 @@ uint16_t SIDEngine::midiNoteToFrequency(int midiNote) {
   double hz = 440.0 * std::pow(2.0, (midiNote - 69) / 12.0);
 
   // Convert to SID frequency register value
-  double fn = (hz * 16777216.0) / SID_CLOCK_PAL;
+  double fn = (hz * 16777216.0) / getClockHz();
 
   return static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+}
+
+double SIDEngine::getClockHz() const {
+  return (currentClockMode == ClockMode::NTSC) ? SID_CLOCK_NTSC : SID_CLOCK_PAL;
 }

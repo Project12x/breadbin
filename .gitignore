@@ -17,6 +17,7 @@ cmake-build-*/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Binaries
 *.exe
@@ -26,3 +27,6 @@ Thumbs.db
 *.obj
 *.pdb
 *.ilk
+
+# Backups
+releases/
