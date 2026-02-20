@@ -1044,8 +1044,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     addAndMakeVisible(label);
   };
 
-  setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 20.0f, 2.0f,
+  setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 10.0f, 2.0f,
                  juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
+  lfoRateSlider->setTextValueSuffix(" Hz");
   setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
@@ -1069,8 +1070,9 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   lfo2WaveformSelector.setTooltip("LFO2 waveform shape");
   addAndMakeVisible(lfo2WaveformSelector);
 
-  setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 20.0f, 3.0f,
+  setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 10.0f, 3.0f,
                  juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
+  lfo2RateSlider->setTextValueSuffix(" Hz");
   setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);

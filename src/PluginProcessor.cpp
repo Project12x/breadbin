@@ -2246,7 +2246,7 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"lfoWave", 1}, "LFO Waveform",
       juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"lfoRate", 1}, "LFO Rate", 0.1f, 20.0f, 2.0f));
+      juce::ParameterID{"lfoRate", 2}, "LFO Rate", 0.1f, 10.0f, 2.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfoDepthFilt", 1}, "LFO Filter Depth", 0.0f, 1.0f,
       0.0f));
@@ -2263,7 +2263,7 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"lfo2Wave", 1}, "LFO2 Waveform",
       juce::StringArray{"Triangle", "Sawtooth", "Square", "S&H"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"lfo2Rate", 1}, "LFO2 Rate", 0.1f, 20.0f, 3.0f));
+      juce::ParameterID{"lfo2Rate", 2}, "LFO2 Rate", 0.1f, 10.0f, 3.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfo2DepthFilt", 1}, "LFO2 Filter Depth", 0.0f, 1.0f,
       0.0f));

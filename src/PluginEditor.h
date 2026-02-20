@@ -383,50 +383,41 @@ public:
     g.setColour(juce::Colour(55, 55, 68));
     g.drawHorizontalLine(static_cast<int>(cy), x0, x0 + w);
 
-    juce::Path path;
-    if (waveType == 1) {                               // Triangle
-      path.startNewSubPath(x0,              yFor(0));
-      path.lineTo(x0 + w * 0.25f,          yFor(1));
-      path.lineTo(x0 + w * 0.75f,          yFor(-1));
-      path.lineTo(x0 + w,                  yFor(0));
-    } else if (waveType == 2) {                        // Sawtooth
-      path.startNewSubPath(x0,             yFor(-1));
-      path.lineTo(x0 + w * 0.97f,          yFor(1));
-      path.startNewSubPath(x0 + w * 0.97f, yFor(1));
-      path.lineTo(x0 + w * 0.97f,          yFor(-1));
-      path.lineTo(x0 + w,                  yFor(-1));
-    } else if (waveType == 3) {                        // Square
-      float mid = x0 + w * 0.5f;
-      path.startNewSubPath(x0,  yFor(1));
-      path.lineTo(mid,          yFor(1));
-      path.lineTo(mid,          yFor(-1));
-      path.lineTo(x0 + w,       yFor(-1));
-    } else {                                           // S&H
-      juce::Random rng(42);
-      const int N = 8;
-      float sw  = w / N;
-      float val = rng.nextFloat() * 2.0f - 1.0f;
-      path.startNewSubPath(x0, yFor(val));
-      for (int i = 0; i < N; ++i) {
-        float ex = x0 + static_cast<float>(i + 1) * sw;
-        path.lineTo(ex, yFor(val));
-        if (i < N - 1) {
-          val = rng.nextFloat() * 2.0f - 1.0f;
-          path.lineTo(ex, yFor(val));
-        }
+    // Waveform scrolls left as LFO phase advances — shows live motion
+    float p = juce::jlimit(0.0f, 1.0f, phase);
+
+    // Pre-generate S&H step values (fixed seed = deterministic, repeating pattern)
+    float shVals[16];
+    { juce::Random rng(42); for (auto &v : shVals) v = rng.nextFloat() * 2.0f - 1.0f; }
+
+    auto waveAt = [&](float t) -> float {
+      t -= std::floor(t); // wrap to [0, 1)
+      if (waveType == 1) { // Triangle
+        if (t < 0.25f) return t * 4.0f;
+        if (t < 0.75f) return 1.0f - (t - 0.25f) * 4.0f;
+        return -1.0f + (t - 0.75f) * 4.0f;
+      } else if (waveType == 2) { // Sawtooth
+        return t < 0.97f ? (-1.0f + (t / 0.97f) * 2.0f) : -1.0f;
+      } else if (waveType == 3) { // Square
+        return t < 0.5f ? 1.0f : -1.0f;
+      } else { // S&H: 8 fixed steps per cycle
+        return shVals[static_cast<int>(t * 8) % 16];
       }
+    };
+
+    juce::Path path;
+    const int numPts = static_cast<int>(w) + 1;
+    for (int i = 0; i < numPts; ++i) {
+      float t = static_cast<float>(i) / static_cast<float>(numPts - 1);
+      float x = x0 + t * w;
+      float y = yFor(waveAt(t + p));
+      if (i == 0) path.startNewSubPath(x, y);
+      else        path.lineTo(x, y);
     }
     g.setColour(juce::Colours::cyan.withAlpha(0.25f));
     g.strokePath(path, juce::PathStrokeType(2.5f));
     g.setColour(juce::Colours::cyan);
     g.strokePath(path, juce::PathStrokeType(1.0f));
-
-    // Phase playhead
-    float px = x0 + juce::jlimit(0.0f, 1.0f, phase) * w;
-    g.setColour(juce::Colours::white.withAlpha(0.2f));
-    g.fillRect(juce::Rectangle<float>(px - 1.0f, b.getY() + 2.0f, 2.0f, b.getHeight() - 4.0f));
-    g.setColour(juce::Colours::white.withAlpha(0.85f));
-    g.fillRect(juce::Rectangle<float>(px - 0.5f, b.getY() + 2.0f, 1.0f, b.getHeight() - 4.0f));
   }
 private:
   int waveType = 1;
