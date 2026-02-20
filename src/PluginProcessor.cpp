@@ -110,10 +110,21 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   extInputLevel = extInputLevelPtr->load();
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
 
+  // Query DAW playhead for BPM (fallback 120 in standalone / no transport)
+  double bpm = 120.0;
+  if (auto *ph = getPlayHead())
+    if (auto pos = ph->getPosition())
+      if (pos->getBpm().hasValue())
+        bpm = *pos->getBpm();
+
   // Sync LFO from APVTS
   lfo.enabled = lfoEnablePtr->load() > 0.5f;
   lfo.waveform = static_cast<LFOWaveform>(static_cast<int>(lfoWavePtr->load()));
   lfo.rate = lfoRatePtr->load();
+  if (isLfoSynced()) {
+    int idx = juce::jlimit(0, 10, juce::roundToInt(lfoSyncDivPtr->load()));
+    lfo.rate = static_cast<float>(bpm / 60.0 / kSyncDivBeats[idx]);
+  }
   lfo.depthFilter = lfoDepthFiltPtr->load();
   lfo.depthPulseWidth = lfoDepthPWPtr->load();
   lfo.depthPitch = lfoDepthPitchPtr->load();
@@ -123,6 +134,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   lfo2.waveform =
       static_cast<LFOWaveform>(static_cast<int>(lfo2WavePtr->load()));
   lfo2.rate = lfo2RatePtr->load();
+  if (isLfo2Synced()) {
+    int idx = juce::jlimit(0, 10, juce::roundToInt(lfo2SyncDivPtr->load()));
+    lfo2.rate = static_cast<float>(bpm / 60.0 / kSyncDivBeats[idx]);
+  }
   lfo2.depthFilter = lfo2DepthFiltPtr->load();
   lfo2.depthPulseWidth = lfo2DepthPWPtr->load();
   lfo2.depthPitch = lfo2DepthPitchPtr->load();
@@ -2260,6 +2275,11 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfoDepthPitch", 1}, "LFO Pitch Depth", 0.0f, 1.0f,
       0.0f));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"lfoSync", 1}, "LFO Sync", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"lfoSyncDiv", 1}, "LFO Sync Division",
+      juce::StringArray{"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"}, 4));
 
   // LFO2
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -2277,6 +2297,11 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"lfo2DepthPitch", 1}, "LFO2 Pitch Depth", 0.0f, 1.0f,
       0.0f));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"lfo2Sync", 1}, "LFO2 Sync", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"lfo2SyncDiv", 1}, "LFO2 Sync Division",
+      juce::StringArray{"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"}, 4));
 
   // PWM Sweep
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -2465,6 +2490,8 @@ void BreadbinProcessor::initializeParameterPointers() {
   lfoDepthFiltPtr = apvts.getRawParameterValue("lfoDepthFilt");
   lfoDepthPWPtr = apvts.getRawParameterValue("lfoDepthPW");
   lfoDepthPitchPtr = apvts.getRawParameterValue("lfoDepthPitch");
+  lfoSyncPtr = apvts.getRawParameterValue("lfoSync");
+  lfoSyncDivPtr = apvts.getRawParameterValue("lfoSyncDiv");
 
   lfo2EnablePtr = apvts.getRawParameterValue("lfo2Enable");
   lfo2WavePtr = apvts.getRawParameterValue("lfo2Wave");
@@ -2472,6 +2499,8 @@ void BreadbinProcessor::initializeParameterPointers() {
   lfo2DepthFiltPtr = apvts.getRawParameterValue("lfo2DepthFilt");
   lfo2DepthPWPtr = apvts.getRawParameterValue("lfo2DepthPW");
   lfo2DepthPitchPtr = apvts.getRawParameterValue("lfo2DepthPitch");
+  lfo2SyncPtr = apvts.getRawParameterValue("lfo2Sync");
+  lfo2SyncDivPtr = apvts.getRawParameterValue("lfo2SyncDiv");
 
   // PWM Sweep
   pwmSweepEnablePtr = apvts.getRawParameterValue("pwmSweepEnable");

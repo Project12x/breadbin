@@ -289,6 +289,8 @@ public:
   const LFOState &getLFO() const { return lfo; }
   LFOState &getLFO2() { return lfo2; }
   const LFOState &getLFO2() const { return lfo2; }
+  bool isLfoSynced()  const { return lfoSyncPtr  && lfoSyncPtr->load()  > 0.5f; }
+  bool isLfo2Synced() const { return lfo2SyncPtr && lfo2SyncPtr->load() > 0.5f; }
 
   // Wavetable
   const WavetableState &getWavetable() const { return wavetable; }
@@ -515,6 +517,22 @@ private:
   std::atomic<float> *lfo2DepthFiltPtr = nullptr;
   std::atomic<float> *lfo2DepthPWPtr = nullptr;
   std::atomic<float> *lfo2DepthPitchPtr = nullptr;
+
+  // LFO tempo sync APVTS pointers
+  std::atomic<float> *lfoSyncPtr     = nullptr;
+  std::atomic<float> *lfoSyncDivPtr  = nullptr;
+  std::atomic<float> *lfo2SyncPtr    = nullptr;
+  std::atomic<float> *lfo2SyncDivPtr = nullptr;
+
+  // Sync division lookup: beats-per-cycle indexed 0..10
+  // {"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"}
+  static constexpr float kSyncDivBeats[11] = {
+      16.0f, 8.0f, 4.0f, 2.0f,
+      1.0f,                        // 1/4 quarter note (default, index 4)
+      0.5f, 0.25f,
+      1.5f, 0.75f,                 // dotted quarter, dotted eighth
+      2.0f / 3.0f, 1.0f / 3.0f   // quarter triplet, eighth triplet
+  };
 
   // PWM Sweep APVTS pointers
   std::atomic<float> *pwmSweepEnablePtr = nullptr;

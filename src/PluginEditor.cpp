@@ -1293,6 +1293,44 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "lfo2DepthPitch", *lfo2DepthPitchSlider);
 
+  // LFO1 Sync controls
+  {
+    int id = 1;
+    for (const char *s : {"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"})
+      lfoSyncDivCombo.addItem(s, id++);
+  }
+  lfoSyncDivCombo.setVisible(false);
+  addAndMakeVisible(lfoSyncDivCombo);
+  lfoSyncModeBtn.setButtonText("Free");
+  lfoSyncModeBtn.setClickingTogglesState(true);
+  lfoSyncModeBtn.setColour(juce::TextButton::buttonOnColourId,
+                            juce::Colours::cyan.darker(0.3f));
+  addAndMakeVisible(lfoSyncModeBtn);
+
+  // LFO2 Sync controls
+  {
+    int id = 1;
+    for (const char *s : {"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"})
+      lfo2SyncDivCombo.addItem(s, id++);
+  }
+  lfo2SyncDivCombo.setVisible(false);
+  addAndMakeVisible(lfo2SyncDivCombo);
+  lfo2SyncModeBtn.setButtonText("Free");
+  lfo2SyncModeBtn.setClickingTogglesState(true);
+  lfo2SyncModeBtn.setColour(juce::TextButton::buttonOnColourId,
+                             juce::Colours::orange.darker(0.3f));
+  addAndMakeVisible(lfo2SyncModeBtn);
+
+  using APVTS = juce::AudioProcessorValueTreeState;
+  lfoSyncAttach     = std::make_unique<APVTS::ButtonAttachment>(
+      processor.apvts, "lfoSync", lfoSyncModeBtn);
+  lfoSyncDivAttach  = std::make_unique<APVTS::ComboBoxAttachment>(
+      processor.apvts, "lfoSyncDiv", lfoSyncDivCombo);
+  lfo2SyncAttach    = std::make_unique<APVTS::ButtonAttachment>(
+      processor.apvts, "lfo2Sync", lfo2SyncModeBtn);
+  lfo2SyncDivAttach = std::make_unique<APVTS::ComboBoxAttachment>(
+      processor.apvts, "lfo2SyncDiv", lfo2SyncDivCombo);
+
   // PWM Sweep attachments
   pwmSweepEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -1379,7 +1417,9 @@ void ModMatrixPanel::resized() {
   // LFO row layout helper
   auto layoutLfoRow = [this](int y, juce::ToggleButton &enableBtn,
                              juce::ComboBox &waveBox, MappableSlider &rateSldr,
-                             juce::Label &rateLbl, MappableSlider &fltSldr,
+                             juce::Label &rateLbl, juce::TextButton &syncBtn,
+                             juce::ComboBox &syncDivCombo,
+                             MappableSlider &fltSldr,
                              juce::Label &fltLbl, MappableSlider &pwSldr,
                              juce::Label &pwLbl, MappableSlider &vibSldr,
                              juce::Label &vibLbl) {
@@ -1388,8 +1428,10 @@ void ModMatrixPanel::resized() {
     x += 54;
     waveBox.setBounds(x, y + 14, 68, 20);
     x += 76;
-    rateLbl.setBounds(x, y + 2, 40, 12);
-    rateSldr.setBounds(x, y + 14, 80, 34); // h=34: 20px track + 14px text box
+    rateLbl.setBounds(x, y + 2, 36, 12);
+    syncBtn.setBounds(x + 38, y + 2, 42, 14);
+    rateSldr.setBounds(x, y + 16, 80, 34); // h=34: 20px track + 14px text box
+    syncDivCombo.setBounds(x, y + 16, 80, 20);
     x += 88;
     const int dW = 42;
     fltLbl.setBounds(x, y + 2, dW, 12);
@@ -1404,14 +1446,16 @@ void ModMatrixPanel::resized() {
 
   // LFO1 row: y=0..54
   layoutLfoRow(0, lfoEnableButton, lfoWaveformSelector, *lfoRateSlider,
-               lfoRateLabel, *lfoDepthFilterSlider, lfoDepthFilterLabel,
+               lfoRateLabel, lfoSyncModeBtn, lfoSyncDivCombo,
+               *lfoDepthFilterSlider, lfoDepthFilterLabel,
                *lfoDepthPWSlider, lfoDepthPWLabel, *lfoDepthPitchSlider,
                lfoDepthPitchLabel);
   lfoDisplay1.setBounds(362, 14, 120, 36);
 
   // LFO2 row: y=55..109
   layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector, *lfo2RateSlider,
-               lfo2RateLabel, *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
+               lfo2RateLabel, lfo2SyncModeBtn, lfo2SyncDivCombo,
+               *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
                *lfo2DepthPWSlider, lfo2DepthPWLabel, *lfo2DepthPitchSlider,
                lfo2DepthPitchLabel);
   lfoDisplay2.setBounds(362, 69, 120, 36);
@@ -1528,6 +1572,16 @@ void ModMatrixPanel::timerCallback() {
   lfoDisplay1.setPhase(static_cast<float>(processor.getLFO().phase));
   lfoDisplay2.setWaveType(lfo2WaveformSelector.getSelectedId());
   lfoDisplay2.setPhase(static_cast<float>(processor.getLFO2().phase));
+
+  bool s1 = processor.isLfoSynced();
+  lfoSyncModeBtn.setButtonText(s1 ? "Sync" : "Free");
+  lfoRateSlider->setVisible(!s1);
+  lfoSyncDivCombo.setVisible(s1);
+
+  bool s2 = processor.isLfo2Synced();
+  lfo2SyncModeBtn.setButtonText(s2 ? "Sync" : "Free");
+  lfo2RateSlider->setVisible(!s2);
+  lfo2SyncDivCombo.setVisible(s2);
 }
 
 // ========== CHORD MEMORY PANEL ==========

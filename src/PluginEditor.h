@@ -462,6 +462,10 @@ private:
       lfoWaveAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       lfoRateAttach, lfoDepthFiltAttach, lfoDepthPWAttach, lfoDepthPitchAttach;
+  juce::TextButton lfoSyncModeBtn;
+  juce::ComboBox   lfoSyncDivCombo;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>   lfoSyncAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfoSyncDivAttach;
 
   // ========== LFO2 ==========
   MappableToggle lfo2EnableButton{"LFO2", processor,
@@ -480,6 +484,10 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       lfo2RateAttach, lfo2DepthFiltAttach, lfo2DepthPWAttach,
       lfo2DepthPitchAttach;
+  juce::TextButton lfo2SyncModeBtn;
+  juce::ComboBox   lfo2SyncDivCombo;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>   lfo2SyncAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfo2SyncDivAttach;
 
   // ========== PWM SWEEP ==========
   MappableToggle pwmSweepEnableButton{

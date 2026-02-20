@@ -583,18 +583,19 @@ void testLFOWaveformMapping() {
   if (!choice)
     return;
 
-  ASSERT_TRUE(choice->choices.size() == 4,
-              "lfoWave has exactly 4 choices (no ghost Sine)");
+  ASSERT_TRUE(choice->choices.size() == 5,
+              "lfoWave has exactly 5 choices (Triangle/Saw/Square/S&H/Sine)");
 
   // Verify names match canonical ordering
   ASSERT_TRUE(choice->choices[0] == "Triangle", "lfoWave[0] = Triangle");
   ASSERT_TRUE(choice->choices[1] == "Sawtooth", "lfoWave[1] = Sawtooth");
   ASSERT_TRUE(choice->choices[2] == "Square", "lfoWave[2] = Square");
   ASSERT_TRUE(choice->choices[3] == "S&H", "lfoWave[3] = S&H");
+  ASSERT_TRUE(choice->choices[4] == "Sine", "lfoWave[4] = Sine");
 
   // Verify each APVTS index maps to correct DSP enum
-  const char *names[] = {"Triangle", "Sawtooth", "Square", "S&H"};
-  for (int i = 0; i < 4; ++i) {
+  const char *names[] = {"Triangle", "Sawtooth", "Square", "S&H", "Sine"};
+  for (int i = 0; i < 5; ++i) {
     choice->setValueNotifyingHost(choice->convertTo0to1(static_cast<float>(i)));
 
     // Process a block so processBlock syncs lfo.waveform from APVTS
