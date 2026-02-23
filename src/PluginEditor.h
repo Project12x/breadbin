@@ -694,6 +694,9 @@ private:
   juce::ComboBox rootNoteSelector;
   juce::Label rootNoteLabel;
 
+  juce::ComboBox bitDepthSelector;
+  juce::Label bitDepthLabel;
+
   juce::ToggleButton loopButton{"Loop"};
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       loopAttach;

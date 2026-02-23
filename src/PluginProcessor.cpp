@@ -100,7 +100,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Sync global parameters from APVTS
   masterVolume = masterVolPtr->load();
-  setMasterVolume(masterVolume); // Sync SID volume register from APVTS
+  // Master volume is applied as output gain in the sample loop.
+  // SID volume register set to max for voice rendering; digi modes
+  // manage the register themselves (4-bit writes $D418, 8-bit zeroes it).
   dualMode = static_cast<DualMode>(static_cast<int>(dualModePtr->load()));
   setAgingFactor(agingPtr->load());
   leftDetuneCents = leftDetunePtr->load();
@@ -112,6 +114,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   bool digiEnabled = digiEnablePtr->load() > 0.5f;
   digiSampler.setRootNote(static_cast<int>(digiRootNotePtr->load()));
   digiSampler.setLooping(digiLoopPtr->load() > 0.5f);
+  int digiBitDepth = static_cast<int>(digiBitDepthPtr->load()) == 1 ? 8 : 4;
+  digiSampler.setBitDepth(digiBitDepth);
 
   // Query DAW playhead for BPM (fallback 120 in standalone / no transport)
   double bpm = 120.0;
@@ -361,6 +365,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   rightGainL *= rightVoiceGain;
   rightGainR *= rightVoiceGain;
 
+  // SID volume register always at max — master volume is applied as output gain,
+  // and the 20Hz DC blocker removes SID idle offset.
+  sidLeft.setVolume(15);
+  sidRight.setVolume(15);
+
   // Mute SID voices during digi playback when no voices are enabled,
   // giving clean digi-only output. When voices ARE enabled, digi runs
   // additively — the $D418 volume modulates voice output (authentic C64).
@@ -386,12 +395,21 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       sidRight.setExternalInput(extR);
     }
 
-    // Digi sample playback: write 4-bit volume to $D418 before clocking
+    // Digi sample playback
+    float digi8bitSample = 0.0f;
     if (digiEnabled && digiSampler.isPlaying()) {
       int digiVal = digiSampler.getNextSample();
       if (digiVal >= 0) {
-        sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
-        sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+        if (digiBitDepth == 4) {
+          // 4-bit: authentic $D418 volume register write
+          sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+          sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+        } else {
+          // 8-bit: direct mix (bypass $D418, higher quality)
+          // Scale to match SID output level (~0.5 peak from /32768 normalization).
+          // 0.15 base * 3x digiGain = ~0.45, comparable to SID voice output.
+          digi8bitSample = (static_cast<float>(digiVal) - 128.0f) / 128.0f * 0.15f;
+        }
       }
     }
 
@@ -401,6 +419,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     // Apply per-SID pan (equal-power pan law) with voice count compensation
     float outL = (sampleL * leftGainL + sampleR * rightGainL) * digiGain;
     float outR = (sampleL * leftGainR + sampleR * rightGainR) * digiGain;
+
+    // Mix 8-bit digi directly into output (bypasses SID volume DAC)
+    if (digiBitDepth == 8 && digi8bitSample != 0.0f) {
+      outL += digi8bitSample * digiGain;
+      outR += digi8bitSample * digiGain;
+    }
+
+    // Apply master volume as output gain (covers voices + digi)
+    outL *= masterVolume;
+    outR *= masterVolume;
 
     // All modes use the same stereo output path.
     // In Unison, both SIDs render the same notes independently,
@@ -1055,9 +1083,8 @@ void BreadbinProcessor::applyFilterModulation() {
 
 void BreadbinProcessor::setMasterVolume(float vol) {
   masterVolume = juce::jlimit(0.0f, 1.0f, vol);
-  int sidVol = static_cast<int>(masterVolume * 15.0f);
-  sidLeft.setVolume(sidVol);
-  sidRight.setVolume(sidVol);
+  // Volume is applied as output gain in processBlock, not via SID register,
+  // so that digi playback also responds to the master volume knob.
 }
 
 void BreadbinProcessor::setLeftChipModel(SIDEngine::ChipModel model) {
@@ -1173,6 +1200,11 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
       juce::MemoryBlock mb(packed.data(), packed.size());
       digiState.setProperty("sampleData", mb.toBase64Encoding(), nullptr);
     }
+    const auto &data8 = digiSampler.getData8bit();
+    if (!data8.empty()) {
+      juce::MemoryBlock mb8(data8.data(), data8.size());
+      digiState.setProperty("sampleData8bit", mb8.toBase64Encoding(), nullptr);
+    }
     apvts.state.addChild(digiState, -1, nullptr);
   }
 
@@ -1218,15 +1250,26 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         int numSamp = digiState.getProperty("numSamples", 0);
         double sr = digiState.getProperty("sampleRate", 44100.0);
         juce::String path = digiState.getProperty("filePath", "");
-        juce::String b64 = digiState.getProperty("sampleData", "");
-        if (numSamp > 0 && b64.isNotEmpty()) {
-          juce::MemoryBlock mb;
-          mb.fromBase64Encoding(b64);
-          std::vector<uint8_t> packed(
-              static_cast<const uint8_t *>(mb.getData()),
-              static_cast<const uint8_t *>(mb.getData()) + mb.getSize());
-          digiSampler.setPackedData(packed, numSamp, sr,
-                                    path.toStdString());
+        // Prefer 8-bit data if available, fall back to 4-bit packed
+        juce::String b64_8 = digiState.getProperty("sampleData8bit", "");
+        if (numSamp > 0 && b64_8.isNotEmpty()) {
+          juce::MemoryBlock mb8;
+          mb8.fromBase64Encoding(b64_8);
+          std::vector<uint8_t> data8(
+              static_cast<const uint8_t *>(mb8.getData()),
+              static_cast<const uint8_t *>(mb8.getData()) + mb8.getSize());
+          digiSampler.setData8bit(data8, numSamp, sr, path.toStdString());
+        } else {
+          juce::String b64 = digiState.getProperty("sampleData", "");
+          if (numSamp > 0 && b64.isNotEmpty()) {
+            juce::MemoryBlock mb;
+            mb.fromBase64Encoding(b64);
+            std::vector<uint8_t> packed(
+                static_cast<const uint8_t *>(mb.getData()),
+                static_cast<const uint8_t *>(mb.getData()) + mb.getSize());
+            digiSampler.setPackedData(packed, numSamp, sr,
+                                      path.toStdString());
+          }
         }
       }
 
@@ -1242,9 +1285,11 @@ void BreadbinProcessor::prepareSafetyChain(double sampleRate,
   spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
   spec.numChannels = 2;
 
-  // 5Hz 2nd-order Butterworth DC blocker (kills SID DC offset)
+  // 20Hz 2nd-order Butterworth DC blocker (kills SID DC offset).
+  // 20Hz is below audible range but fast enough to track and remove
+  // the MOS6581's significant idle DC offset.
   *subsonicFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(
-      sampleRate, 5.0f, 0.707f);
+      sampleRate, 20.0f, 0.707f);
   subsonicFilter.prepare(spec);
 
   // 20kHz low-pass (ultrasonic filter)
@@ -2153,6 +2198,12 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
       p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
     break;
   }
+  case ControlParam::DigiBitDepth: {
+    auto *p = apvts.getParameter("digiBitDepth");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
   default:
     break;
   }
@@ -2315,6 +2366,8 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Digi Root Note";
   case ControlParam::DigiLoop:
     return "Digi Loop";
+  case ControlParam::DigiBitDepth:
+    return "Digi Bit Depth";
   default:
     return "Unknown";
   }
@@ -2343,13 +2396,15 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"dualMode", 1}, "Dual SID Mode",
       juce::StringArray{"Stereo Split", "Unison", "Multitimbral"}, 0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
-      juce::ParameterID{"chipLeft", 2}, "Left Chip Model",
-      juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
+      juce::ParameterID{"chipLeft", 3}, "Left Chip Model",
+      juce::StringArray{"MOS 6581", "MOS 6581 R2", "MOS 6581 R3", "MOS 6581 R4",
+                         "MOS 8580", "MOS 8580 R5", "CSG 9580", "MOS 8580D"},
       0));
   layout.add(std::make_unique<juce::AudioParameterChoice>(
-      juce::ParameterID{"chipRight", 2}, "Right Chip Model",
-      juce::StringArray{"MOS 6581", "MOS 6581 R4", "MOS 8580", "MOS 8580D"},
-      2));
+      juce::ParameterID{"chipRight", 3}, "Right Chip Model",
+      juce::StringArray{"MOS 6581", "MOS 6581 R2", "MOS 6581 R3", "MOS 6581 R4",
+                         "MOS 8580", "MOS 8580 R5", "CSG 9580", "MOS 8580D"},
+      4));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"aging", 1}, "Chip Age", 0.0f, 1.0f, 0.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -2375,6 +2430,9 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"digiRootNote", 1}, "Digi Root Note", 24, 96, 60));
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"digiLoop", 1}, "Digi Loop", false));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"digiBitDepth", 1}, "Digi Bit Depth",
+      juce::StringArray{"4-bit", "8-bit"}, 0));
 
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"leftPan", 1}, "Left SID Pan", -1.0f, 1.0f, -1.0f));
@@ -2611,6 +2669,7 @@ void BreadbinProcessor::initializeParameterPointers() {
   digiEnablePtr = apvts.getRawParameterValue("digiEnable");
   digiRootNotePtr = apvts.getRawParameterValue("digiRootNote");
   digiLoopPtr = apvts.getRawParameterValue("digiLoop");
+  digiBitDepthPtr = apvts.getRawParameterValue("digiBitDepth");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");
   pitchBendRangePtr = apvts.getRawParameterValue("pitchBendRange");

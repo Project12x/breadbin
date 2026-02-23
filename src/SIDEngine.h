@@ -11,7 +11,16 @@ class SID;
 
 class SIDEngine {
 public:
-  enum class ChipModel { MOS6581, MOS6581R4, MOS8580, MOS8580D };
+  enum class ChipModel {
+    MOS6581,    // 0: Standard early 6581
+    MOS6581R2,  // 1: Early revision, bright, weak combined waveforms
+    MOS6581R3,  // 2: Most common 6581, slightly dark
+    MOS6581R4,  // 3: Late revision, bright filter, strong combined waveforms
+    MOS8580,    // 4: Standard 8580, clean
+    MOS8580R5,  // 5: Late 8580, darker, stronger combined waveforms
+    CSG9580,    // 6: Final production run, bright and clean
+    MOS8580D    // 7: Digiboost era, mellow
+  };
   enum class ClockMode { PAL, NTSC };
   enum class Waveform {
     Triangle = 0x10,

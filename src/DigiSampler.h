@@ -8,16 +8,17 @@
 #include <string>
 #include <vector>
 
-// 4-bit digi sample player for authentic C64 $D418 volume register playback.
-// Samples are quantized to 16 levels (0-15), packed 2 per byte.
+// Digi sample player for C64-style playback with two modes:
+//   4-bit: Authentic $D418 volume register playback (0-15), packed 2 per byte
+//   8-bit: Higher quality direct mix (0-255), 1 byte per sample
 // Pitch-tracks to MIDI notes via a configurable root note.
 //
 // Usage:
 //   GUI thread:  loadFromFile(path)
 //   Audio thread: noteOn(midiNote, hostSR), getNextSample(), noteOff()
 //
-// The caller writes the returned 4-bit value to SID register $D418 via
-// SIDEngine::writeVolumeRegister() before each clock() call.
+// In 4-bit mode, the caller writes the returned value to SID register $D418.
+// In 8-bit mode, the caller mixes the returned value directly into output.
 class DigiSampler {
 public:
   DigiSampler() = default;
@@ -54,27 +55,34 @@ public:
       peak = std::max(peak, std::abs(mono[i]));
     float scale = (peak > 0.0001f) ? (1.0f / peak) : 1.0f;
 
-    // Quantize to 4-bit (0-15) and pack: high nibble = even, low nibble = odd
+    // Store both 4-bit packed and 8-bit unpacked representations
     int packedSize = (totalSamples + 1) / 2;
-    std::vector<uint8_t> newData(static_cast<size_t>(packedSize), 0);
+    std::vector<uint8_t> newData4(static_cast<size_t>(packedSize), 0);
+    std::vector<uint8_t> newData8(static_cast<size_t>(totalSamples), 0);
 
     for (int i = 0; i < totalSamples; ++i) {
       float normalized = mono[i] * scale;
-      int quantized =
-          static_cast<int>((normalized + 1.0f) * 7.5f + 0.5f); // [-1,+1]->[0,15]
-      quantized = std::clamp(quantized, 0, 15);
 
+      // 8-bit: [-1,+1] -> [0,255]
+      int q8 = static_cast<int>((normalized + 1.0f) * 127.5f + 0.5f);
+      q8 = std::clamp(q8, 0, 255);
+      newData8[static_cast<size_t>(i)] = static_cast<uint8_t>(q8);
+
+      // 4-bit: [-1,+1] -> [0,15], packed 2 per byte
+      int q4 = static_cast<int>((normalized + 1.0f) * 7.5f + 0.5f);
+      q4 = std::clamp(q4, 0, 15);
       int byteIdx = i / 2;
       if (i % 2 == 0)
-        newData[static_cast<size_t>(byteIdx)] |=
-            static_cast<uint8_t>(quantized << 4);
+        newData4[static_cast<size_t>(byteIdx)] |=
+            static_cast<uint8_t>(q4 << 4);
       else
-        newData[static_cast<size_t>(byteIdx)] |=
-            static_cast<uint8_t>(quantized);
+        newData4[static_cast<size_t>(byteIdx)] |=
+            static_cast<uint8_t>(q4);
     }
 
     // Commit atomically (audio thread reads only when loaded && playing)
-    sampleData = std::move(newData);
+    sampleData = std::move(newData4);
+    sampleData8bit = std::move(newData8);
     numSamples = totalSamples;
     sourceSampleRate = reader->sampleRate;
     filePath = path;
@@ -87,6 +95,7 @@ public:
     playing = false;
     loaded = false;
     sampleData.clear();
+    sampleData8bit.clear();
     numSamples = 0;
     sourceSampleRate = 44100.0;
     filePath.clear();
@@ -110,7 +119,8 @@ public:
 
   void noteOff() { playing = false; }
 
-  // Returns next 4-bit sample (0-15), or -1 if not playing.
+  // Returns next sample value, or -1 if not playing.
+  // 4-bit mode: returns 0-15, 8-bit mode: returns 0-255.
   int getNextSample() {
     if (!playing || numSamples == 0)
       return -1;
@@ -126,13 +136,24 @@ public:
       }
     }
 
-    // Linear interpolation between adjacent 4-bit samples
-    uint8_t s0 = getSample4bit(idx);
-    uint8_t s1 = getSample4bit(std::min(idx + 1, numSamples - 1));
     double frac = position - static_cast<double>(idx);
-    int interpolated = static_cast<int>(
-        s0 + frac * (static_cast<double>(s1) - static_cast<double>(s0)) + 0.5);
-    interpolated = std::clamp(interpolated, 0, 15);
+    int interpolated;
+
+    if (bitDepth == 8) {
+      // 8-bit: interpolate from unpacked buffer
+      uint8_t s0 = getSample8bit(idx);
+      uint8_t s1 = getSample8bit(std::min(idx + 1, numSamples - 1));
+      interpolated = static_cast<int>(
+          s0 + frac * (static_cast<double>(s1) - static_cast<double>(s0)) + 0.5);
+      interpolated = std::clamp(interpolated, 0, 255);
+    } else {
+      // 4-bit: interpolate from packed nibble buffer
+      uint8_t s0 = getSample4bit(idx);
+      uint8_t s1 = getSample4bit(std::min(idx + 1, numSamples - 1));
+      interpolated = static_cast<int>(
+          s0 + frac * (static_cast<double>(s1) - static_cast<double>(s0)) + 0.5);
+      interpolated = std::clamp(interpolated, 0, 15);
+    }
 
     position += increment;
     return interpolated;
@@ -146,10 +167,13 @@ public:
   int getRootNote() const { return rootNote; }
   void setLooping(bool loop) { looping = loop; }
   bool isLooping() const { return looping; }
+  void setBitDepth(int depth) { bitDepth = (depth == 8) ? 8 : 4; }
+  int getBitDepth() const { return bitDepth; }
 
   // ---- State serialization ----
 
   const std::vector<uint8_t> &getPackedData() const { return sampleData; }
+  const std::vector<uint8_t> &getData8bit() const { return sampleData8bit; }
 
   void setPackedData(const std::vector<uint8_t> &data, int count, double sr,
                      const std::string &path) {
@@ -159,14 +183,45 @@ public:
     filePath = path;
     loaded = (numSamples > 0);
     playing = false;
+    // Regenerate 8-bit from 4-bit if not provided separately
+    sampleData8bit.resize(static_cast<size_t>(numSamples));
+    for (int i = 0; i < numSamples; ++i)
+      sampleData8bit[static_cast<size_t>(i)] =
+          static_cast<uint8_t>(getSample4bit(i) * 17); // 0-15 -> 0-255
+  }
+
+  void setData8bit(const std::vector<uint8_t> &data, int count, double sr,
+                   const std::string &path) {
+    sampleData8bit = data;
+    numSamples = count;
+    sourceSampleRate = sr;
+    filePath = path;
+    loaded = (numSamples > 0);
+    playing = false;
+    // Regenerate 4-bit packed from 8-bit
+    int packedSize = (numSamples + 1) / 2;
+    sampleData.assign(static_cast<size_t>(packedSize), 0);
+    for (int i = 0; i < numSamples; ++i) {
+      int q4 = data[static_cast<size_t>(i)] / 17; // 0-255 -> 0-15
+      int byteIdx = i / 2;
+      if (i % 2 == 0)
+        sampleData[static_cast<size_t>(byteIdx)] |=
+            static_cast<uint8_t>(q4 << 4);
+      else
+        sampleData[static_cast<size_t>(byteIdx)] |=
+            static_cast<uint8_t>(q4);
+    }
   }
 
 private:
   // Packed 4-bit samples: high nibble = even index, low nibble = odd index
   std::vector<uint8_t> sampleData;
+  // Unpacked 8-bit samples: 1 byte per sample (0-255)
+  std::vector<uint8_t> sampleData8bit;
   int numSamples = 0;
   double sourceSampleRate = 44100.0;
   int rootNote = 60; // C4
+  int bitDepth = 4;  // 4 or 8
   std::string filePath;
 
   // Playback state (audio thread only)
@@ -184,5 +239,11 @@ private:
       return (sampleData[static_cast<size_t>(byteIdx)] >> 4) & 0x0F;
     else
       return sampleData[static_cast<size_t>(byteIdx)] & 0x0F;
+  }
+
+  uint8_t getSample8bit(int index) const {
+    if (index < 0 || index >= numSamples)
+      return 128; // DC midpoint
+    return sampleData8bit[static_cast<size_t>(index)];
   }
 };

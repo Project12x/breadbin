@@ -772,6 +772,20 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "digiLoop", loopButton);
 
+  bitDepthLabel.setText("Depth:", juce::dontSendNotification);
+  bitDepthLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(bitDepthLabel);
+
+  bitDepthSelector.addItem("4-bit ($D418)", 1);
+  bitDepthSelector.addItem("8-bit (Direct)", 2);
+  bitDepthSelector.setSelectedId(1, juce::dontSendNotification);
+  bitDepthSelector.onChange = [this]() {
+    auto *p = processor.apvts.getParameter("digiBitDepth");
+    if (p) p->setValueNotifyingHost(
+        p->convertTo0to1(static_cast<float>(bitDepthSelector.getSelectedId() - 1)));
+  };
+  addAndMakeVisible(bitDepthSelector);
+
   updateInfoLabels();
 }
 
@@ -792,6 +806,9 @@ void DigiSamplerPanel::resized() {
   rootNoteSelector.setBounds(ctrlRow.removeFromLeft(80));
   ctrlRow.removeFromLeft(16);
   loopButton.setBounds(ctrlRow.removeFromLeft(70));
+  ctrlRow.removeFromLeft(16);
+  bitDepthLabel.setBounds(ctrlRow.removeFromLeft(36));
+  bitDepthSelector.setBounds(ctrlRow.removeFromLeft(90));
 }
 
 void DigiSamplerPanel::paint(juce::Graphics &g) {
@@ -3260,20 +3277,27 @@ void BreadbinEditor::setupLeftSID() {
   addAndMakeVisible(leftSIDLabel);
 
   leftChipSelector.addItem("MOS 6581", 1);
-  leftChipSelector.addItem("MOS 6581 R4", 2);
-  leftChipSelector.addItem("MOS 8580", 3);
-  leftChipSelector.addItem("MOS 8580D", 4);
+  leftChipSelector.addItem("MOS 6581 R2", 2);
+  leftChipSelector.addItem("MOS 6581 R3", 3);
+  leftChipSelector.addItem("MOS 6581 R4", 4);
+  leftChipSelector.addItem("MOS 8580", 5);
+  leftChipSelector.addItem("MOS 8580 R5", 6);
+  leftChipSelector.addItem("CSG 9580", 7);
+  leftChipSelector.addItem("MOS 8580D", 8);
   leftChipSelector.setSelectedId(1);
   leftChipSelector.onChange = [this]() {
     static constexpr SIDEngine::ChipModel models[] = {
-        SIDEngine::ChipModel::MOS6581, SIDEngine::ChipModel::MOS6581R4,
-        SIDEngine::ChipModel::MOS8580, SIDEngine::ChipModel::MOS8580D};
+        SIDEngine::ChipModel::MOS6581,  SIDEngine::ChipModel::MOS6581R2,
+        SIDEngine::ChipModel::MOS6581R3, SIDEngine::ChipModel::MOS6581R4,
+        SIDEngine::ChipModel::MOS8580,  SIDEngine::ChipModel::MOS8580R5,
+        SIDEngine::ChipModel::CSG9580,  SIDEngine::ChipModel::MOS8580D};
     int idx = leftChipSelector.getSelectedId() - 1;
-    if (idx >= 0 && idx < 4)
+    if (idx >= 0 && idx < 8)
       processor.setLeftChipModel(models[idx]);
   };
   leftChipSelector.setTooltip(
-      "6581: Classic warm, 6581 R4: Brighter, 8580: Clean, 8580D: Mellow");
+      "6581: Warm, R2: Bright, R3: Classic, R4: Bright/Strong, "
+      "8580: Clean, R5: Dark, 9580: Bright, 8580D: Mellow");
   addAndMakeVisible(leftChipSelector);
 
   // Voice buttons and enables for L SID (voices 0-2)
@@ -3406,20 +3430,27 @@ void BreadbinEditor::setupRightSID() {
   addAndMakeVisible(rightSIDLabel);
 
   rightChipSelector.addItem("MOS 6581", 1);
-  rightChipSelector.addItem("MOS 6581 R4", 2);
-  rightChipSelector.addItem("MOS 8580", 3);
-  rightChipSelector.addItem("MOS 8580D", 4);
-  rightChipSelector.setSelectedId(3);
+  rightChipSelector.addItem("MOS 6581 R2", 2);
+  rightChipSelector.addItem("MOS 6581 R3", 3);
+  rightChipSelector.addItem("MOS 6581 R4", 4);
+  rightChipSelector.addItem("MOS 8580", 5);
+  rightChipSelector.addItem("MOS 8580 R5", 6);
+  rightChipSelector.addItem("CSG 9580", 7);
+  rightChipSelector.addItem("MOS 8580D", 8);
+  rightChipSelector.setSelectedId(5);
   rightChipSelector.onChange = [this]() {
     static constexpr SIDEngine::ChipModel models[] = {
-        SIDEngine::ChipModel::MOS6581, SIDEngine::ChipModel::MOS6581R4,
-        SIDEngine::ChipModel::MOS8580, SIDEngine::ChipModel::MOS8580D};
+        SIDEngine::ChipModel::MOS6581,  SIDEngine::ChipModel::MOS6581R2,
+        SIDEngine::ChipModel::MOS6581R3, SIDEngine::ChipModel::MOS6581R4,
+        SIDEngine::ChipModel::MOS8580,  SIDEngine::ChipModel::MOS8580R5,
+        SIDEngine::ChipModel::CSG9580,  SIDEngine::ChipModel::MOS8580D};
     int idx = rightChipSelector.getSelectedId() - 1;
-    if (idx >= 0 && idx < 4)
+    if (idx >= 0 && idx < 8)
       processor.setRightChipModel(models[idx]);
   };
   rightChipSelector.setTooltip(
-      "6581: Classic warm, 6581 R4: Brighter, 8580: Clean, 8580D: Mellow");
+      "6581: Warm, R2: Bright, R3: Classic, R4: Bright/Strong, "
+      "8580: Clean, R5: Dark, 9580: Bright, 8580D: Mellow");
   addAndMakeVisible(rightChipSelector);
 
   // Voice buttons and enables for R SID (voices 3-5)
@@ -3855,7 +3886,7 @@ void BreadbinEditor::resized() {
   auto leftPanel = sidRow.removeFromLeft(sidWidth);
   leftSIDLabel.setBounds(leftPanel.removeFromTop(20));
   auto leftChipRow = leftPanel.removeFromTop(24);
-  leftChipSelector.setBounds(leftChipRow.removeFromLeft(100));
+  leftChipSelector.setBounds(leftChipRow.removeFromLeft(120));
 
   // Voice buttons with enable checkboxes
   auto leftVoicesRow = leftPanel.removeFromTop(28);
@@ -3899,7 +3930,7 @@ void BreadbinEditor::resized() {
   auto rightPanel = sidRow.removeFromRight(sidWidth);
   rightSIDLabel.setBounds(rightPanel.removeFromTop(20));
   auto rightChipRow = rightPanel.removeFromTop(24);
-  rightChipSelector.setBounds(rightChipRow.removeFromRight(100));
+  rightChipSelector.setBounds(rightChipRow.removeFromRight(120));
 
   // Voice buttons with enable checkboxes (right-justified)
   auto rightVoicesRow = rightPanel.removeFromTop(28);
@@ -4536,6 +4567,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   setParam("digiEnable", 0.0f);
   setParam("digiRootNote", 60.0f);
   setParam("digiLoop", 0.0f);
+  setParam("digiBitDepth", 0.0f);
   processor.getDigiSampler().unload();
 
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user

@@ -131,6 +131,7 @@ public:
     DigiEnable,
     DigiRootNote,
     DigiLoop,
+    DigiBitDepth,
   };
 
   static juce::String getParamName(ControlParam param);
@@ -508,6 +509,7 @@ private:
   std::atomic<float> *digiEnablePtr = nullptr;
   std::atomic<float> *digiRootNotePtr = nullptr;
   std::atomic<float> *digiLoopPtr = nullptr;
+  std::atomic<float> *digiBitDepthPtr = nullptr;
   std::atomic<float> *leftPanPtr = nullptr;
   std::atomic<float> *rightPanPtr = nullptr;
   std::atomic<float> *pitchBendRangePtr = nullptr;
