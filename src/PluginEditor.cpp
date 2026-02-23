@@ -430,6 +430,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                        juce::Colour(60, 60, 70));
   loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
   loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  loadButton.setTooltip("Load a .sid / .psid / .mus / .prg file for playback");
   loadButton.onClick = [this]() {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Load SID File", juce::File{}, "*.sid;*.psid;*.mus;*.prg");
@@ -479,6 +480,9 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   setupTransport(pauseButton, "Pause", juce::Colours::yellow);
   setupTransport(stopButton, "Stop", juce::Colours::red);
 
+  playButton.setTooltip("Play the loaded SID file");
+  pauseButton.setTooltip("Pause playback");
+  stopButton.setTooltip("Stop playback and reset to start");
   playButton.onClick = [this]() { processor.getSidFilePlayer().play(); };
   pauseButton.onClick = [this]() { processor.getSidFilePlayer().pause(); };
   stopButton.onClick = [this]() { processor.getSidFilePlayer().stop(); };
@@ -490,6 +494,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                            juce::Colours::white);
   snapshotButton.setColour(juce::TextButton::textColourOffId,
                            juce::Colours::white);
+  snapshotButton.setTooltip("Copy current SID register state into synth voice parameters");
   snapshotButton.onClick = [this]() { processor.snapshotSidPlayerToAPVTS(); };
   addAndMakeVisible(snapshotButton);
 
@@ -508,6 +513,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   subtuneLabel.setText("Sub-tune:", juce::dontSendNotification);
   subtuneLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
   addAndMakeVisible(subtuneLabel);
+  subtuneSelector.setTooltip("Select which sub-tune to play from a multi-song SID file");
   subtuneSelector.onChange = [this]() {
     int sel = subtuneSelector.getSelectedId();
     if (sel > 0)
@@ -523,6 +529,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   volumeSlider.setValue(0.7);
   volumeSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   volumeSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
+  volumeSlider.setTooltip("SID player playback volume");
   volumeSlider.onValueChange = [this]() {
     processor.getSidFilePlayer().setVolume(
         static_cast<float>(volumeSlider.getValue()));
@@ -1048,15 +1055,19 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   setupLfoSlider(lfoRateSlider, lfoRateLabel, "Rate", 0.1f, 10.0f, 2.0f,
                  juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
   lfoRateSlider->setTextValueSuffix(" Hz");
+  lfoRateSlider->setTooltip("LFO1 rate in Hz (0.1 - 10 Hz)");
   setupLfoSlider(lfoDepthFilterSlider, lfoDepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfoDepthFilterSlider->setTooltip("LFO1 filter cutoff modulation depth");
   setupLfoSlider(lfoDepthPWSlider, lfoDepthPWLabel, "PW", 0.0f, 1.0f, 0.0f,
                  juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfoDepthPWSlider->setTooltip("LFO1 pulse width modulation depth");
   setupLfoSlider(lfoDepthPitchSlider, lfoDepthPitchLabel, "Vib", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfoDepthPitchSlider->setTooltip("LFO1 vibrato (pitch modulation) depth");
 
   // ========== LFO2 SETUP ==========
   lfo2EnableButton.setTooltip("LFO 2: Second LFO for additional modulation");
@@ -1075,15 +1086,19 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   setupLfoSlider(lfo2RateSlider, lfo2RateLabel, "Rate", 0.1f, 10.0f, 3.0f,
                  juce::Slider::LinearHorizontal, juce::Slider::TextBoxBelow);
   lfo2RateSlider->setTextValueSuffix(" Hz");
+  lfo2RateSlider->setTooltip("LFO2 rate in Hz (0.1 - 10 Hz)");
   setupLfoSlider(lfo2DepthFilterSlider, lfo2DepthFilterLabel, "Flt", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfo2DepthFilterSlider->setTooltip("LFO2 filter cutoff modulation depth");
   setupLfoSlider(lfo2DepthPWSlider, lfo2DepthPWLabel, "PW", 0.0f, 1.0f, 0.0f,
                  juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfo2DepthPWSlider->setTooltip("LFO2 pulse width modulation depth");
   setupLfoSlider(lfo2DepthPitchSlider, lfo2DepthPitchLabel, "Vib", 0.0f, 1.0f,
                  0.0f, juce::Slider::RotaryHorizontalVerticalDrag,
                  juce::Slider::NoTextBox);
+  lfo2DepthPitchSlider->setTooltip("LFO2 vibrato (pitch modulation) depth");
 
   // LFO2 accent colour: orange
   lfo2DepthFilterSlider->setColour(juce::Slider::trackColourId,
@@ -1223,6 +1238,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepEnableButton.setTooltip("Enable dedicated PWM sweep oscillator");
   addAndMakeVisible(pwmSweepEnableButton);
 
+  pwmSweepRateSlider.setTooltip("PWM sweep speed in Hz");
   pwmSweepRateSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   pwmSweepRateSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 18);
   pwmSweepRateSlider.setRange(0.05, 10.0, 0.01);
@@ -1238,6 +1254,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepRateLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
   addAndMakeVisible(pwmSweepRateLabel);
 
+  pwmSweepDepthSlider.setTooltip("PWM sweep depth (0 = none, 1 = full range)");
   pwmSweepDepthSlider.setSliderStyle(juce::Slider::LinearHorizontal);
   pwmSweepDepthSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40,
                                       18);
@@ -1299,12 +1316,14 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     for (const char *s : {"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"})
       lfoSyncDivCombo.addItem(s, id++);
   }
+  lfoSyncDivCombo.setTooltip("LFO sync note division (relative to quarter note)");
   lfoSyncDivCombo.setVisible(false);
   addAndMakeVisible(lfoSyncDivCombo);
   lfoSyncModeBtn.setButtonText("Free");
   lfoSyncModeBtn.setClickingTogglesState(true);
   lfoSyncModeBtn.setColour(juce::TextButton::buttonOnColourId,
                             juce::Colours::cyan.darker(0.3f));
+  lfoSyncModeBtn.setTooltip("LFO rate mode: Free = manual Hz, Sync = lock to DAW tempo");
   addAndMakeVisible(lfoSyncModeBtn);
 
   // LFO2 Sync controls
@@ -1313,12 +1332,14 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     for (const char *s : {"4/1","2/1","1/1","1/2","1/4","1/8","1/16","1/4D","1/8D","1/4T","1/8T"})
       lfo2SyncDivCombo.addItem(s, id++);
   }
+  lfo2SyncDivCombo.setTooltip("LFO2 sync note division (relative to quarter note)");
   lfo2SyncDivCombo.setVisible(false);
   addAndMakeVisible(lfo2SyncDivCombo);
   lfo2SyncModeBtn.setButtonText("Free");
   lfo2SyncModeBtn.setClickingTogglesState(true);
   lfo2SyncModeBtn.setColour(juce::TextButton::buttonOnColourId,
                              juce::Colours::orange.darker(0.3f));
+  lfo2SyncModeBtn.setTooltip("LFO2 rate mode: Free = manual Hz, Sync = lock to DAW tempo");
   addAndMakeVisible(lfo2SyncModeBtn);
 
   using APVTS = juce::AudioProcessorValueTreeState;
@@ -1428,10 +1449,9 @@ void ModMatrixPanel::resized() {
     x += 54;
     waveBox.setBounds(x, y + 14, 68, 20);
     x += 76;
-    rateLbl.setBounds(x, y + 2, 36, 12);
-    syncBtn.setBounds(x + 38, y + 2, 42, 14);
-    rateSldr.setBounds(x, y + 16, 80, 34); // h=34: 20px track + 14px text box
-    syncDivCombo.setBounds(x, y + 16, 80, 20);
+    rateLbl.setBounds(x, y + 2, 40, 12);
+    rateSldr.setBounds(x, y + 14, 80, 34); // h=34: 20px track + 14px text box
+    syncDivCombo.setBounds(x, y + 14, 80, 20);
     x += 88;
     const int dW = 42;
     fltLbl.setBounds(x, y + 2, dW, 12);
@@ -1442,6 +1462,8 @@ void ModMatrixPanel::resized() {
     x += dW + 4;
     vibLbl.setBounds(x, y + 2, dW, 12);
     vibSldr.setBounds(x, y + 14, dW, 36);
+    x += dW + 4;
+    syncBtn.setBounds(x, y + 2, 28, 50); // full-height toggle, right of depth sliders
   };
 
   // LFO1 row: y=0..54
@@ -1450,7 +1472,7 @@ void ModMatrixPanel::resized() {
                *lfoDepthFilterSlider, lfoDepthFilterLabel,
                *lfoDepthPWSlider, lfoDepthPWLabel, *lfoDepthPitchSlider,
                lfoDepthPitchLabel);
-  lfoDisplay1.setBounds(362, 14, 120, 36);
+  lfoDisplay1.setBounds(394, 14, 120, 36);
 
   // LFO2 row: y=55..109
   layoutLfoRow(55, lfo2EnableButton, lfo2WaveformSelector, *lfo2RateSlider,
@@ -1458,7 +1480,7 @@ void ModMatrixPanel::resized() {
                *lfo2DepthFilterSlider, lfo2DepthFilterLabel,
                *lfo2DepthPWSlider, lfo2DepthPWLabel, *lfo2DepthPitchSlider,
                lfo2DepthPitchLabel);
-  lfoDisplay2.setBounds(362, 69, 120, 36);
+  lfoDisplay2.setBounds(394, 69, 120, 36);
 
   // PWM Sweep row: y=112..139
   {
@@ -2472,6 +2494,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(presetNextButton);
 
   // Preset dirty indicator
+  presetDirtyLabel.setTooltip("* indicates unsaved changes to the current preset");
   presetDirtyLabel.setColour(juce::Label::textColourId, juce::Colours::gold);
   presetDirtyLabel.setFont(boldFont.withHeight(16.0f));
   presetDirtyLabel.setJustificationType(juce::Justification::centred);
@@ -2822,6 +2845,7 @@ void BreadbinEditor::setupControls() {
   addAndMakeVisible(wavetableButton);
 
   // ===== INLINE ENABLE TOGGLES (above popup buttons) =====
+  wtEnableToggle.setTooltip("Enable/disable wavetable step sequencer");
   wtEnableToggle.setColour(juce::ToggleButton::textColourId,
                            juce::Colours::cyan);
   wtEnableToggle.setColour(juce::ToggleButton::tickColourId,
@@ -2831,6 +2855,7 @@ void BreadbinEditor::setupControls() {
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "wtEnable", wtEnableToggle);
 
+  lfo1EnableToggle.setTooltip("Enable/disable LFO 1");
   lfo1EnableToggle.setColour(juce::ToggleButton::textColourId,
                              juce::Colours::cyan);
   lfo1EnableToggle.setColour(juce::ToggleButton::tickColourId,
@@ -2840,6 +2865,7 @@ void BreadbinEditor::setupControls() {
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "lfoEnable", lfo1EnableToggle);
 
+  lfo2EnableToggle.setTooltip("Enable/disable LFO 2");
   lfo2EnableToggle.setColour(juce::ToggleButton::textColourId,
                              juce::Colours::cyan);
   lfo2EnableToggle.setColour(juce::ToggleButton::tickColourId,
