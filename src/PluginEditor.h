@@ -69,6 +69,12 @@ public:
       const juce::String &sectionName,
       const juce::PopupMenu::Options &) override;
 
+  void drawDocumentWindowTitleBar(juce::DocumentWindow &window,
+                                  juce::Graphics &g, int w, int h,
+                                  int titleSpaceX, int titleSpaceW,
+                                  const juce::Image *icon,
+                                  bool drawTitleTextOnLeft) override;
+
   juce::Label *createSliderTextBox(juce::Slider &slider) override {
     auto *l = juce::LookAndFeel_V4::createSliderTextBox(slider);
     l->setFont(proFont.withHeight(11.0f));
@@ -237,7 +243,7 @@ public:
       if (auto *laf = dynamic_cast<BreadbinLookAndFeel *>(&getLookAndFeel()))
         g.setFont(laf->getBoldFont().withHeight(10.0f));
       else
-        g.setFont(10.0f);
+        g.setFont(juce::Font(juce::FontOptions(10.0f)));
       g.drawText("LEARN", getLocalBounds(), juce::Justification::centred);
     }
   }
@@ -671,6 +677,9 @@ public:
   FilterDisplay(MappableSlider &cutoff, MappableSlider &res)
       : cutoffSlider(cutoff), resSlider(res) {}
 
+  void setFont(const juce::Font &f) { displayFont = f; }
+  void setMonoFont(const juce::Font &f) { monoFont = f; }
+
   void setCutoff(int val) {
     if (currentCutoff != val) { currentCutoff = val; repaint(); }
   }
@@ -692,7 +701,7 @@ public:
 
     if (!lpOn && !bpOn && !hpOn) {
       g.setColour(juce::Colours::grey.withAlpha(0.4f));
-      g.setFont(juce::Font(juce::FontOptions(9.0f)));
+      g.setFont(displayFont.withHeight(9.0f));
       g.drawText("filter off", b, juce::Justification::centred);
       return;
     }
@@ -748,9 +757,20 @@ public:
                          b.getY() + py + ph);
     }
     g.setColour(juce::Colours::grey.withAlpha(0.4f));
-    g.setFont(juce::Font(juce::FontOptions(7.5f)));
+    g.setFont(displayFont.withHeight(7.5f));
     g.drawText("drag", b.reduced(3).removeFromBottom(9.0f),
                juce::Justification::centredRight);
+
+    // Frequency axis labels
+    g.setFont(monoFont.withHeight(8.0f));
+    g.setColour(juce::Colour(130, 130, 145).withAlpha(0.4f));
+    for (auto [freq, label] : std::initializer_list<std::pair<float, const char*>>{
+            {100.f, "100"}, {1000.f, "1k"}, {10000.f, "10k"}}) {
+      float normX = std::log(freq / kMinHz) / logRange;
+      int labelX = static_cast<int>(b.getX() + px + normX * pw);
+      g.drawText(label, labelX - 10, static_cast<int>(b.getBottom()) - 10,
+                 20, 10, juce::Justification::centred);
+    }
   }
 
   void mouseDown(const juce::MouseEvent &e) override {
@@ -780,6 +800,8 @@ private:
   juce::Point<int> dragStart;
   int  dragStartCutoff  = 0;
   int  dragStartRes     = 0;
+  juce::Font displayFont;
+  juce::Font monoFont;
 };
 
 class BreadbinEditor : public juce::AudioProcessorEditor,

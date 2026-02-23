@@ -24,6 +24,10 @@ BreadbinLookAndFeel::BreadbinLookAndFeel() {
             juce::Colours::cyan.withAlpha(0.25f));
   setColour(juce::PopupMenu::textColourId, juce::Colours::lightgrey);
   setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+
+  // Document window (popup panels) title bar colours
+  setColour(juce::DocumentWindow::textColourId, juce::Colours::cyan);
+  setColour(juce::ResizableWindow::backgroundColourId, juce::Colour(30, 30, 35));
 }
 
 void BreadbinLookAndFeel::drawRotarySlider(
@@ -418,6 +422,26 @@ void BreadbinLookAndFeel::drawPopupMenuSectionHeaderWithOptions(
                        static_cast<float>(area.getRight() - 8));
 }
 
+void BreadbinLookAndFeel::drawDocumentWindowTitleBar(
+    juce::DocumentWindow &window, juce::Graphics &g, int w, int h,
+    int titleSpaceX, int titleSpaceW, const juce::Image *, bool) {
+  if (w * h == 0) return;
+
+  // Dark background matching panel theme
+  g.setColour(juce::Colour(22, 22, 27));
+  g.fillRect(0, 0, w, h);
+
+  // Subtle bottom border
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
+  g.drawHorizontalLine(h - 1, 0.0f, static_cast<float>(w));
+
+  // Title text in cyan, centred
+  g.setFont(boldFont.withHeight(13.0f));
+  g.setColour(juce::Colours::cyan);
+  g.drawText(window.getName(), titleSpaceX, 0, titleSpaceW, h,
+             juce::Justification::centred);
+}
+
 // ========== END CUSTOM LOOKANDFEEL ==========
 
 // ========== SID FILE PLAYER PANEL ==========
@@ -596,6 +620,8 @@ void SidPlayerPanel::resized() {
 
 void SidPlayerPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
+  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
 }
 
 void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
@@ -746,6 +772,10 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   addAndMakeVisible(midiLearnOverlay);
   midiLearnOverlay.setAlwaysOnTop(true);
 
+  filterDisplay_L.setFont(proFont);
+  filterDisplay_R.setFont(proFont);
+  filterDisplay_L.setMonoFont(monoFont);
+  filterDisplay_R.setMonoFont(monoFont);
   addAndMakeVisible(filterDisplay_L);
   addAndMakeVisible(filterDisplay_R);
 
@@ -1048,7 +1078,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     slider->setTooltip(name);
     label.setText(name, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(juce::Font(juce::FontOptions(9.0f)));
+    label.setFont(panelProFont.withHeight(9.0f));
     addAndMakeVisible(label);
   };
 
@@ -1112,7 +1142,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
   pitchBendRangeLabel.setColour(juce::Label::textColourId,
                                 juce::Colours::lightgrey);
-  pitchBendRangeLabel.setFont(juce::Font(juce::FontOptions(11.0f)));
+  pitchBendRangeLabel.setFont(panelProFont.withHeight(11.0f));
   addAndMakeVisible(pitchBendRangeLabel);
 
   pitchBendRangeSelector.addItem("+/- 2", 1);
@@ -1197,13 +1227,13 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 
     s.sourceValueLabel.setColour(juce::Label::textColourId,
                                  juce::Colours::cyan);
-    s.sourceValueLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+    s.sourceValueLabel.setFont(panelMonoFont.withHeight(10.0f));
     s.sourceValueLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.sourceValueLabel);
 
     s.contributionLabel.setColour(juce::Label::textColourId,
                                   juce::Colours::orange);
-    s.contributionLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+    s.contributionLabel.setFont(panelMonoFont.withHeight(10.0f));
     s.contributionLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(s.contributionLabel);
 
@@ -1223,7 +1253,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 
   auto setupTotalLabel = [this](juce::Label &label, juce::Colour colour) {
     label.setColour(juce::Label::textColourId, colour);
-    label.setFont(juce::Font(10.0f)); // overridden by refreshFonts()
+    label.setFont(panelMonoFont.withHeight(10.0f));
     label.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(label);
   };
@@ -1251,7 +1281,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepRateLabel.setText("Rate", juce::dontSendNotification);
   pwmSweepRateLabel.setColour(juce::Label::textColourId,
                               juce::Colours::greenyellow);
-  pwmSweepRateLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  pwmSweepRateLabel.setFont(panelProFont.withHeight(10.0f));
   addAndMakeVisible(pwmSweepRateLabel);
 
   pwmSweepDepthSlider.setTooltip("PWM sweep depth (0 = none, 1 = full range)");
@@ -1268,7 +1298,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepDepthLabel.setText("Depth", juce::dontSendNotification);
   pwmSweepDepthLabel.setColour(juce::Label::textColourId,
                                juce::Colours::greenyellow);
-  pwmSweepDepthLabel.setFont(juce::Font(juce::FontOptions(10.0f)));
+  pwmSweepDepthLabel.setFont(panelProFont.withHeight(10.0f));
   addAndMakeVisible(pwmSweepDepthLabel);
 
   // ========== APVTS ATTACHMENTS (LFO1/LFO2) ==========
@@ -1372,6 +1402,8 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 
 void ModMatrixPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
+  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
 
   // Dark recessed section backgrounds
   auto drawSectionBg = [&](int y, int h) {
@@ -1399,20 +1431,10 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   drawGlowLabel("LFO 2", 4, 57, juce::Colours::orange);
   drawGlowLabel("PWM Sweep", 4, 112, juce::Colours::greenyellow);
 
-  // Gradient fade separator bars
-  auto drawSeparator = [&](int y) {
-    float pw = static_cast<float>(panelWidth);
-    juce::ColourGradient grad(juce::Colours::transparentBlack, 4.0f,
-                              static_cast<float>(y),
-                              juce::Colours::transparentBlack, pw - 4.0f,
-                              static_cast<float>(y), false);
-    grad.addColour(0.2, juce::Colours::grey.withAlpha(0.3f));
-    grad.addColour(0.8, juce::Colours::grey.withAlpha(0.3f));
-    g.setGradientFill(grad);
-    g.fillRect(4, y, static_cast<int>(pw) - 8, 1);
-  };
-  drawSeparator(148);
-  drawSeparator(172);
+  // Separator bars
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
+  g.drawHorizontalLine(148, 6.0f, static_cast<float>(panelWidth - 6));
+  g.drawHorizontalLine(172, 6.0f, static_cast<float>(panelWidth - 6));
 
   // Mod matrix column headers
   const int mmTop = 176;
@@ -1426,7 +1448,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colours::orange);
   g.drawText("Out", 447, mmTop, 45, 16, juce::Justification::centred);
 
-  g.setColour(juce::Colour(55, 55, 65));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
   g.drawHorizontalLine(342, 6.0f, static_cast<float>(panelWidth - 6));
   g.setColour(juce::Colour(130, 130, 145));
   g.setFont(panelProFont.withHeight(10.0f));
@@ -1678,7 +1700,7 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     slots[s].label.setText("Slot " + juce::String(s + 1),
                            juce::dontSendNotification);
     slots[s].label.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    slots[s].label.setFont(juce::Font(juce::FontOptions(11.0f)));
+    slots[s].label.setFont(panelProFont.withHeight(11.0f));
     addAndMakeVisible(slots[s].label);
 
     for (int i = 0; i < 5; ++i) {
@@ -1797,6 +1819,8 @@ void ChordMemoryPanel::timerCallback() {
 
 void ChordMemoryPanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
+  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
 
   // Title with glow pill
   g.setColour(juce::Colours::cyan.withAlpha(0.15f));
@@ -1814,7 +1838,7 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
                    10, 28, 140, 28, juce::Justification::centredLeft, 2);
 
   // Divider below header
-  g.setColour(juce::Colour(55, 55, 65));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
   g.drawHorizontalLine(58, 8.0f, static_cast<float>(panelWidth - 8));
 
   // Dark recessed background behind slot rows
@@ -2033,6 +2057,8 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
 
 void WavetablePanel::paint(juce::Graphics &g) {
   g.fillAll(juce::Colour(30, 30, 35));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
+  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
 
   // Title with glow background
   g.setColour(juce::Colours::cyan.withAlpha(0.15f));
@@ -2060,7 +2086,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
   g.drawText("(0-4095)", 2, 256, 50, 12, juce::Justification::centredRight);
 
   // Horizontal dividers between sections
-  g.setColour(juce::Colour(55, 55, 65));
+  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
   g.drawHorizontalLine(57, 10.0f,
                        static_cast<float>(panelWidth - 10)); // below header
   g.drawHorizontalLine(98, 55.0f,
@@ -2259,7 +2285,8 @@ void BreadbinEditor::showChordMemoryPopup() {
   auto *window =
       new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
-  window->setUsingNativeTitleBar(true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
   window->setResizable(false, false);
   window->setLookAndFeel(&customLookAndFeel);
   window->centreAroundComponent(this, window->getWidth(), window->getHeight());
@@ -2285,7 +2312,8 @@ void BreadbinEditor::showSidPlayerPopup() {
   auto *window =
       new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
-  window->setUsingNativeTitleBar(true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
   window->setResizable(false, false);
   window->setLookAndFeel(&customLookAndFeel);
   window->centreAroundComponent(this, window->getWidth(), window->getHeight());
@@ -2311,7 +2339,8 @@ void BreadbinEditor::showModMatrixPopup() {
   auto *window =
       new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
-  window->setUsingNativeTitleBar(true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
   window->setResizable(false, false);
   window->setLookAndFeel(&customLookAndFeel);
   window->centreAroundComponent(this, window->getWidth(), window->getHeight());
@@ -2337,7 +2366,8 @@ void BreadbinEditor::showWavetablePopup() {
   auto *window = new NonModalPopup("Wavetable Step Sequencer",
                                    juce::Colour(30, 30, 35), true);
   window->setContentOwned(panel, true);
-  window->setUsingNativeTitleBar(true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
   window->setResizable(false, false);
   window->setLookAndFeel(&customLookAndFeel);
   window->centreAroundComponent(this, window->getWidth(), window->getHeight());
@@ -3523,7 +3553,12 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   if (backgroundImage.isValid()) {
     g.drawImage(backgroundImage, getLocalBounds().toFloat(),
                 juce::RectanglePlacement::stretchToFit);
-    g.setColour(juce::Colour(0, 0, 0).withAlpha(0.65f));
+    juce::ColourGradient vignette(
+        juce::Colours::black.withAlpha(0.45f),
+        getWidth() * 0.5f, getHeight() * 0.4f,
+        juce::Colours::black.withAlpha(0.80f),
+        0.0f, 0.0f, true);
+    g.setGradientFill(vignette);
     g.fillRect(getLocalBounds());
   } else {
     g.fillAll(juce::Colour(30, 30, 35));
@@ -3533,6 +3568,8 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   auto drawHeaderGlow = [&](juce::Label &label, juce::Colour colour) {
     auto b = label.getBounds().toFloat();
     float glowY = b.getBottom();
+    g.setColour(colour.withAlpha(0.05f));
+    g.fillRect(b.getX(), glowY + 2.0f, b.getWidth(), 6.0f);
     g.setColour(colour.withAlpha(0.3f));
     g.fillRect(b.getX() + 10.0f, glowY, b.getWidth() - 20.0f, 2.0f);
     g.setColour(colour.withAlpha(0.1f));
