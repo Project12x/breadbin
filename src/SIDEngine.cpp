@@ -293,6 +293,32 @@ void SIDEngine::setExternalInput(float sample) {
   sid->input(value);
 }
 
+void SIDEngine::writeVolumeRegister(uint8_t vol4bit) {
+  // Write filter mode (upper nibble) | volume (lower nibble) to register $D418.
+  // Preserves current filter routing while overriding volume for digi playback.
+  writeRegister(0x18, filterMode | (vol4bit & 0x0F));
+}
+
+void SIDEngine::muteVoices() {
+  if (voicesMuted) return;
+  voicesMuted = true;
+  // Set test bit (bit 3) on all voice control registers to reset oscillators.
+  // This silences voices while preserving their cached state for restoration.
+  for (int v = 0; v < 3; ++v) {
+    int baseReg = v * 7;
+    writeRegister(baseReg + 4, 0x08); // Test bit only, no waveform/gate
+  }
+}
+
+void SIDEngine::unmuteVoices() {
+  if (!voicesMuted) return;
+  voicesMuted = false;
+  // Restore all voice control registers from cache
+  for (int v = 0; v < 3; ++v) {
+    updateVoiceRegisters(v);
+  }
+}
+
 void SIDEngine::writeRegister(uint8_t reg, uint8_t value) {
   sid->write(reg, value);
 }

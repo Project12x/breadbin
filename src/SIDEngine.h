@@ -63,6 +63,16 @@ public:
   // External audio input (routes through filter)
   void setExternalInput(float sample); // -1.0 to +1.0
 
+  // Write 4-bit volume to $D418, preserving filter mode bits.
+  // Used for digi sample playback. Call before clock() each sample.
+  void writeVolumeRegister(uint8_t vol4bit);
+
+  // Silence all voice oscillators via test bit (bit 3 of control register).
+  // Used during digi playback to prevent voice output from mixing with the
+  // $D418 volume DAC signal. Call unmuteVoices() to restore normal operation.
+  void muteVoices();
+  void unmuteVoices();
+
 private:
   std::unique_ptr<reSIDfp::SID> sid;
 
@@ -105,6 +115,7 @@ private:
       0x10; // Default lowpass so filtered voices produce output
   uint8_t filterVoiceMask = 0;
   uint8_t masterVolume = 15;
+  bool voicesMuted = false; // True when digi mute is active
 
   void writeRegister(uint8_t reg, uint8_t value);
   void updateVoiceRegisters(int voice);

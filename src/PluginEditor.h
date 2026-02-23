@@ -671,6 +671,37 @@ private:
   void updateRegisterDisplay();
 };
 
+// 4-bit digi sample player popup panel
+class DigiSamplerPanel : public juce::Component {
+public:
+  DigiSamplerPanel(BreadbinProcessor &proc);
+  ~DigiSamplerPanel() override { setLookAndFeel(nullptr); }
+  void resized() override;
+  void paint(juce::Graphics &g) override;
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold,
+                    const juce::Font &mono);
+  static constexpr int panelWidth = 400;
+  static constexpr int panelHeight = 250;
+
+private:
+  BreadbinProcessor &processor;
+  juce::Font panelProFont, panelBoldFont, panelMonoFont;
+
+  juce::TextButton loadButton{"Load WAV"};
+  juce::Label fileNameLabel;
+  juce::Label sampleInfoLabel;
+
+  juce::ComboBox rootNoteSelector;
+  juce::Label rootNoteLabel;
+
+  juce::ToggleButton loopButton{"Loop"};
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      loopAttach;
+
+  std::unique_ptr<juce::FileChooser> fileChooser;
+  void updateInfoLabels();
+};
+
 // Interactive filter frequency response display for SID filter sections
 class FilterDisplay : public juce::Component {
 public:
@@ -1079,6 +1110,15 @@ private:
   juce::TextButton wavetableButton{"Wavetable"};
   juce::Component::SafePointer<juce::DialogWindow> wavetableWindow;
   void showWavetablePopup();
+
+  // ========== DIGI SAMPLER ==========
+  juce::TextButton digiButton{"Digi"};
+  juce::Component::SafePointer<juce::DialogWindow> digiWindow;
+  MappableToggle digiEnableToggle{
+      "Digi", processor, BreadbinProcessor::ControlParam::DigiEnable};
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      digiEnableAttach;
+  void showDigiPopup();
 
   // ========== INLINE ENABLE TOGGLES (above popup buttons) ==========
   MappableToggle wtEnableToggle{"WT", processor,

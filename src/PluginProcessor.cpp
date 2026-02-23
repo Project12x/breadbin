@@ -109,6 +109,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   extInputEnabled = extInputEnablePtr->load() > 0.5f;
   extInputLevel = extInputLevelPtr->load();
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
+  bool digiEnabled = digiEnablePtr->load() > 0.5f;
+  digiSampler.setRootNote(static_cast<int>(digiRootNotePtr->load()));
+  digiSampler.setLooping(digiLoopPtr->load() > 0.5f);
 
   // Query DAW playhead for BPM (fallback 120 in standalone / no transport)
   double bpm = 120.0;
@@ -213,6 +216,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // parameter change, then guard this with the dirty flag for efficiency.
   for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
+    // Release voice immediately when toggled off
+    if (!voiceSettings[v].enabled && voices[v].active) {
+      releaseNote(v);
+    }
   }
 
   // Handle MIDI
@@ -329,6 +336,46 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   float rightGainL = std::cos(rightAngle);
   float rightGainR = std::sin(rightAngle);
 
+  // Voice count gain compensation: normalize output level regardless of
+  // how many voices are enabled. 3 voices per SID is the reference level.
+  // With fewer enabled voices the SID output drops, so we boost to match.
+  int leftVoiceCount = 0, rightVoiceCount = 0;
+  for (int v = 0; v < 3; ++v)
+    if (voiceSettings[v].enabled) ++leftVoiceCount;
+  for (int v = 3; v < 6; ++v)
+    if (voiceSettings[v].enabled) ++rightVoiceCount;
+  // Compensation: 3/count (1 voice = 3x, 2 voices = 1.5x, 3 voices = 1x)
+  // If 0 voices enabled, use 1.0 (no signal anyway, or digi-only)
+  float leftVoiceGain = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
+  float rightVoiceGain = rightVoiceCount > 0 ? 3.0f / static_cast<float>(rightVoiceCount) : 1.0f;
+
+  // Digi gain compensation: $D418 digi modulates the master volume register
+  // which scales ALL voice output. When no voices are active, the digi signal
+  // itself is very quiet. Apply a boost to bring digi to a usable level.
+  // The SID outputs digi through the volume DAC at ~1/3 the voice level.
+  float digiGain = (digiEnabled && digiSampler.isPlaying()) ? 3.0f : 1.0f;
+
+  // Combine voice compensation into pan gains
+  leftGainL *= leftVoiceGain;
+  leftGainR *= leftVoiceGain;
+  rightGainL *= rightVoiceGain;
+  rightGainR *= rightVoiceGain;
+
+  // Mute SID voices during digi playback when no voices are enabled,
+  // giving clean digi-only output. When voices ARE enabled, digi runs
+  // additively — the $D418 volume modulates voice output (authentic C64).
+  bool digiPlaying = digiEnabled && digiSampler.isPlaying();
+  if (digiPlaying && leftVoiceCount == 0) {
+    sidLeft.muteVoices();
+  } else {
+    sidLeft.unmuteVoices();
+  }
+  if (digiPlaying && rightVoiceCount == 0) {
+    sidRight.muteVoices();
+  } else {
+    sidRight.unmuteVoices();
+  }
+
   // Generate audio from SID engines
   for (int i = 0; i < numSamples; ++i) {
     // Feed external audio to SID filters if enabled
@@ -339,12 +386,21 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       sidRight.setExternalInput(extR);
     }
 
+    // Digi sample playback: write 4-bit volume to $D418 before clocking
+    if (digiEnabled && digiSampler.isPlaying()) {
+      int digiVal = digiSampler.getNextSample();
+      if (digiVal >= 0) {
+        sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+        sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+      }
+    }
+
     float sampleL = sidLeft.clock();
     float sampleR = sidRight.clock();
 
-    // Apply per-SID pan (equal-power pan law)
-    float outL = sampleL * leftGainL + sampleR * rightGainL;
-    float outR = sampleL * leftGainR + sampleR * rightGainR;
+    // Apply per-SID pan (equal-power pan law) with voice count compensation
+    float outL = (sampleL * leftGainL + sampleR * rightGainL) * digiGain;
+    float outR = (sampleL * leftGainR + sampleR * rightGainR) * digiGain;
 
     // All modes use the same stereo output path.
     // In Unison, both SIDs render the same notes independently,
@@ -542,6 +598,10 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       }
     }
 
+    // Digi sampler: trigger on note-on (plays alongside normal voices)
+    if (digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
+      digiSampler.noteOn(note, hostSampleRate);
+
     // Chord memory takes priority and does not feed arp tracking.
     if (chordMemory.enabled) {
       if (dualMode == DualMode::Multitimbral) {
@@ -593,6 +653,10 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     }
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
+
+    // Digi sampler note-off
+    if (digiEnablePtr->load() > 0.5f && digiSampler.isPlaying())
+      digiSampler.noteOff();
 
     // Chord memory release (stays independent of arp state)
     if (chordMemory.enabled) {
@@ -1093,6 +1157,25 @@ void BreadbinProcessor::getStateInformation(juce::MemoryBlock &destData) {
   // Persist global preset selection
   apvts.state.setProperty("globalPresetId", globalPresetId, nullptr);
 
+  // Persist digi sample data
+  auto existingDigi = apvts.state.getChildWithName("DigiSampler");
+  if (existingDigi.isValid())
+    apvts.state.removeChild(existingDigi, nullptr);
+  if (digiSampler.isLoaded()) {
+    juce::ValueTree digiState("DigiSampler");
+    digiState.setProperty("numSamples", digiSampler.getNumSamples(), nullptr);
+    digiState.setProperty("sampleRate", digiSampler.getSourceSampleRate(),
+                          nullptr);
+    digiState.setProperty("filePath",
+                          juce::String(digiSampler.getFilePath()), nullptr);
+    const auto &packed = digiSampler.getPackedData();
+    if (!packed.empty()) {
+      juce::MemoryBlock mb(packed.data(), packed.size());
+      digiState.setProperty("sampleData", mb.toBase64Encoding(), nullptr);
+    }
+    apvts.state.addChild(digiState, -1, nullptr);
+  }
+
   auto apvtsState = apvts.copyState();
   std::unique_ptr<juce::XmlElement> xml(apvtsState.createXml());
   copyXmlToBinary(*xml, destData);
@@ -1128,6 +1211,24 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
 
       // Restore global preset selection
       globalPresetId = apvts.state.getProperty("globalPresetId", 1);
+
+      // Restore digi sample data
+      auto digiState = apvts.state.getChildWithName("DigiSampler");
+      if (digiState.isValid()) {
+        int numSamp = digiState.getProperty("numSamples", 0);
+        double sr = digiState.getProperty("sampleRate", 44100.0);
+        juce::String path = digiState.getProperty("filePath", "");
+        juce::String b64 = digiState.getProperty("sampleData", "");
+        if (numSamp > 0 && b64.isNotEmpty()) {
+          juce::MemoryBlock mb;
+          mb.fromBase64Encoding(b64);
+          std::vector<uint8_t> packed(
+              static_cast<const uint8_t *>(mb.getData()),
+              static_cast<const uint8_t *>(mb.getData()) + mb.getSize());
+          digiSampler.setPackedData(packed, numSamp, sr,
+                                    path.toStdString());
+        }
+      }
 
       stateRestored = true;
     }
@@ -2040,6 +2141,18 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
       p->setValueNotifyingHost(p->convertTo0to1(normalized * 3.0f));
     break;
   }
+  case ControlParam::DigiEnable: {
+    auto *p = apvts.getParameter("digiEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::DigiLoop: {
+    auto *p = apvts.getParameter("digiLoop");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
   default:
     break;
   }
@@ -2196,6 +2309,12 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "LFO Waveform";
   case ControlParam::Lfo2Wave:
     return "LFO2 Waveform";
+  case ControlParam::DigiEnable:
+    return "Digi Enable";
+  case ControlParam::DigiRootNote:
+    return "Digi Root Note";
+  case ControlParam::DigiLoop:
+    return "Digi Loop";
   default:
     return "Unknown";
   }
@@ -2248,6 +2367,15 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"extInputLevel", 1}, "Ext Input Level", 0.0f, 2.0f,
       1.0f));
+
+  // Digi Sampler
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"digiEnable", 1}, "Digi Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"digiRootNote", 1}, "Digi Root Note", 24, 96, 60));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"digiLoop", 1}, "Digi Loop", false));
+
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"leftPan", 1}, "Left SID Pan", -1.0f, 1.0f, -1.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -2480,6 +2608,9 @@ void BreadbinProcessor::initializeParameterPointers() {
   clockModePtr = apvts.getRawParameterValue("clockMode");
   extInputEnablePtr = apvts.getRawParameterValue("extInputEnable");
   extInputLevelPtr = apvts.getRawParameterValue("extInputLevel");
+  digiEnablePtr = apvts.getRawParameterValue("digiEnable");
+  digiRootNotePtr = apvts.getRawParameterValue("digiRootNote");
+  digiLoopPtr = apvts.getRawParameterValue("digiLoop");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");
   pitchBendRangePtr = apvts.getRawParameterValue("pitchBendRange");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DigiSampler.h"
 #include "SIDEngine.h"
 #include "SidFilePlayer.h"
 #include <algorithm>
@@ -127,6 +128,9 @@ public:
     LFO2DepthPitch,
     LfoWave,
     Lfo2Wave,
+    DigiEnable,
+    DigiRootNote,
+    DigiLoop,
   };
 
   static juce::String getParamName(ControlParam param);
@@ -180,6 +184,7 @@ public:
   // Synth parameter accessors for GUI
   SIDEngine &getLeftSID() { return sidLeft; }
   SIDEngine &getRightSID() { return sidRight; }
+  DigiSampler &getDigiSampler() { return digiSampler; }
 
   // Per-voice settings (6 voices: 0-2 = SID L, 3-5 = SID R)
   struct VoiceSettings {
@@ -352,6 +357,7 @@ public:
 private:
   SIDEngine sidLeft;
   SIDEngine sidRight;
+  DigiSampler digiSampler;
 
   // SID file player (background thread + ring buffer)
   std::unique_ptr<SidFilePlayer> sidFilePlayer;
@@ -499,6 +505,9 @@ private:
   std::atomic<float> *clockModePtr = nullptr;
   std::atomic<float> *extInputEnablePtr = nullptr;
   std::atomic<float> *extInputLevelPtr = nullptr;
+  std::atomic<float> *digiEnablePtr = nullptr;
+  std::atomic<float> *digiRootNotePtr = nullptr;
+  std::atomic<float> *digiLoopPtr = nullptr;
   std::atomic<float> *leftPanPtr = nullptr;
   std::atomic<float> *rightPanPtr = nullptr;
   std::atomic<float> *pitchBendRangePtr = nullptr;

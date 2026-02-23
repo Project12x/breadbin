@@ -703,6 +703,188 @@ void SidPlayerPanel::updateRegisterDisplay() {
 
 // ========== END SID FILE PLAYER PANEL ==========
 
+// ========== DIGI SAMPLER PANEL ==========
+
+DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
+  setSize(panelWidth, panelHeight);
+
+  loadButton.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
+  loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
+  loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  loadButton.onClick = [this]() {
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Load Sample", juce::File{}, "*.wav;*.aiff;*.aif");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode |
+                                 juce::FileBrowserComponent::canSelectFiles,
+                             [this](const juce::FileChooser &fc) {
+      auto result = fc.getResult();
+      if (result == juce::File{})
+        return;
+      auto &digi = processor.getDigiSampler();
+      if (digi.loadFromFile(result.getFullPathName().toStdString())) {
+        // Sync root note from APVTS
+        auto *rootParam = processor.apvts.getRawParameterValue("digiRootNote");
+        if (rootParam)
+          digi.setRootNote(static_cast<int>(rootParam->load()));
+        updateInfoLabels();
+        repaint();
+      }
+    });
+  };
+  addAndMakeVisible(loadButton);
+
+  fileNameLabel.setText("No sample loaded", juce::dontSendNotification);
+  fileNameLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(fileNameLabel);
+
+  sampleInfoLabel.setText("", juce::dontSendNotification);
+  sampleInfoLabel.setColour(juce::Label::textColourId,
+                            juce::Colours::grey);
+  addAndMakeVisible(sampleInfoLabel);
+
+  rootNoteLabel.setText("Root:", juce::dontSendNotification);
+  rootNoteLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  addAndMakeVisible(rootNoteLabel);
+
+  // Populate root note selector: C1 (24) to C7 (96)
+  const char *noteNames[] = {"C", "C#", "D", "D#", "E", "F",
+                              "F#", "G", "G#", "A", "A#", "B"};
+  for (int midi = 24; midi <= 96; ++midi) {
+    int octave = (midi / 12) - 1;
+    juce::String name = juce::String(noteNames[midi % 12]) + juce::String(octave);
+    rootNoteSelector.addItem(name, midi);
+  }
+  rootNoteSelector.setSelectedId(60, juce::dontSendNotification); // C4
+  rootNoteSelector.onChange = [this]() {
+    int note = rootNoteSelector.getSelectedId();
+    if (note > 0) {
+      auto *p = processor.apvts.getParameter("digiRootNote");
+      if (p) p->setValueNotifyingHost(p->convertTo0to1(static_cast<float>(note)));
+      processor.getDigiSampler().setRootNote(note);
+    }
+  };
+  addAndMakeVisible(rootNoteSelector);
+
+  loopButton.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
+  loopButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
+  addAndMakeVisible(loopButton);
+  loopAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "digiLoop", loopButton);
+
+  updateInfoLabels();
+}
+
+void DigiSamplerPanel::resized() {
+  auto bounds = getLocalBounds().reduced(12);
+
+  auto topRow = bounds.removeFromTop(24);
+  loadButton.setBounds(topRow.removeFromLeft(90));
+  topRow.removeFromLeft(8);
+  fileNameLabel.setBounds(topRow);
+
+  bounds.removeFromTop(4);
+  sampleInfoLabel.setBounds(bounds.removeFromTop(18));
+
+  bounds.removeFromTop(8);
+  auto ctrlRow = bounds.removeFromTop(24);
+  rootNoteLabel.setBounds(ctrlRow.removeFromLeft(36));
+  rootNoteSelector.setBounds(ctrlRow.removeFromLeft(80));
+  ctrlRow.removeFromLeft(16);
+  loopButton.setBounds(ctrlRow.removeFromLeft(70));
+}
+
+void DigiSamplerPanel::paint(juce::Graphics &g) {
+  auto bounds = getLocalBounds().toFloat();
+  g.setColour(juce::Colour(30, 30, 35));
+  g.fillRoundedRectangle(bounds, 6.0f);
+  g.setColour(juce::Colours::cyan.withAlpha(0.3f));
+  g.drawRoundedRectangle(bounds.reduced(0.5f), 6.0f, 1.0f);
+
+  // Waveform display area
+  auto waveArea = getLocalBounds().reduced(12);
+  waveArea.removeFromTop(90); // skip controls
+  auto waveRect = waveArea.toFloat();
+  g.setColour(juce::Colour(18, 18, 22));
+  g.fillRoundedRectangle(waveRect, 4.0f);
+  g.setColour(juce::Colour(50, 50, 62));
+  g.drawRoundedRectangle(waveRect.reduced(0.5f), 4.0f, 0.5f);
+
+  auto &digi = processor.getDigiSampler();
+  if (digi.isLoaded() && digi.getNumSamples() > 0) {
+    // Draw 4-bit waveform
+    const auto &packed = digi.getPackedData();
+    int numSamples = digi.getNumSamples();
+    float padX = 4.0f, padY = 4.0f;
+    float w = waveRect.getWidth() - padX * 2.0f;
+    float h = waveRect.getHeight() - padY * 2.0f;
+    float x0 = waveRect.getX() + padX;
+    float y0 = waveRect.getY() + padY;
+
+    juce::Path path;
+    int numPts = juce::jmin(static_cast<int>(w), numSamples);
+    for (int i = 0; i < numPts; ++i) {
+      float t = static_cast<float>(i) / static_cast<float>(juce::jmax(1, numPts - 1));
+      int sampleIdx = static_cast<int>(t * static_cast<float>(numSamples - 1));
+      // Unpack 4-bit sample
+      int byteIdx = sampleIdx / 2;
+      uint8_t val;
+      if (sampleIdx % 2 == 0)
+        val = (packed[static_cast<size_t>(byteIdx)] >> 4) & 0x0F;
+      else
+        val = packed[static_cast<size_t>(byteIdx)] & 0x0F;
+
+      float norm = static_cast<float>(val) / 15.0f; // 0..1
+      float px = x0 + static_cast<float>(i);
+      float py = y0 + h * (1.0f - norm);
+      if (i == 0)
+        path.startNewSubPath(px, py);
+      else
+        path.lineTo(px, py);
+    }
+    g.setColour(juce::Colours::cyan.withAlpha(0.2f));
+    g.strokePath(path, juce::PathStrokeType(2.5f));
+    g.setColour(juce::Colours::cyan);
+    g.strokePath(path, juce::PathStrokeType(1.0f));
+  } else {
+    g.setColour(juce::Colours::grey.withAlpha(0.4f));
+    g.setFont(panelProFont.withHeight(11.0f));
+    g.drawText("Load a WAV sample for 4-bit $D418 digi playback",
+               waveRect, juce::Justification::centred);
+  }
+}
+
+void DigiSamplerPanel::refreshFonts(const juce::Font &pro,
+                                     const juce::Font &bold,
+                                     const juce::Font &mono) {
+  panelProFont = pro;
+  panelBoldFont = bold;
+  panelMonoFont = mono;
+  fileNameLabel.setFont(pro.withHeight(13.0f));
+  sampleInfoLabel.setFont(mono.withHeight(11.0f));
+  rootNoteLabel.setFont(pro.withHeight(13.0f));
+}
+
+void DigiSamplerPanel::updateInfoLabels() {
+  auto &digi = processor.getDigiSampler();
+  if (digi.isLoaded()) {
+    juce::File f(digi.getFilePath());
+    fileNameLabel.setText(f.getFileName(), juce::dontSendNotification);
+    double durSec = static_cast<double>(digi.getNumSamples()) / digi.getSourceSampleRate();
+    int packedBytes = static_cast<int>(digi.getPackedData().size());
+    sampleInfoLabel.setText(
+        juce::String(durSec, 2) + "s  " +
+            juce::String(digi.getNumSamples()) + " samples  " +
+            juce::String(packedBytes) + " bytes packed",
+        juce::dontSendNotification);
+  } else {
+    fileNameLabel.setText("No sample loaded", juce::dontSendNotification);
+    sampleInfoLabel.setText("", juce::dontSendNotification);
+  }
+}
+
+// ========== END DIGI SAMPLER PANEL ==========
+
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
     : juce::AudioProcessorEditor(&p), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
@@ -2376,6 +2558,33 @@ void BreadbinEditor::showWavetablePopup() {
   wavetableWindow = window;
 }
 
+void BreadbinEditor::showDigiPopup() {
+  if (digiWindow != nullptr) {
+    if (!digiWindow->isVisible()) {
+      digiWindow.deleteAndZero();
+    } else {
+      digiWindow->toFront(true);
+      return;
+    }
+  }
+
+  auto *panel = new DigiSamplerPanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
+  panel->refreshFonts(proFont, boldFont, monoFont);
+
+  auto *window =
+      new NonModalPopup("Digi Sampler ($D418)", juce::Colour(30, 30, 35), true);
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  digiWindow = window;
+}
+
 void BreadbinEditor::setupControls() {
   // Title label removed - logo is in lower left corner
 
@@ -2939,6 +3148,27 @@ void BreadbinEditor::setupControls() {
   sidPlayerButton.onClick = [this]() { showSidPlayerPopup(); };
   addAndMakeVisible(sidPlayerButton);
 
+  // ===== DIGI SAMPLER =====
+  digiButton.setTooltip("Digi Sampler: Authentic 4-bit $D418 sample playback");
+  digiButton.setColour(juce::TextButton::buttonColourId,
+                       juce::Colour(60, 50, 70));
+  digiButton.setColour(juce::TextButton::textColourOnId,
+                       juce::Colours::cyan);
+  digiButton.setColour(juce::TextButton::textColourOffId,
+                       juce::Colours::cyan);
+  digiButton.onClick = [this]() { showDigiPopup(); };
+  addAndMakeVisible(digiButton);
+
+  digiEnableToggle.setTooltip("Enable/disable digi sampler");
+  digiEnableToggle.setColour(juce::ToggleButton::textColourId,
+                             juce::Colours::cyan);
+  digiEnableToggle.setColour(juce::ToggleButton::tickColourId,
+                             juce::Colours::cyan);
+  addAndMakeVisible(digiEnableToggle);
+  digiEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "digiEnable", digiEnableToggle);
+
   // ===== FILTER ENVELOPE =====
   filterEnvEnableButton.setTooltip(
       "Filter Envelope: Dedicated ADSR for filter cutoff");
@@ -3057,8 +3287,8 @@ void BreadbinEditor::setupLeftSID() {
     leftVoiceEnables[i].setButtonText("");
     leftVoiceEnables[i].setToggleState(true, juce::dontSendNotification);
     leftVoiceEnables[i].onClick = [this, i]() {
-      processor.getVoiceSettings(i).enabled =
-          leftVoiceEnables[i].getToggleState();
+      auto *p = processor.apvts.getParameter("v" + juce::String(i) + "_enable");
+      if (p) p->setValueNotifyingHost(leftVoiceEnables[i].getToggleState() ? 1.0f : 0.0f);
     };
     leftVoiceEnables[i].setTooltip("Enable/disable Voice " +
                                    juce::String(i + 1));
@@ -3203,8 +3433,8 @@ void BreadbinEditor::setupRightSID() {
     rightVoiceEnables[i].setButtonText("");
     rightVoiceEnables[i].setToggleState(true, juce::dontSendNotification);
     rightVoiceEnables[i].onClick = [this, i]() {
-      processor.getVoiceSettings(i + 3).enabled =
-          rightVoiceEnables[i].getToggleState();
+      auto *p = processor.apvts.getParameter("v" + juce::String(i + 3) + "_enable");
+      if (p) p->setValueNotifyingHost(rightVoiceEnables[i].getToggleState() ? 1.0f : 0.0f);
     };
     rightVoiceEnables[i].setTooltip("Enable/disable Voice " +
                                     juce::String(i + 4));
@@ -3947,6 +4177,9 @@ void BreadbinEditor::resized() {
   wtRow.removeFromRight(4);
   auto wtBtnBounds = wtRow.removeFromRight(85);
   wavetableButton.setBounds(wtBtnBounds.withSize(85, 20).translated(0, 2));
+  wtRow.removeFromRight(4);
+  auto digiBtnBounds = wtRow.removeFromRight(55);
+  digiButton.setBounds(digiBtnBounds.withSize(55, 20).translated(0, 2));
 
   // 5b. Enable toggles row (above popup buttons, right-justified)
   auto toggleRow = bounds.removeFromBottom(18);
@@ -3955,6 +4188,7 @@ void BreadbinEditor::resized() {
   lfo1EnableToggle.setBounds(modBtnBounds.getX(), toggleRow.getY(), 55, 18);
   lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, toggleRow.getY(), 55,
                              18);
+  digiEnableToggle.setBounds(digiBtnBounds.getX(), toggleRow.getY(), 52, 18);
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
@@ -4297,6 +4531,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   for (int s = 0; s < 4; ++s)
     for (int i = 0; i < 5; ++i)
       setParam("chord_s" + juce::String(s) + "_i" + juce::String(i), 0.0f);
+
+  // Digi Sampler: off, defaults
+  setParam("digiEnable", 0.0f);
+  setParam("digiRootNote", 60.0f);
+  setParam("digiLoop", 0.0f);
+  processor.getDigiSampler().unload();
 
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
   // preference)
@@ -6132,6 +6372,461 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setFilters(1600, 3);
     break;
   }
+
+    // ---- SHOWCASE ----
+    // Presets that demonstrate the full depth of Breadbin's features.
+    // Each uses multiple systems simultaneously in musically powerful ways.
+
+  case 70: { // Kitchen Sink - Every feature active simultaneously
+    // Both LFOs, mod matrix (all 4 slots), wavetable, filter env, PWM sweep,
+    // chord memory, chorus, delay — the ultimate feature demo
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 1, 5, 10, 5, 2);
+    setParam("leftDetune", -6.0f);
+    setParam("rightDetune", 6.0f);
+    setFilters(800, 6);
+    // LFO1: tempo-synced 1/4 note triangle on filter
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoSync", 1.0f);
+    setParam("lfoSyncDiv", 4.0f); // 1/4 notes
+    setParam("lfoDepthFilt", 0.35f);
+    // LFO2: free-running sine on pitch (vibrato)
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 4.0f); // Sine
+    setParam("lfo2Rate", 5.0f);
+    setParam("lfo2DepthPitch", 0.06f);
+    // Filter envelope: medium swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.5f);
+    setParam("filterEnvDecay", 0.8f);
+    setParam("filterEnvSustain", 0.5f);
+    setParam("filterEnvRelease", 1.5f);
+    setParam("filterEnvAmount", 0.5f);
+    // PWM sweep
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.4f);
+    setParam("pwmSweepDepth", 0.3f);
+    // Wavetable: 4-step timbral cycle
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 4.0f);
+    setParam("wtRate", 6.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0, 2.0f, 0.0f, 2048.0f);  // Pulse, root
+      setWTStep(1, 1.0f, 0.0f, 2048.0f);  // Saw, root
+      setWTStep(2, 2.0f, 7.0f, 1500.0f);  // Pulse, 5th, narrow
+      setWTStep(3, 0.0f, 12.0f, 2048.0f); // Triangle, octave
+    }
+    // Mod matrix: all 4 slots active
+    {
+      auto setMod = [this, &setParam](int slot, float src, float dst,
+                                      float amt) {
+        auto mp = "mod" + juce::String(slot) + "_";
+        auto *srcP = processor.apvts.getParameter(mp + "src");
+        auto *dstP = processor.apvts.getParameter(mp + "dst");
+        if (srcP)
+          srcP->setValueNotifyingHost(srcP->convertTo0to1(src));
+        if (dstP)
+          dstP->setValueNotifyingHost(dstP->convertTo0to1(dst));
+        setParam(mp + "amt", amt);
+      };
+      setMod(0, 5.0f, 1.0f, 0.4f);  // Velocity -> Filter
+      setMod(1, 4.0f, 2.0f, 0.3f);  // ModWheel -> PW
+      setMod(2, 1.0f, 4.0f, 0.25f); // LFO1 -> Resonance
+      setMod(3, 3.0f, 3.0f, 0.15f); // FilterEnv -> Pitch
+    }
+    // Chord memory: major 7th voicing
+    setParam("chordEnable", 1.0f);
+    setParam("chordSlot", 0.0f);
+    setParam("chord_s0_i0", 4.0f);  // major 3rd
+    setParam("chord_s0_i1", 7.0f);  // perfect 5th
+    setParam("chord_s0_i2", 11.0f); // major 7th
+    // Chorus + delay
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 330.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.25f);
+    break;
+  }
+
+  case 71: { // Sync Sculptor - Hard sync with tempo-synced modulation
+    // Hard sync saw voices with musical modulation creating evolving harmonics
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 12, 4, 3);
+      setParam("v" + juce::String(v) + "_sync", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset", 5.0f); // 4th for rich sync
+    }
+    setParam("leftDetune", -5.0f);
+    setParam("rightDetune", 5.0f);
+    setFilters(1200, 5);
+    // LFO1: tempo-synced 1/2 note on filter for sweeping sync harmonics
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f); // Triangle
+    setParam("lfoSync", 1.0f);
+    setParam("lfoSyncDiv", 3.0f); // 1/2 notes
+    setParam("lfoDepthFilt", 0.4f);
+    // LFO2: free slow on PW for timbral drift
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 4.0f); // Sine
+    setParam("lfo2Rate", 0.5f);
+    setParam("lfo2DepthPW", 0.3f);
+    // Filter envelope: sharp attack bite
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.25f);
+    setParam("filterEnvSustain", 0.3f);
+    setParam("filterEnvRelease", 0.5f);
+    setParam("filterEnvAmount", 0.55f);
+    // Mod matrix: Velocity->Filter, ModWheel->Pitch
+    {
+      auto setMod = [this, &setParam](int slot, float src, float dst,
+                                      float amt) {
+        auto mp = "mod" + juce::String(slot) + "_";
+        auto *srcP = processor.apvts.getParameter(mp + "src");
+        auto *dstP = processor.apvts.getParameter(mp + "dst");
+        if (srcP)
+          srcP->setValueNotifyingHost(srcP->convertTo0to1(src));
+        if (dstP)
+          dstP->setValueNotifyingHost(dstP->convertTo0to1(dst));
+        setParam(mp + "amt", amt);
+      };
+      setMod(0, 5.0f, 1.0f, 0.5f); // Velocity -> Filter
+      setMod(1, 4.0f, 3.0f, 0.2f); // ModWheel -> Pitch
+    }
+    // Chorus for stereo width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    setParam("pitchBendRange", 7.0f);
+    break;
+  }
+
+  case 72: { // Ring Cathedral - Ethereal ring mod bells with space FX
+    // Ring mod triangles with consonant mod offset creating bell harmonics
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Triangle, 0, 3, 2, 12, 6, 6);
+      setParam("v" + juce::String(v) + "_ringMod", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset", 7.0f); // 5th: consonant
+    }
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    setFilters(900, 4);
+    // LFO1: very slow filter sweep
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 4.0f); // Sine
+    setParam("lfoRate", 0.15f);
+    setParam("lfoDepthFilt", 0.25f);
+    // LFO2: slow PW (affects ring mod timbre via harmonics)
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 0.0f); // Triangle
+    setParam("lfo2Rate", 0.3f);
+    setParam("lfo2DepthPW", 0.2f);
+    // Filter envelope: slow cathedral swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 2.5f);
+    setParam("filterEnvDecay", 1.5f);
+    setParam("filterEnvSustain", 0.6f);
+    setParam("filterEnvRelease", 4.0f);
+    setParam("filterEnvAmount", 0.45f);
+    // Long spacious delay
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 500.0f);
+    setParam("delayTimeR", 750.0f);
+    setParam("delayFeedback", 0.5f);
+    setParam("delayMix", 0.4f);
+    // Wide chorus
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.6f);
+    setParam("chorusDepth", 0.35f);
+    setParam("chorusMix", 0.35f);
+    break;
+  }
+
+  case 73: { // Matrix Express - All 4 mod slots for maximum expression
+    // Performance-oriented preset: every mod slot mapped for expressive playing
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 1, 4, 10, 4, 2);
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    setFilters(900, 5);
+    // LFO1: tempo-synced vibrato (subtle)
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 4.0f); // Sine
+    setParam("lfoSync", 1.0f);
+    setParam("lfoSyncDiv", 5.0f); // 1/8 notes
+    setParam("lfoDepthPitch", 0.04f);
+    // Filter envelope: medium pluck
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.01f);
+    setParam("filterEnvDecay", 0.4f);
+    setParam("filterEnvSustain", 0.4f);
+    setParam("filterEnvRelease", 0.6f);
+    setParam("filterEnvAmount", 0.5f);
+    // All 4 mod matrix slots for full expression
+    {
+      auto setMod = [this, &setParam](int slot, float src, float dst,
+                                      float amt) {
+        auto mp = "mod" + juce::String(slot) + "_";
+        auto *srcP = processor.apvts.getParameter(mp + "src");
+        auto *dstP = processor.apvts.getParameter(mp + "dst");
+        if (srcP)
+          srcP->setValueNotifyingHost(srcP->convertTo0to1(src));
+        if (dstP)
+          dstP->setValueNotifyingHost(dstP->convertTo0to1(dst));
+        setParam(mp + "amt", amt);
+      };
+      setMod(0, 5.0f, 1.0f, 0.6f);  // Velocity -> Filter (dynamics)
+      setMod(1, 4.0f, 2.0f, 0.5f);  // ModWheel -> PW (timbre morph)
+      setMod(2, 1.0f, 3.0f, 0.08f); // LFO1 -> Pitch (vibrato)
+      setMod(3, 3.0f, 4.0f, 0.4f);  // FilterEnv -> Resonance (attack bite)
+    }
+    // Chorus for width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.2f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.3f);
+    // Delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 375.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.3f);
+    setParam("delayMix", 0.2f);
+    setParam("pitchBendRange", 5.0f);
+    break;
+  }
+
+  case 74: { // WT Kaleidoscope - Full 16-step wavetable journey
+    // Maximum wavetable depth: 16 steps cycling through all waveforms,
+    // pitch jumps, and PW variations creating a melodic pattern
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 3, 2);
+    setParam("leftDetune", -3.0f);
+    setParam("rightDetune", 3.0f);
+    setFilters(1100, 4);
+    // 16-step wavetable: diverse timbral and melodic sequence
+    setParam("wtEnable", 1.0f);
+    setParam("wtNumSteps", 16.0f);
+    setParam("wtRate", 10.0f);
+    setParam("wtLoop", 1.0f);
+    {
+      auto setWTStep = [&setParam](int step, float wave, float pitch,
+                                   float pw) {
+        auto sp = "wt_s" + juce::String(step) + "_";
+        setParam(sp + "wave", wave);
+        setParam(sp + "pitch", pitch);
+        setParam(sp + "pw", pw);
+      };
+      setWTStep(0,  2.0f,  0.0f, 2048.0f); // Pulse, root
+      setWTStep(1,  2.0f,  4.0f, 1800.0f); // Pulse, M3
+      setWTStep(2,  1.0f,  7.0f, 2048.0f); // Saw, P5
+      setWTStep(3,  2.0f, 12.0f, 2048.0f); // Pulse, oct
+      setWTStep(4,  0.0f,  7.0f, 2048.0f); // Tri, P5
+      setWTStep(5,  2.0f,  0.0f, 1024.0f); // Pulse, root, narrow
+      setWTStep(6,  1.0f, -5.0f, 2048.0f); // Saw, P4 down
+      setWTStep(7,  3.0f,  0.0f, 2048.0f); // Noise, hit
+      setWTStep(8,  2.0f,  0.0f, 3000.0f); // Pulse, root, thin
+      setWTStep(9,  2.0f,  3.0f, 2048.0f); // Pulse, m3
+      setWTStep(10, 0.0f,  5.0f, 2048.0f); // Tri, P4
+      setWTStep(11, 1.0f, 12.0f, 2048.0f); // Saw, oct
+      setWTStep(12, 2.0f, -7.0f, 1500.0f); // Pulse, P5 down
+      setWTStep(13, 2.0f,  0.0f, 512.0f);  // Pulse, root, very narrow
+      setWTStep(14, 1.0f,  7.0f, 2048.0f); // Saw, P5
+      setWTStep(15, 0.0f,  0.0f, 2048.0f); // Tri, root (resolve)
+    }
+    // LFO1: slow filter movement
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.25f);
+    setParam("lfoDepthFilt", 0.2f);
+    // Filter envelope for pluck definition
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.15f);
+    setParam("filterEnvSustain", 0.2f);
+    setParam("filterEnvRelease", 0.3f);
+    setParam("filterEnvAmount", 0.5f);
+    // Delay for rhythmic depth
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 200.0f);
+    setParam("delayTimeR", 300.0f);
+    setParam("delayFeedback", 0.4f);
+    setParam("delayMix", 0.3f);
+    // Chorus for stereo
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.2f);
+    setParam("chorusMix", 0.25f);
+    break;
+  }
+
+  case 75: { // Chord Cathedral - All 4 chord slots with rich voicings
+    // Every chord memory slot loaded with a different musical voicing
+    for (int v = 0; v < 6; ++v)
+      configVoice(v, SIDEngine::Waveform::Pulse, 2048, 4, 4, 12, 6, 2);
+    setParam("leftDetune", -5.0f);
+    setParam("rightDetune", 5.0f);
+    setFilters(700, 5);
+    // Chord memory: 4 different voicings
+    setParam("chordEnable", 1.0f);
+    setParam("chordSlot", 0.0f);
+    // Slot 0: Major 9th (+4, +7, +11, +14)
+    setParam("chord_s0_i0", 4.0f);
+    setParam("chord_s0_i1", 7.0f);
+    setParam("chord_s0_i2", 11.0f);
+    setParam("chord_s0_i3", 14.0f);
+    // Slot 1: Minor 7th (+3, +7, +10)
+    setParam("chord_s1_i0", 3.0f);
+    setParam("chord_s1_i1", 7.0f);
+    setParam("chord_s1_i2", 10.0f);
+    // Slot 2: Dominant 7th (+4, +7, +10)
+    setParam("chord_s2_i0", 4.0f);
+    setParam("chord_s2_i1", 7.0f);
+    setParam("chord_s2_i2", 10.0f);
+    // Slot 3: Add9 (+2, +7, +12)
+    setParam("chord_s3_i0", 2.0f);
+    setParam("chord_s3_i1", 7.0f);
+    setParam("chord_s3_i2", 12.0f);
+    // PWM sweep for evolving texture
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.3f);
+    setParam("pwmSweepDepth", 0.35f);
+    // Filter envelope: pad swell
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 1.5f);
+    setParam("filterEnvDecay", 1.0f);
+    setParam("filterEnvSustain", 0.7f);
+    setParam("filterEnvRelease", 3.0f);
+    setParam("filterEnvAmount", 0.5f);
+    // Chorus for width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    // Long delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 500.0f);
+    setParam("delayTimeR", 750.0f);
+    setParam("delayFeedback", 0.45f);
+    setParam("delayMix", 0.3f);
+    break;
+  }
+
+  case 76: { // Dual Worlds - Different instruments per SID (stereo split)
+    // Left SID (v0-2): aggressive sync saw lead
+    // Right SID (v3-5): soft triangle pad
+    // Two completely different instruments in stereo
+    configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 3);
+    configVoice(1, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 3);
+    configVoice(2, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 2, 3);
+    for (int v = 0; v < 3; ++v) {
+      setParam("v" + juce::String(v) + "_sync", 1.0f);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+      setParam("v" + juce::String(v) + "_modOffset", 5.0f);
+    }
+    configVoice(3, SIDEngine::Waveform::Triangle, 0, 6, 3, 12, 8, 6);
+    configVoice(4, SIDEngine::Waveform::Triangle, 0, 6, 3, 12, 8, 6);
+    configVoice(5, SIDEngine::Waveform::Triangle, 0, 6, 3, 12, 8, 6);
+    for (int v = 3; v < 6; ++v)
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    setParam("dualMode", 0.0f); // StereoSplit
+    setParam("leftDetune", -4.0f);
+    setParam("rightDetune", 4.0f);
+    setFilters(1000, 4);
+    // LFO1: filter sweep for left (lead) side
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 0.0f);
+    setParam("lfoRate", 0.4f);
+    setParam("lfoDepthFilt", 0.3f);
+    // LFO2: slow PW drift
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 4.0f); // Sine
+    setParam("lfo2Rate", 0.2f);
+    setParam("lfo2DepthPW", 0.2f);
+    // Chorus for the pad side
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 0.8f);
+    setParam("chorusDepth", 0.25f);
+    setParam("chorusMix", 0.3f);
+    // Delay for stereo depth
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 375.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.3f);
+    setParam("delayMix", 0.2f);
+    break;
+  }
+
+  case 77: { // Glide Machine - Portamento synthwave solo monster
+    // Unison mode, long glide, wide detune — modern synthwave lead
+    for (int v = 0; v < 6; ++v) {
+      configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 2, 12, 4, 3);
+      setParam("v" + juce::String(v) + "_filter", 1.0f);
+    }
+    setParam("dualMode", 1.0f); // Unison
+    setParam("leftDetune", -15.0f);
+    setParam("rightDetune", 15.0f);
+    setParam("glide", 800.0f); // Long portamento
+    setFilters(1400, 5);
+    // LFO1: S&H on filter for random filter steps
+    setParam("lfoEnable", 1.0f);
+    setParam("lfoWave", 3.0f); // S&H
+    setParam("lfoRate", 3.0f);
+    setParam("lfoDepthFilt", 0.25f);
+    // LFO2: vibrato
+    setParam("lfo2Enable", 1.0f);
+    setParam("lfo2Wave", 4.0f); // Sine
+    setParam("lfo2Rate", 5.5f);
+    setParam("lfo2DepthPitch", 0.07f);
+    // PWM sweep for movement
+    setParam("pwmSweepEnable", 1.0f);
+    setParam("pwmSweepRate", 0.5f);
+    setParam("pwmSweepDepth", 0.3f);
+    // Filter envelope: attack pluck
+    setParam("filterEnvEnable", 1.0f);
+    setParam("filterEnvAttack", 0.001f);
+    setParam("filterEnvDecay", 0.3f);
+    setParam("filterEnvSustain", 0.4f);
+    setParam("filterEnvRelease", 0.8f);
+    setParam("filterEnvAmount", 0.45f);
+    // Mod matrix: Velocity->Filter for dynamics
+    {
+      auto *s0src = processor.apvts.getParameter("mod0_src");
+      auto *s0dst = processor.apvts.getParameter("mod0_dst");
+      if (s0src)
+        s0src->setValueNotifyingHost(s0src->convertTo0to1(5.0f)); // Velocity
+      if (s0dst)
+        s0dst->setValueNotifyingHost(s0dst->convertTo0to1(1.0f)); // Filter
+      setParam("mod0_amt", 0.4f);
+    }
+    // Delay for space
+    setParam("delayEnable", 1.0f);
+    setParam("delayTimeL", 333.0f);
+    setParam("delayTimeR", 500.0f);
+    setParam("delayFeedback", 0.35f);
+    setParam("delayMix", 0.3f);
+    // Chorus for massive width
+    setParam("chorusEnable", 1.0f);
+    setParam("chorusRate", 1.0f);
+    setParam("chorusDepth", 0.3f);
+    setParam("chorusMix", 0.35f);
+    setParam("pitchBendRange", 12.0f);
+    break;
+  }
   }
 
   // Re-apply all voice settings to SID engine after preset configuration.
@@ -6344,6 +7039,20 @@ void BreadbinEditor::refreshUserPresets() {
     sub.addItem(65, "Ring Mod Pad");
     sub.addItem(69, "Percussion Ensemble");
     root->addSubMenu("FX & Modulation", sub);
+  }
+
+  // -- Showcase (demonstrates full feature depth) --
+  {
+    juce::PopupMenu sub;
+    sub.addItem(70, "Kitchen Sink");
+    sub.addItem(71, "Sync Sculptor");
+    sub.addItem(72, "Ring Cathedral");
+    sub.addItem(73, "Matrix Express");
+    sub.addItem(74, "WT Kaleidoscope");
+    sub.addItem(75, "Chord Cathedral");
+    sub.addItem(76, "Dual Worlds");
+    sub.addItem(77, "Glide Machine");
+    root->addSubMenu("Showcase", sub);
   }
 
   // -- Classic C64 (last - niche/educational) --
