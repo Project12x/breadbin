@@ -1182,6 +1182,18 @@ void BreadbinEditor::timerCallback() {
     cpuLoadLabel.setText(txt, juce::dontSendNotification);
   }
 
+  // Poly voice count (active/max)
+  if (processor.isPolyEnabled()) {
+    int active = processor.getActivePolyVoiceCount();
+    int maxN = processor.getPolyMaxNotes();
+    polyVoiceCountLabel.setText(
+        juce::String(active) + "/" + juce::String(maxN),
+        juce::dontSendNotification);
+    polyVoiceCountLabel.setVisible(true);
+  } else {
+    polyVoiceCountLabel.setVisible(false);
+  }
+
   // SID Player register overlay
   if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
     auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
@@ -2622,6 +2634,27 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(dualModeSelector);
 
+  // Poly mode toggle + max notes selector
+  polyEnableButton.setTooltip("Enable true polyphony (each note gets its own SID pair)");
+  addAndMakeVisible(polyEnableButton);
+  polyEnableAttachment = std::make_unique<
+      juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "polyEnable", polyEnableButton);
+
+  for (int i = 1; i <= 8; ++i)
+    polyMaxNotesSelector.addItem(juce::String(i), i);
+  polyMaxNotesSelector.setSelectedId(4, juce::dontSendNotification);
+  polyMaxNotesSelector.setTooltip("Maximum polyphonic voices (1-12)");
+  addAndMakeVisible(polyMaxNotesSelector);
+  polyMaxNotesAttachment = std::make_unique<
+      juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+      processor.apvts, "polyMaxNotes", polyMaxNotesSelector);
+
+  polyVoiceCountLabel.setText("0/6", juce::dontSendNotification);
+  polyVoiceCountLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
+  polyVoiceCountLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(polyVoiceCountLabel);
+
   // Global Factory Presets
   globalPresetLabel.setText("Patch:", juce::dontSendNotification);
   globalPresetLabel.setColour(juce::Label::textColourId,
@@ -3808,6 +3841,12 @@ void BreadbinEditor::updateFiltersFromUI() {
   processor.getRightSID().setFilterMode(rightLPButton.getToggleState(),
                                         rightBPButton.getToggleState(),
                                         rightHPButton.getToggleState());
+
+  // Cache filter mode for poly voice replication
+  processor.cacheFilterMode(
+      leftLPButton.getToggleState(), leftBPButton.getToggleState(),
+      leftHPButton.getToggleState(), rightLPButton.getToggleState(),
+      rightBPButton.getToggleState(), rightHPButton.getToggleState());
 }
 
 void BreadbinEditor::paint(juce::Graphics &g) {
@@ -3850,7 +3889,11 @@ void BreadbinEditor::resized() {
   auto topRow = bounds.removeFromTop(rowH);
   modeLabel.setBounds(topRow.removeFromLeft(45));
   dualModeSelector.setBounds(topRow.removeFromLeft(105));
-  topRow.removeFromLeft(pad * 2);
+  topRow.removeFromLeft(pad);
+  polyEnableButton.setBounds(topRow.removeFromLeft(42));
+  polyMaxNotesSelector.setBounds(topRow.removeFromLeft(42).withHeight(22).translated(0, 3));
+  polyVoiceCountLabel.setBounds(topRow.removeFromLeft(30));
+  topRow.removeFromLeft(pad);
 
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
   presetPrevButton.setBounds(topRow.removeFromLeft(20).reduced(0, 2));
@@ -4569,6 +4612,10 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   setParam("digiLoop", 0.0f);
   setParam("digiBitDepth", 0.0f);
   processor.getDigiSampler().unload();
+
+  // Poly mode: off, default max notes
+  setParam("polyEnable", 0.0f);
+  setParam("polyMaxNotes", 4.0f);
 
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
   // preference)

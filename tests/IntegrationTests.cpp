@@ -2549,6 +2549,141 @@ void testWavetableStepSequencerProducesVariation() {
 }
 
 // ============================================================================
+// Poly Mode Tests
+// ============================================================================
+
+void testPolyModeProducesSound() {
+  std::printf("--- Poly mode produces sound ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Enable poly mode
+  auto *param = p->apvts.getParameter("polyEnable");
+  param->setValueNotifyingHost(1.0f);
+  warmUp(*p);
+
+  ASSERT_TRUE(p->isPolyEnabled(), "Poly mode enabled");
+
+  // Send note via MIDI
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  float rms = processBlock(*p, 512, &midi);
+  // Process a few more blocks for SID to settle
+  for (int i = 0; i < 5; ++i)
+    rms = std::max(rms, processBlock(*p));
+
+  ASSERT_TRUE(rms > 0.0001f, "Poly mode produces audible output");
+  ASSERT_TRUE(p->getActivePolyVoiceCount() > 0, "At least one poly voice active");
+}
+
+void testPolyMultipleNotesAllocateSeparateVoices() {
+  std::printf("--- Multiple notes allocate separate poly voices ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Enable poly with max 6
+  auto *polyParam = p->apvts.getParameter("polyEnable");
+  polyParam->setValueNotifyingHost(1.0f);
+  warmUp(*p);
+
+  // Send 3 different notes
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 2);
+  processBlock(*p, 512, &midi);
+
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 3,
+              "3 poly voices allocated for 3 notes");
+}
+
+void testPolyMonoUnaffectedWhenDisabled() {
+  std::printf("--- Mono mode unaffected when poly disabled ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Poly stays off (default)
+  ASSERT_TRUE(!p->isPolyEnabled(), "Poly mode off by default");
+
+  // Send note via mono path
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  float rms = processBlock(*p, 512, &midi);
+  for (int i = 0; i < 5; ++i)
+    rms = std::max(rms, processBlock(*p));
+
+  ASSERT_TRUE(rms > 0.0001f, "Mono mode still produces sound");
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 0,
+              "No poly voices when poly disabled");
+}
+
+void testPolyVoiceStealing() {
+  std::printf("--- Poly voice stealing when pool full ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Enable poly with max 2 voices
+  auto *polyParam = p->apvts.getParameter("polyEnable");
+  polyParam->setValueNotifyingHost(1.0f);
+  auto *maxParam = p->apvts.getParameter("polyMaxNotes");
+  maxParam->setValueNotifyingHost(maxParam->convertTo0to1(2.0f));
+  warmUp(*p);
+
+  // Play 3 notes (pool has only 2 slots)
+  juce::MidiBuffer midi1;
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  processBlock(*p, 512, &midi1);
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 2,
+              "Pool filled with 2 voices");
+
+  // Third note should steal oldest
+  juce::MidiBuffer midi2;
+  midi2.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 0);
+  processBlock(*p, 512, &midi2);
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 2,
+              "Voice count stays at max after steal");
+}
+
+void testPolyNoteOffReleasesCorrectVoice() {
+  std::printf("--- Poly note-off releases correct voice ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Enable poly
+  auto *polyParam = p->apvts.getParameter("polyEnable");
+  polyParam->setValueNotifyingHost(1.0f);
+  warmUp(*p);
+
+  // Play 2 notes
+  juce::MidiBuffer midi1;
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  processBlock(*p, 512, &midi1);
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 2, "2 voices active");
+
+  // Release one note
+  juce::MidiBuffer midi2;
+  midi2.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &midi2);
+
+  // One voice should now be in releasing state (still counted as active)
+  // but the other should remain fully active
+  int activeCount = p->getActivePolyVoiceCount();
+  ASSERT_TRUE(activeCount == 2,
+              "Both voices still counted (one releasing)");
+
+  // Process many blocks to let release timer expire
+  for (int i = 0; i < 200; ++i)
+    processBlock(*p);
+
+  // After release timer, the released voice should be freed
+  int postRelease = p->getActivePolyVoiceCount();
+  ASSERT_TRUE(postRelease == 1,
+              "Released voice freed after release timer");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -2660,6 +2795,13 @@ int main() {
   testPresetDirtyDetection();
   testPostModValuesReturnToBaseline();
   testIdleLFOModulationDoesNotTouchVoices();
+
+  // ==================== POLY MODE TESTS ====================
+  testPolyModeProducesSound();
+  testPolyMultipleNotesAllocateSeparateVoices();
+  testPolyMonoUnaffectedWhenDisabled();
+  testPolyVoiceStealing();
+  testPolyNoteOffReleasesCorrectVoice();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

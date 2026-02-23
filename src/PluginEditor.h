@@ -891,6 +891,16 @@ private:
                                     juce::Colours::cyan.withAlpha(0.7f),
                                     juce::Colours::white};
 
+  // Poly mode controls
+  MappableToggle polyEnableButton{"Poly", processor,
+                                  BreadbinProcessor::ControlParam::PolyEnable};
+  juce::ComboBox polyMaxNotesSelector;
+  juce::Label polyVoiceCountLabel;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      polyEnableAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      polyMaxNotesAttachment;
+
   // Time Machine (aging)
   MappableSlider agingSlider{processor, BreadbinProcessor::ControlParam::Aging};
   juce::Label agingLabel{"Aging", "AGING"};

@@ -42,6 +42,23 @@ public:
     float currentValue = 0.0f; // 0.0-1.0 envelope output
   };
 
+  // Polyphony: each held note gets its own L/R SID engine pair
+  struct PolyVoice {
+    std::unique_ptr<SIDEngine> sidLeft;
+    std::unique_ptr<SIDEngine> sidRight;
+    int midiNote = -1;
+    int velocity = 0;
+    bool active = false;
+    bool releasing = false;          // Gate off, ADSR releasing
+    double currentHz = 0.0;
+    double targetHz = 0.0;
+    bool isGliding = false;
+    uint32_t startSample = 0;       // Monotonic counter for voice stealing
+    int releaseSamplesRemaining = 0; // Fallback release timer
+    FilterEnvelopeState filterEnv;   // Per-voice filter envelope
+  };
+  static constexpr int MAX_POLY = 12;
+
   // Wavetable step sequencer
   struct WavetableStep {
     int waveform = 2;      // 0=Tri,1=Saw,2=Pulse,3=Noise
@@ -132,6 +149,8 @@ public:
     DigiRootNote,
     DigiLoop,
     DigiBitDepth,
+    PolyEnable,
+    PolyMaxNotes,
   };
 
   static juce::String getParamName(ControlParam param);
@@ -371,6 +390,34 @@ private:
   size_t sidResampleBufCapacity =
       0; // Track allocated capacity to avoid RT resize
 
+  // Poly voice pool (pre-allocated, activated on demand)
+  std::array<PolyVoice, MAX_POLY> polyVoices;
+  uint32_t polyNoteCounter = 0;
+  bool polyEnabled = false;
+  int polyMaxNotes = 6;
+  std::atomic<float> *polyEnablePtr = nullptr;
+  std::atomic<float> *polyMaxNotesPtr = nullptr;
+
+  // Cached filter mode for poly voice replication (set by editor)
+  bool filterLPLeft = true, filterBPLeft = false, filterHPLeft = false;
+  bool filterLPRight = true, filterBPRight = false, filterHPRight = false;
+public:
+  void cacheFilterMode(bool lpL, bool bpL, bool hpL,
+                       bool lpR, bool bpR, bool hpR) {
+    filterLPLeft = lpL; filterBPLeft = bpL; filterHPLeft = hpL;
+    filterLPRight = lpR; filterBPRight = bpR; filterHPRight = hpR;
+  }
+private:
+
+  // Poly voice management
+  int findFreePolyVoice() const;
+  int findStealablePolyVoice() const;
+  void polyNoteOn(int midiNote, int velocity);
+  void polyNoteOff(int midiNote);
+  void polyAllNotesOff();
+  void applySettingsToPolyVoice(int polyIdx);
+  void processPolyFilterEnvelope(int polyIdx, int numSamples);
+
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS8580;
@@ -468,6 +515,17 @@ public:
     int count = 0;
     for (const auto &voice : voices)
       if (voice.active)
+        ++count;
+    return count;
+  }
+
+  // Polyphony accessors
+  bool isPolyEnabled() const { return polyEnabled; }
+  int getPolyMaxNotes() const { return polyMaxNotes; }
+  int getActivePolyVoiceCount() const {
+    int count = 0;
+    for (int i = 0; i < polyMaxNotes; ++i)
+      if (polyVoices[i].active || polyVoices[i].releasing)
         ++count;
     return count;
   }

@@ -12,6 +12,12 @@ BreadbinProcessor::BreadbinProcessor()
   sidLeft.setChipModel(chipModelLeft);
   sidRight.setChipModel(chipModelRight);
 
+  // Pre-allocate poly voice pool (24 SID engines, ~1.2MB)
+  for (auto &pv : polyVoices) {
+    pv.sidLeft = std::make_unique<SIDEngine>();
+    pv.sidRight = std::make_unique<SIDEngine>();
+  }
+
   // Initialize SID file player
   sidFilePlayer = std::make_unique<SidFilePlayer>();
 
@@ -45,6 +51,18 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
   sidRight.prepare(sampleRate);
+
+  // Prepare all poly voice SID engines
+  for (auto &pv : polyVoices) {
+    pv.sidLeft->prepare(sampleRate);
+    pv.sidRight->prepare(sampleRate);
+    pv.sidLeft->setChipModel(chipModelLeft);
+    pv.sidRight->setChipModel(chipModelRight);
+    pv.sidLeft->setClockMode(clockMode);
+    pv.sidRight->setClockMode(clockMode);
+    pv.sidLeft->setAgingFactor(agingFactor);
+    pv.sidRight->setAgingFactor(agingFactor);
+  }
 
   // Initialize MIDI collector for virtual keyboard
   midiCollector.reset(sampleRate);
@@ -111,6 +129,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   extInputEnabled = extInputEnablePtr->load() > 0.5f;
   extInputLevel = extInputLevelPtr->load();
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
+  polyEnabled = polyEnablePtr->load() > 0.5f;
+  polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
   bool digiEnabled = digiEnablePtr->load() > 0.5f;
   digiSampler.setRootNote(static_cast<int>(digiRootNotePtr->load()));
   digiSampler.setLooping(digiLoopPtr->load() > 0.5f);
@@ -210,9 +230,21 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (chipModelDirty.exchange(false, std::memory_order_relaxed)) {
     sidLeft.setChipModel(chipModelLeft);
     sidRight.setChipModel(chipModelRight);
+    if (polyEnabled) {
+      for (int pi = 0; pi < polyMaxNotes; ++pi) {
+        polyVoices[pi].sidLeft->setChipModel(chipModelLeft);
+        polyVoices[pi].sidRight->setChipModel(chipModelRight);
+      }
+    }
   }
   if (clockModeDirty.exchange(false, std::memory_order_relaxed)) {
     setClockMode(clockMode);
+    if (polyEnabled) {
+      for (int pi = 0; pi < polyMaxNotes; ++pi) {
+        polyVoices[pi].sidLeft->setClockMode(clockMode);
+        polyVoices[pi].sidRight->setClockMode(clockMode);
+      }
+    }
   }
 
   // Sync voice settings every block for now.
@@ -224,6 +256,13 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     if (!voiceSettings[v].enabled && voices[v].active) {
       releaseNote(v);
     }
+  }
+
+  // Sync voice settings to active poly voices (waveform, ADSR, filter, etc.)
+  if (polyEnabled) {
+    for (int pi = 0; pi < polyMaxNotes; ++pi)
+      if (polyVoices[pi].active || polyVoices[pi].releasing)
+        applySettingsToPolyVoice(pi);
   }
 
   // Handle MIDI
@@ -242,32 +281,43 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     processWavetable(numSamples);
   }
 
-  // Process glide/portamento for all voices
+  // Process glide/portamento
   if (glideTimeMs > 0.0f) {
-    // Calculate glide rate: how much to move per sample
     double glideTimeSec = glideTimeMs / 1000.0;
     double samplesPerGlide = hostSampleRate * glideTimeSec;
+    double glideRate = static_cast<double>(numSamples) / samplesPerGlide;
 
-    for (int v = 0; v < 6; ++v) {
-      if (voices[v].active && voices[v].isGliding) {
-        double currentHz = voices[v].currentHz;
-        double targetHz = voices[v].targetHz;
-
-        if (std::abs(currentHz - targetHz) < 0.1) {
-          // Close enough - snap to target
-          voices[v].currentHz = targetHz;
-          voices[v].isGliding = false;
+    if (polyEnabled) {
+      // Poly glide: process per-poly-voice
+      for (int pi = 0; pi < polyMaxNotes; ++pi) {
+        auto &pv = polyVoices[pi];
+        if (!pv.active || !pv.isGliding) continue;
+        if (std::abs(pv.currentHz - pv.targetHz) < 0.1) {
+          pv.currentHz = pv.targetHz;
+          pv.isGliding = false;
         } else {
-          // Exponential glide for musical feel
-          // Move a fraction of the distance per block
-          double glideRate = static_cast<double>(numSamples) / samplesPerGlide;
-          double newHz = currentHz + (targetHz - currentHz) * glideRate;
-          voices[v].currentHz = newHz;
-
-          // Update SID frequency
-          SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-          int sidVoice = v % 3;
-          sid.setFrequency(sidVoice, newHz);
+          pv.currentHz += (pv.targetHz - pv.currentHz) * glideRate;
+          for (int v = 0; v < 3; ++v) {
+            pv.sidLeft->setFrequency(v, pv.currentHz);
+            pv.sidRight->setFrequency(v, pv.currentHz);
+          }
+        }
+      }
+    } else {
+      // Mono glide
+      for (int v = 0; v < 6; ++v) {
+        if (voices[v].active && voices[v].isGliding) {
+          double currentHz = voices[v].currentHz;
+          double targetHz = voices[v].targetHz;
+          if (std::abs(currentHz - targetHz) < 0.1) {
+            voices[v].currentHz = targetHz;
+            voices[v].isGliding = false;
+          } else {
+            double newHz = currentHz + (targetHz - currentHz) * glideRate;
+            voices[v].currentHz = newHz;
+            SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+            sid.setFrequency(v % 3, newHz);
+          }
         }
       }
     }
@@ -311,6 +361,91 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Mod matrix (additional routing from any source to any dest)
   applyModMatrix();
 
+  // Poly modulation: propagate global modulation state to all active poly voices.
+  // LFO/mod matrix/PWM sweep have already computed their values and written to
+  // the mono SIDs (sidLeft/sidRight). We extract the effective offsets and apply
+  // them to each poly voice's SID pair for PW, pitch, and filter cutoff.
+  if (polyEnabled) {
+    // Compute global PW modulation offset
+    float val1 = lfo.enabled ? lfo.currentValue : 0.0f;
+    float val2 = lfo2.enabled ? lfo2.currentValue : 0.0f;
+    float pwDepth1 = lfo.enabled ? lfo.depthPulseWidth : 0.0f;
+    float pwDepth2 = lfo2.enabled ? lfo2.depthPulseWidth : 0.0f;
+    float sweepDepth =
+        (pwmSweepEnablePtr->load() > 0.5f) ? pwmSweepDepthPtr->load() : 0.0f;
+    int pwMod = 0;
+    if (pwDepth1 > 0.0f || pwDepth2 > 0.0f)
+      pwMod = static_cast<int>(val1 * pwDepth1 * 2048.0f) +
+              static_cast<int>(val2 * pwDepth2 * 2048.0f);
+    if (sweepDepth > 0.0f)
+      pwMod += static_cast<int>(pwmSweepCurrentValue * sweepDepth * 2048.0f);
+
+    // Compute global pitch modulation offset (semitones)
+    float pitchDepth1 = lfo.enabled ? lfo.depthPitch : 0.0f;
+    float pitchDepth2 = lfo2.enabled ? lfo2.depthPitch : 0.0f;
+    float semitoneMod = 0.0f;
+    if (pitchDepth1 > 0.0f || pitchDepth2 > 0.0f)
+      semitoneMod = val1 * pitchDepth1 * 2.0f + val2 * pitchDepth2 * 2.0f;
+    bool wtActive = wavetable.enabled;
+    auto &wtStep = wavetable.steps[wavetable.currentStep];
+    if (wtActive)
+      semitoneMod += static_cast<float>(wtStep.pitchOffset);
+
+    // Compute global filter mod offset (same as applyFilterModulation)
+    int filterModOffset = 0;
+    filterModOffset += static_cast<int>(modWheelValue * 1000.0f);
+    if (lfo.enabled && lfo.depthFilter > 0.0f)
+      filterModOffset += static_cast<int>(val1 * lfo.depthFilter * 1024.0f);
+    if (lfo2.enabled && lfo2.depthFilter > 0.0f)
+      filterModOffset += static_cast<int>(val2 * lfo2.depthFilter * 1024.0f);
+
+    double pitchMultiplier =
+        (semitoneMod != 0.0f) ? std::pow(2.0, semitoneMod / 12.0) : 1.0;
+
+    // Process per-voice filter envelope and apply all modulation to poly voices
+    bool filterEnvOn = filterEnvEnablePtr->load() > 0.5f;
+    float filterEnvAmt = filterEnvOn ? filterEnvAmountPtr->load() : 0.0f;
+
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      auto &pv = polyVoices[pi];
+      if (!pv.active && !pv.releasing) continue;
+
+      // Per-voice filter envelope
+      if (filterEnvOn)
+        processPolyFilterEnvelope(pi, numSamples);
+      int perVoiceEnvOffset =
+          static_cast<int>(pv.filterEnv.currentValue * filterEnvAmt * 2047.0f);
+
+      // Apply filter cutoff: base + global mod + per-voice envelope
+      int leftCutoff = juce::jlimit(
+          0, 2047, baseFilterCutoffLeft + filterModOffset + perVoiceEnvOffset);
+      int rightCutoff = juce::jlimit(
+          0, 2047, baseFilterCutoffRight + filterModOffset + perVoiceEnvOffset);
+      pv.sidLeft->setFilterCutoff(leftCutoff);
+      pv.sidRight->setFilterCutoff(rightCutoff);
+
+      // Apply PW modulation to all voices on this poly pair
+      for (int v = 0; v < 3; ++v) {
+        int basePWL = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
+        pv.sidLeft->setPulseWidth(v, std::clamp(basePWL + pwMod, 0, 4095));
+        int basePWR = wtActive ? wtStep.pulseWidth : voiceSettings[v + 3].pulseWidth;
+        pv.sidRight->setPulseWidth(v, std::clamp(basePWR + pwMod, 0, 4095));
+      }
+
+      // Apply pitch modulation + pitch bend to all voices
+      double baseHz = pv.currentHz;
+      double bendSemitones = pitchBendValue * pitchBendRange;
+      double bendMultiplier = std::pow(2.0, bendSemitones / 12.0);
+      double modHz = baseHz * pitchMultiplier * bendMultiplier;
+      for (int v = 0; v < 3; ++v) {
+        if (voiceSettings[v].enabled)
+          pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
+        if (voiceSettings[v + 3].enabled)
+          pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+      }
+    }
+  }
+
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -353,89 +488,140 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   float leftVoiceGain = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
   float rightVoiceGain = rightVoiceCount > 0 ? 3.0f / static_cast<float>(rightVoiceCount) : 1.0f;
 
-  // Digi gain compensation: $D418 digi modulates the master volume register
-  // which scales ALL voice output. When no voices are active, the digi signal
-  // itself is very quiet. Apply a boost to bring digi to a usable level.
-  // The SID outputs digi through the volume DAC at ~1/3 the voice level.
-  float digiGain = (digiEnabled && digiSampler.isPlaying()) ? 3.0f : 1.0f;
-
   // Combine voice compensation into pan gains
   leftGainL *= leftVoiceGain;
   leftGainR *= leftVoiceGain;
   rightGainL *= rightVoiceGain;
   rightGainR *= rightVoiceGain;
 
-  // SID volume register always at max — master volume is applied as output gain,
-  // and the 20Hz DC blocker removes SID idle offset.
-  sidLeft.setVolume(15);
-  sidRight.setVolume(15);
+  if (polyEnabled) {
+    // === POLY SAMPLE GENERATION ===
+    // Each active poly voice has its own L/R SID pair. Clock them all
+    // and sum with pan law, normalized by active voice count.
 
-  // Mute SID voices during digi playback when no voices are enabled,
-  // giving clean digi-only output. When voices ARE enabled, digi runs
-  // additively — the $D418 volume modulates voice output (authentic C64).
-  bool digiPlaying = digiEnabled && digiSampler.isPlaying();
-  if (digiPlaying && leftVoiceCount == 0) {
-    sidLeft.muteVoices();
-  } else {
-    sidLeft.unmuteVoices();
-  }
-  if (digiPlaying && rightVoiceCount == 0) {
-    sidRight.muteVoices();
-  } else {
-    sidRight.unmuteVoices();
-  }
+    // Count active poly voices for normalization
+    int activePolyCount = 0;
+    for (int pi = 0; pi < polyMaxNotes; ++pi)
+      if (polyVoices[pi].active || polyVoices[pi].releasing)
+        ++activePolyCount;
+    // 1/sqrt(N) normalization preserves perceived loudness across polyphony
+    float polyNorm = activePolyCount > 0
+        ? 1.0f / std::sqrt(static_cast<float>(activePolyCount))
+        : 1.0f;
 
-  // Generate audio from SID engines
-  for (int i = 0; i < numSamples; ++i) {
-    // Feed external audio to SID filters if enabled
-    if (extInputEnabled && inputLeft != nullptr) {
-      float extL = inputLeft[i] * extInputLevel;
-      float extR = inputRight[i] * extInputLevel;
-      sidLeft.setExternalInput(extL);
-      sidRight.setExternalInput(extR);
+    for (int i = 0; i < numSamples; ++i) {
+      float outL = 0.0f;
+      float outR = 0.0f;
+
+      for (int pi = 0; pi < polyMaxNotes; ++pi) {
+        auto &pv = polyVoices[pi];
+        if (!pv.active && !pv.releasing) continue;
+
+        float sL = pv.sidLeft->clock();
+        float sR = pv.sidRight->clock();
+
+        outL += sL * leftGainL + sR * rightGainL;
+        outR += sL * leftGainR + sR * rightGainR;
+      }
+
+      // Normalize and apply master volume
+      outL *= polyNorm * masterVolume;
+      outR *= polyNorm * masterVolume;
+
+      leftChannel[i] = outL;
+      if (rightChannel)
+        rightChannel[i] = outR;
     }
 
-    // Digi sample playback
-    float digi8bitSample = 0.0f;
-    if (digiEnabled && digiSampler.isPlaying()) {
-      int digiVal = digiSampler.getNextSample();
-      if (digiVal >= 0) {
-        if (digiBitDepth == 4) {
-          // 4-bit: authentic $D418 volume register write
-          sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
-          sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
-        } else {
-          // 8-bit: direct mix (bypass $D418, higher quality)
-          // Scale to match SID output level (~0.5 peak from /32768 normalization).
-          // 0.15 base * 3x digiGain = ~0.45, comparable to SID voice output.
-          digi8bitSample = (static_cast<float>(digiVal) - 128.0f) / 128.0f * 0.15f;
+    // Release detection: decrement timers, deactivate expired voices
+    // Filter envelope is just cutoff modulation — once the SID ADSR finishes
+    // releasing there's no signal left, so we only check the SID release timer.
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      auto &pv = polyVoices[pi];
+      if (pv.releasing) {
+        pv.releaseSamplesRemaining -= numSamples;
+        if (pv.releaseSamplesRemaining <= 0) {
+          pv.active = false;
+          pv.releasing = false;
+          pv.midiNote = -1;
+          pv.filterEnv = FilterEnvelopeState{};
         }
       }
     }
+  } else {
+    // === MONO/PARAPHONIC SAMPLE GENERATION (existing path) ===
 
-    float sampleL = sidLeft.clock();
-    float sampleR = sidRight.clock();
+    // Digi gain compensation: $D418 digi modulates the master volume register
+    // which scales ALL voice output. When no voices are active, the digi signal
+    // itself is very quiet. Apply a boost to bring digi to a usable level.
+    float digiGain = (digiEnabled && digiSampler.isPlaying()) ? 3.0f : 1.0f;
 
-    // Apply per-SID pan (equal-power pan law) with voice count compensation
-    float outL = (sampleL * leftGainL + sampleR * rightGainL) * digiGain;
-    float outR = (sampleL * leftGainR + sampleR * rightGainR) * digiGain;
+    // SID volume register always at max — master volume is applied as output gain,
+    // and the 20Hz DC blocker removes SID idle offset.
+    sidLeft.setVolume(15);
+    sidRight.setVolume(15);
 
-    // Mix 8-bit digi directly into output (bypasses SID volume DAC)
-    if (digiBitDepth == 8 && digi8bitSample != 0.0f) {
-      outL += digi8bitSample * digiGain;
-      outR += digi8bitSample * digiGain;
+    // Mute SID voices during digi playback when no voices are enabled,
+    // giving clean digi-only output. When voices ARE enabled, digi runs
+    // additively — the $D418 volume modulates voice output (authentic C64).
+    bool digiPlaying = digiEnabled && digiSampler.isPlaying();
+    if (digiPlaying && leftVoiceCount == 0) {
+      sidLeft.muteVoices();
+    } else {
+      sidLeft.unmuteVoices();
+    }
+    if (digiPlaying && rightVoiceCount == 0) {
+      sidRight.muteVoices();
+    } else {
+      sidRight.unmuteVoices();
     }
 
-    // Apply master volume as output gain (covers voices + digi)
-    outL *= masterVolume;
-    outR *= masterVolume;
+    for (int i = 0; i < numSamples; ++i) {
+      // Feed external audio to SID filters if enabled
+      if (extInputEnabled && inputLeft != nullptr) {
+        float extL = inputLeft[i] * extInputLevel;
+        float extR = inputRight[i] * extInputLevel;
+        sidLeft.setExternalInput(extL);
+        sidRight.setExternalInput(extR);
+      }
 
-    // All modes use the same stereo output path.
-    // In Unison, both SIDs render the same notes independently,
-    // so per-SID pan still provides stereo width.
-    leftChannel[i] = outL;
-    if (rightChannel)
-      rightChannel[i] = outR;
+      // Digi sample playback
+      float digi8bitSample = 0.0f;
+      if (digiEnabled && digiSampler.isPlaying()) {
+        int digiVal = digiSampler.getNextSample();
+        if (digiVal >= 0) {
+          if (digiBitDepth == 4) {
+            // 4-bit: authentic $D418 volume register write
+            sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+            sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
+          } else {
+            // 8-bit: direct mix (bypass $D418, higher quality)
+            digi8bitSample = (static_cast<float>(digiVal) - 128.0f) / 128.0f * 0.15f;
+          }
+        }
+      }
+
+      float sampleL = sidLeft.clock();
+      float sampleR = sidRight.clock();
+
+      // Apply per-SID pan (equal-power pan law) with voice count compensation
+      float outL = (sampleL * leftGainL + sampleR * rightGainL) * digiGain;
+      float outR = (sampleL * leftGainR + sampleR * rightGainR) * digiGain;
+
+      // Mix 8-bit digi directly into output (bypasses SID volume DAC)
+      if (digiBitDepth == 8 && digi8bitSample != 0.0f) {
+        outL += digi8bitSample * digiGain;
+        outR += digi8bitSample * digiGain;
+      }
+
+      // Apply master volume as output gain (covers voices + digi)
+      outL *= masterVolume;
+      outR *= masterVolume;
+
+      leftChannel[i] = outL;
+      if (rightChannel)
+        rightChannel[i] = outR;
+    }
   }
 
   // === SID FILE PLAYER MIX (with resampling from 44100 to host rate) ===
@@ -626,8 +812,8 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       }
     }
 
-    // Digi sampler: trigger on note-on (plays alongside normal voices)
-    if (digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
+    // Digi sampler: trigger on note-on (mono only; disabled in poly mode)
+    if (!polyEnabled && digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
       digiSampler.noteOn(note, hostSampleRate);
 
     // Chord memory takes priority and does not feed arp tracking.
@@ -662,6 +848,12 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     // If arp is enabled, don't do normal note handling
     if (arpEnabled)
       return;
+
+    // Poly mode: each note gets its own SID pair
+    if (polyEnabled) {
+      polyNoteOn(note, lastVelocity);
+      return;
+    }
 
     if (dualMode == DualMode::Multitimbral) {
       // Channel 1 -> left SID, Channel 2 -> right SID
@@ -714,12 +906,20 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     // If arp is enabled, handle release when no notes held
     if (arpEnabled) {
       if (arpHeldCount == 0 && lastArpNote >= 0 && !sustainActive) {
-        // Release all voices
-        for (int v = 0; v < 6; ++v) {
-          releaseNote(v);
-        }
+        if (polyEnabled)
+          polyAllNotesOff();
+        else
+          for (int v = 0; v < 6; ++v)
+            releaseNote(v);
         lastArpNote = -1;
       }
+      return;
+    }
+
+    // Poly mode: release matching poly voice
+    if (polyEnabled) {
+      if (!sustainActive)
+        polyNoteOff(note);
       return;
     }
 
@@ -739,11 +939,13 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     arpSeqCount = 0;
     lastArpNote = -1;
 
-    leftNoteQueue.clear();
-    rightNoteQueue.clear();
-    // Turn off all voices
-    for (int v = 0; v < 6; ++v) {
-      releaseNote(v);
+    if (polyEnabled) {
+      polyAllNotesOff();
+    } else {
+      leftNoteQueue.clear();
+      rightNoteQueue.clear();
+      for (int v = 0; v < 6; ++v)
+        releaseNote(v);
     }
   } else if (msg.isPitchWheel()) {
     // Convert 14-bit value (0-16383, center=8192) to -1.0 to +1.0
@@ -764,9 +966,27 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
         sustainActive = pedalDown;
 
         if (!sustainActive) {
+          // In poly mode, release all active poly voices that aren't physically held
+          if (polyEnabled && !arpEnabled) {
+            // Release poly voices whose notes are no longer physically held
+            for (int i = 0; i < polyMaxNotes; ++i) {
+              auto &pv = polyVoices[i];
+              if (pv.active && !pv.releasing) {
+                bool held = false;
+                for (int ai = 0; ai < arpHeldCount; ++ai) {
+                  if (arpHeldNotes[ai] == pv.midiNote) {
+                    held = true;
+                    break;
+                  }
+                }
+                if (!held)
+                  polyNoteOff(pv.midiNote);
+              }
+            }
+          }
           // If arp is NOT enabled, we need to release notes that are only
           // held by sustain
-          if (!arpEnabled) {
+          if (!arpEnabled && !polyEnabled) {
             // Check left SID queue
             for (int i = leftNoteQueue.size(); --i >= 0;) {
               int n = leftNoteQueue[i];
@@ -960,17 +1180,31 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
 }
 
 void BreadbinProcessor::updateAllVoiceFrequencies() {
-  // Apply pitch bend to all active voices
-  for (int v = 0; v < 6; ++v) {
-    if (voices[v].active) {
-      float detune = (v < 3) ? leftDetuneCents : rightDetuneCents;
-      float bendSemitones = pitchBendValue * static_cast<float>(pitchBendRange);
-      double note = static_cast<double>(voices[v].note) + bendSemitones +
-                    (detune / 100.0);
-      double hz = 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
+  float bendSemitones = pitchBendValue * static_cast<float>(pitchBendRange);
 
-      SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-      sid.setFrequency(v % 3, hz);
+  if (polyEnabled) {
+    // Poly: apply pitch bend to all active poly voice SIDs
+    double bendMult = std::pow(2.0, bendSemitones / 12.0);
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      auto &pv = polyVoices[pi];
+      if (!pv.active && !pv.releasing) continue;
+      double hz = pv.currentHz * bendMult;
+      for (int v = 0; v < 3; ++v) {
+        pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
+        pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+      }
+    }
+  } else {
+    // Mono: apply pitch bend to all active voices
+    for (int v = 0; v < 6; ++v) {
+      if (voices[v].active) {
+        float detune = (v < 3) ? leftDetuneCents : rightDetuneCents;
+        double note = static_cast<double>(voices[v].note) + bendSemitones +
+                      (detune / 100.0);
+        double hz = 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
+        SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
+        sid.setFrequency(v % 3, hz);
+      }
     }
   }
 }
@@ -1106,7 +1340,234 @@ void BreadbinProcessor::setAgingFactor(float aging) {
   agingFactor = aging;
   sidLeft.setAgingFactor(aging);
   sidRight.setAgingFactor(aging);
+  for (auto &pv : polyVoices) {
+    pv.sidLeft->setAgingFactor(aging);
+    pv.sidRight->setAgingFactor(aging);
+  }
 }
+
+// ==================== POLY VOICE MANAGEMENT ====================
+
+// SID ADSR release times in seconds (indexed 0-15)
+static constexpr float kSidReleaseTimes[16] = {
+    0.006f,  0.024f, 0.048f,  0.072f, 0.114f, 0.168f, 0.204f, 0.240f,
+    0.300f,  0.750f, 1.500f,  2.400f, 3.000f, 9.000f, 15.000f, 24.000f};
+
+int BreadbinProcessor::findFreePolyVoice() const {
+  int limit = polyMaxNotes;
+  // Prefer truly inactive slots
+  for (int i = 0; i < limit; ++i) {
+    if (!polyVoices[i].active && !polyVoices[i].releasing)
+      return i;
+  }
+  // Fall back to releasing slots (can be reused)
+  for (int i = 0; i < limit; ++i) {
+    if (polyVoices[i].releasing)
+      return i;
+  }
+  return -1;
+}
+
+int BreadbinProcessor::findStealablePolyVoice() const {
+  int limit = polyMaxNotes;
+  int oldest = -1;
+  uint32_t oldestTime = UINT32_MAX;
+  for (int i = 0; i < limit; ++i) {
+    if (polyVoices[i].startSample < oldestTime) {
+      oldestTime = polyVoices[i].startSample;
+      oldest = i;
+    }
+  }
+  return oldest;
+}
+
+void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
+  int idx = findFreePolyVoice();
+  if (idx < 0)
+    idx = findStealablePolyVoice();
+  if (idx < 0)
+    return;
+
+  auto &pv = polyVoices[idx];
+
+  // If stealing, release the old note first
+  if (pv.active || pv.releasing) {
+    for (int v = 0; v < 3; ++v) {
+      pv.sidLeft->noteOff(v);
+      pv.sidRight->noteOff(v);
+    }
+  }
+
+  pv.midiNote = midiNote;
+  pv.velocity = velocity;
+  pv.active = true;
+  pv.releasing = false;
+  pv.startSample = polyNoteCounter++;
+  pv.filterEnv = FilterEnvelopeState{};
+
+  // Calculate frequency
+  pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
+  pv.currentHz = pv.targetHz;
+  pv.isGliding = false;
+
+  // Apply current voice settings and filter state to this poly voice
+  applySettingsToPolyVoice(idx);
+
+  // Trigger all enabled voices on both SIDs
+  for (int v = 0; v < 3; ++v) {
+    if (voiceSettings[v].enabled)
+      pv.sidLeft->noteOn(v, midiNote, velocity, leftDetuneCents);
+  }
+  for (int v = 0; v < 3; ++v) {
+    if (voiceSettings[v + 3].enabled)
+      pv.sidRight->noteOn(v, midiNote, velocity, rightDetuneCents);
+  }
+}
+
+void BreadbinProcessor::polyNoteOff(int midiNote) {
+  for (int i = 0; i < polyMaxNotes; ++i) {
+    auto &pv = polyVoices[i];
+    if (pv.active && !pv.releasing && pv.midiNote == midiNote) {
+      pv.releasing = true;
+      for (int v = 0; v < 3; ++v) {
+        pv.sidLeft->noteOff(v);
+        pv.sidRight->noteOff(v);
+      }
+      // Start filter envelope release
+      pv.filterEnv.stage = FilterEnvelopeState::Stage::Release;
+
+      // Set release timer based on longest enabled SID ADSR release, capped
+      // at 3 seconds to prevent poly voices from hanging with high release values
+      int maxRel = 0;
+      for (int v = 0; v < 6; ++v)
+        if (voiceSettings[v].enabled)
+          maxRel = std::max(maxRel, voiceSettings[v].release);
+      float releaseSec = std::min(kSidReleaseTimes[maxRel], 3.0f);
+      pv.releaseSamplesRemaining =
+          static_cast<int>(releaseSec * hostSampleRate) + 512;
+      return; // Only release one voice per noteOff
+    }
+  }
+}
+
+void BreadbinProcessor::polyAllNotesOff() {
+  for (int i = 0; i < MAX_POLY; ++i) {
+    auto &pv = polyVoices[i];
+    if (pv.active || pv.releasing) {
+      for (int v = 0; v < 3; ++v) {
+        pv.sidLeft->noteOff(v);
+        pv.sidRight->noteOff(v);
+      }
+      pv.active = false;
+      pv.releasing = false;
+      pv.midiNote = -1;
+      pv.filterEnv = FilterEnvelopeState{};
+    }
+  }
+}
+
+void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
+  auto &pv = polyVoices[polyIdx];
+
+  // Apply L SID voice settings (voices 0-2)
+  for (int v = 0; v < 3; ++v) {
+    auto &vs = voiceSettings[v];
+    pv.sidLeft->setWaveform(v, vs.waveform);
+    pv.sidLeft->setPulseWidth(v, vs.pulseWidth);
+    pv.sidLeft->setAttack(v, vs.attack);
+    pv.sidLeft->setDecay(v, vs.decay);
+    pv.sidLeft->setSustain(v, vs.sustain);
+    pv.sidLeft->setRelease(v, vs.release);
+    pv.sidLeft->setRingMod(v, vs.ringMod);
+    pv.sidLeft->setSync(v, vs.sync);
+  }
+  pv.sidLeft->setFilterVoices(voiceSettings[0].filterEnabled,
+                               voiceSettings[1].filterEnabled,
+                               voiceSettings[2].filterEnabled);
+
+  // Apply R SID voice settings (voices 3-5)
+  for (int v = 0; v < 3; ++v) {
+    auto &vs = voiceSettings[v + 3];
+    pv.sidRight->setWaveform(v, vs.waveform);
+    pv.sidRight->setPulseWidth(v, vs.pulseWidth);
+    pv.sidRight->setAttack(v, vs.attack);
+    pv.sidRight->setDecay(v, vs.decay);
+    pv.sidRight->setSustain(v, vs.sustain);
+    pv.sidRight->setRelease(v, vs.release);
+    pv.sidRight->setRingMod(v, vs.ringMod);
+    pv.sidRight->setSync(v, vs.sync);
+  }
+  pv.sidRight->setFilterVoices(voiceSettings[3].filterEnabled,
+                                voiceSettings[4].filterEnabled,
+                                voiceSettings[5].filterEnabled);
+
+  // Volume always max (output gain applied post-mix)
+  pv.sidLeft->setVolume(15);
+  pv.sidRight->setVolume(15);
+
+  // Filter mode and base cutoff/resonance
+  pv.sidLeft->setFilterMode(filterLPLeft, filterBPLeft, filterHPLeft);
+  pv.sidRight->setFilterMode(filterLPRight, filterBPRight, filterHPRight);
+  pv.sidLeft->setFilterCutoff(baseFilterCutoffLeft);
+  pv.sidRight->setFilterCutoff(baseFilterCutoffRight);
+  pv.sidLeft->setFilterResonance(baseFilterResLeft);
+  pv.sidRight->setFilterResonance(baseFilterResRight);
+}
+
+void BreadbinProcessor::processPolyFilterEnvelope(int polyIdx, int numSamples) {
+  auto &pv = polyVoices[polyIdx];
+  auto &env = pv.filterEnv;
+  bool gateOn = pv.active && !pv.releasing;
+
+  // Gate transitions
+  if (gateOn && !env.gateWasOn)
+    env.stage = FilterEnvelopeState::Stage::Attack;
+  else if (!gateOn && env.gateWasOn)
+    env.stage = FilterEnvelopeState::Stage::Release;
+  env.gateWasOn = gateOn;
+
+  float dt = static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
+  float attack = filterEnvAttackPtr->load();
+  float decay = filterEnvDecayPtr->load();
+  float sustain = filterEnvSustainPtr->load();
+  float release = filterEnvReleasePtr->load();
+
+  switch (env.stage) {
+  case FilterEnvelopeState::Stage::Attack:
+    env.currentValue += dt / attack;
+    if (env.currentValue >= 1.0f) {
+      env.currentValue = 1.0f;
+      env.stage = FilterEnvelopeState::Stage::Decay;
+    }
+    break;
+  case FilterEnvelopeState::Stage::Decay: {
+    float decayRate = dt / decay;
+    env.currentValue -= decayRate * (env.currentValue - sustain);
+    if (env.currentValue <= sustain + 0.001f) {
+      env.currentValue = sustain;
+      env.stage = FilterEnvelopeState::Stage::Sustain;
+    }
+    break;
+  }
+  case FilterEnvelopeState::Stage::Sustain:
+    env.currentValue = sustain;
+    break;
+  case FilterEnvelopeState::Stage::Release: {
+    float releaseRate = dt / release;
+    env.currentValue -= releaseRate * env.currentValue;
+    if (env.currentValue <= 0.001f) {
+      env.currentValue = 0.0f;
+      env.stage = FilterEnvelopeState::Stage::Idle;
+    }
+    break;
+  }
+  case FilterEnvelopeState::Stage::Idle:
+    env.currentValue = 0.0f;
+    break;
+  }
+}
+
+// ==================== END POLY VOICE MANAGEMENT ====================
 
 juce::ValueTree BreadbinProcessor::getVoiceState(int v) const {
   juce::ValueTree voiceState("Voice" + juce::String(v));
@@ -1273,6 +1734,9 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         }
       }
 
+      // Kill any active poly voices on state restore
+      polyAllNotesOff();
+
       stateRestored = true;
     }
   }
@@ -1394,17 +1858,23 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
 
     // Release previous note if different
     if (lastArpNote >= 0 && lastArpNote != note) {
-      for (int v = 0; v < 6; ++v) {
-        if (voices[v].note == lastArpNote) {
-          releaseNote(v);
+      if (polyEnabled) {
+        polyNoteOff(lastArpNote);
+      } else {
+        for (int v = 0; v < 6; ++v) {
+          if (voices[v].note == lastArpNote)
+            releaseNote(v);
         }
       }
     }
 
-    // Trigger new note on all enabled voices
-    for (int v = 0; v < 6; ++v) {
-      if (voiceSettings[v].enabled) {
-        triggerNote(v, note, lastVelocity);
+    // Trigger new note
+    if (polyEnabled) {
+      polyNoteOn(note, lastVelocity);
+    } else {
+      for (int v = 0; v < 6; ++v) {
+        if (voiceSettings[v].enabled)
+          triggerNote(v, note, lastVelocity);
       }
     }
 
@@ -1457,19 +1927,30 @@ void BreadbinProcessor::triggerChordDualSID(int rootNote, int velocity) {
       notes[count++] = juce::jlimit(0, 127, rootNote + interval);
   }
 
-  for (int v = 0; v < 6; ++v) {
-    if (v < count && voiceSettings[v].enabled)
-      triggerNote(v, notes[v], velocity);
-    else if (voices[v].active)
-      releaseNote(v);
+  if (polyEnabled) {
+    // Poly: each chord note gets its own SID pair
+    for (int n = 0; n < count; ++n)
+      polyNoteOn(notes[n], velocity);
+  } else {
+    for (int v = 0; v < 6; ++v) {
+      if (v < count && voiceSettings[v].enabled)
+        triggerNote(v, notes[v], velocity);
+      else if (voices[v].active)
+        releaseNote(v);
+    }
   }
 }
 
 void BreadbinProcessor::releaseChord(bool isLeftSID) {
-  const int base = isLeftSID ? 0 : 3;
-  for (int v = base; v < base + 3; ++v)
-    if (voices[v].active)
-      releaseNote(v);
+  if (polyEnabled) {
+    // Poly: release all active poly voices
+    polyAllNotesOff();
+  } else {
+    const int base = isLeftSID ? 0 : 3;
+    for (int v = base; v < base + 3; ++v)
+      if (voices[v].active)
+        releaseNote(v);
+  }
 }
 
 void BreadbinProcessor::startChordLearn(int slot) {
@@ -2368,6 +2849,10 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Digi Loop";
   case ControlParam::DigiBitDepth:
     return "Digi Bit Depth";
+  case ControlParam::PolyEnable:
+    return "Poly Enable";
+  case ControlParam::PolyMaxNotes:
+    return "Poly Max Notes";
   default:
     return "Unknown";
   }
@@ -2433,6 +2918,12 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"digiBitDepth", 1}, "Digi Bit Depth",
       juce::StringArray{"4-bit", "8-bit"}, 0));
+
+  // Polyphony
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"polyEnable", 1}, "Poly Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterInt>(
+      juce::ParameterID{"polyMaxNotes", 1}, "Poly Max Notes", 1, 8, 4));
 
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"leftPan", 1}, "Left SID Pan", -1.0f, 1.0f, -1.0f));
@@ -2670,6 +3161,8 @@ void BreadbinProcessor::initializeParameterPointers() {
   digiRootNotePtr = apvts.getRawParameterValue("digiRootNote");
   digiLoopPtr = apvts.getRawParameterValue("digiLoop");
   digiBitDepthPtr = apvts.getRawParameterValue("digiBitDepth");
+  polyEnablePtr = apvts.getRawParameterValue("polyEnable");
+  polyMaxNotesPtr = apvts.getRawParameterValue("polyMaxNotes");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");
   pitchBendRangePtr = apvts.getRawParameterValue("pitchBendRange");
