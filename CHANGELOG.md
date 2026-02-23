@@ -9,18 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **4 Chip Model Variants**: Expanded from 2 to 4 SID models — MOS 6581 (classic warm),
-  MOS 6581 R4 (brighter filter, stronger combined waveforms), MOS 8580 (clean, tight bass),
-  and MOS 8580D (mellow digiboost era). Each variant uses reSIDfp's filter curve and
-  combined waveform tuning APIs for distinct sonic personalities.
+- **8 Chip Model Variants**: Expanded from 2 base SID models to 8 distinct chip profiles —
+  MOS 6581 (standard), 6581 R2 (bright, weak CW), 6581 R3 (most common, slightly dark),
+  6581 R4 (late revision, strong CW), MOS 8580 (standard clean), 8580 R5 (darker, strong CW),
+  CSG 9580 (final production, bright), and 8580D (digiboost era, mellow). Each variant uses
+  reSIDfp's filter curve, range, and combined waveform tuning APIs.
+- **8-Bit Digi Mode**: Added bit depth selector for digi sampler (4-bit / 8-bit). 4-bit mode
+  is authentic C64 $D418 volume register playback (crunchy, lo-fi). 8-bit mode stores samples
+  at full resolution and mixes directly into the output bus, bypassing the 4-bit limitation
+  for cleaner retro sound. Both modes support pitch tracking and looping.
 - **Stereo Chip Defaults**: Left SID defaults to MOS 6581, right to MOS 8580 for immediate
   stereo width and tonal contrast out of the box.
 
 ### Fixed
 
-- **DC Offset / Drone**: Replaced 20Hz single-pole subsonic filter with a 5Hz 2nd-order
-  Butterworth DC blocker. Eliminates the persistent background drone caused by SID's
-  inherent DC offset while preserving sub-bass content.
+- **Master Volume**: Reworked from SID volume register to output gain. Master volume now
+  controls all output (voices + digi in both 4-bit and 8-bit modes). Previously, digi
+  playback overwrote the volume register and was unaffected by the master gain knob.
+- **DC Offset / Drone**: Bumped DC blocker from 5Hz to 20Hz 2nd-order Butterworth. Faster
+  at removing the MOS6581's significant idle DC offset while still below audible range.
+  Eliminates persistent background drone that was previously masked by the noise gate.
 - **Chip Defaults**: Fixed right SID defaulting to MOS 6581 R4 instead of MOS 8580 (bumped APVTS version to clear stale state).
 - **UI Rendering**: Fixed preset navigation buttons showing "..." truncation by implementing custom vector arrow drawing.
 

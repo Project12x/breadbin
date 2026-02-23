@@ -72,6 +72,14 @@
 - [x] Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
 - [x] SID File Player (load .SID/.PSID from HVSC, playback with register overlay, snapshot to APVTS presets)
 
+### Sound Engine
+
+- [x] Expanded chip variants (4 → 8 models: MOS 6581, 6581 R2, 6581 R3, 6581 R4, 8580, 8580 R5, CSG 9580, 8580D)
+- [x] 8-bit digi mode (direct mix path bypassing 4-bit $D418 limitation)
+- [x] Master volume reworked as output gain (affects voices + digi in both modes)
+- [x] DC blocker improved (5Hz → 20Hz, eliminates SID idle DC offset)
+- [x] Digi sampler (4-bit authentic $D418 playback with WAV loading, pitch tracking, loop)
+
 ### Release Engineering
 
 - [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
@@ -83,9 +91,9 @@
 - [ ] User documentation / manual
 - [ ] Marketing assets (screenshots, demo audio)
 
-### Deferred / High-Risk
+### Cancelled
 
-- [ ] 3-SID expansion (9-voice architecture) � previous attempt caused oscillation; requires careful CPU/stability work
+- [x] ~~3-SID expansion (9-voice architecture)~~ -- Cancelled. Dual SID (6 voices) is the final architecture. � previous attempt caused oscillation; requires careful CPU/stability work
 
 ### UI Polish
 
@@ -113,3 +121,7 @@
 | 2026-02-12 | Chord Memory | 4 slots x 5 intervals (-24..+24), mutually exclusive with arp, popup UI, global preset reset, 3 integration tests | pending |
 | 2026-02-12 | Wavetable step editor | 16-step grid popup (waveform/pitch/PW per step), replaced inline controls, current-step indicator, 2 new presets (WT Arpeggio, WT Morph), 2 integration tests | pending |
 | 2026-02-12 | SID File Player | Load .SID files via libsidplayfp full engine, background thread + ring buffer playback, register overlay on main UI, snapshot registers to APVTS presets, popup UI with transport/info/hex display | pending |
+| 2026-02-23 | Chip variant expansion | 4 → 8 chip models (6581 R2/R3, 8580 R5, CSG 9580) using reSIDfp filter curve/range/CW tuning | `aed8cef` |
+| 2026-02-23 | 8-bit digi mode | Dual 4-bit/8-bit storage, direct mix path bypassing $D418, bit depth selector UI | `aed8cef` |
+| 2026-02-23 | Master volume fix | Reworked as output gain (was SID volume register), now affects voices + digi in all modes | `aed8cef` |
+| 2026-02-23 | DC blocker improvement | 5Hz → 20Hz 2nd-order Butterworth, eliminates SID idle DC offset/drone | `aed8cef` |

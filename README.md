@@ -2,24 +2,63 @@
 
 C64 Dual SID Synthesizer - GPL v3
 
-A JUCE 8 VST3/Standalone synthesizer using reSIDfp for authentic SID chip emulation.
+A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip emulation.
 
 ## Features
 
-- **Dual SID Engine**: Two independent MOS 6581/8580 emulators
-- **Three Modes**: Stereo Split, Unison (detuned fatness), Multitimbral (MIDI channel routing)
-- **Chip Model Switching**: 6581 (darker, grittier) vs 8580 (cleaner, brighter)
+### Sound Engine
+- **Dual SID Engine**: Two independent SID emulators with 6 voices total
+- **8 Chip Model Variants**: MOS 6581 (+ R2, R3, R4), MOS 8580 (+ R5, 8580D), CSG 9580
+- **Three Modes**: Stereo Split, Unison (detuned fatness), Multitimbral
 - **Time Machine**: Simulates capacitor aging from factory fresh to vintage drift
+- **PAL/NTSC Clock**: Authentic PAL (985,248 Hz) and NTSC (1,022,727 Hz) timing
+
+### Modulation
+- **Dual LFOs**: Triangle/Saw/Square/S&H/Sine -> filter/PW/pitch
+- **Filter Envelope**: Dedicated ADSR with bipolar amount
+- **4-Slot Mod Matrix**: 6 sources x 5 destinations, bipolar amount
+- **PWM Sweep**: Dedicated pulse width modulation oscillator
+- **Ring Mod + Hard Sync**: Per-voice inter-oscillator modulation
+- **14-bit Pitch Bend + Mod Wheel**
+
+### Performance
+- **Arpeggiator**: Multiple patterns, octave expansion, tempo sync
+- **Chord Memory**: 4 slots x 5 intervals, trigger chords from single key
+- **Wavetable Sequencer**: 16 steps with per-step waveform/PW/pitch
+- **Portamento / Glide**: Monophonic legato with linear Hz interpolation
+
+### Digi Sampler
+- **WAV Loading**: Load any WAV file as a digi sample
+- **4-bit Mode**: Authentic C64 $D418 volume register playback (crunchy, lo-fi)
+- **8-bit Mode**: Direct mix path for cleaner retro sound
+- **Pitch Tracking + Loop**: MIDI note controls playback rate
+
+### Extras
+- **SID File Player**: Load .SID/.PSID files from the HVSC (50,000+ C64 tunes)
+- **69 Factory Presets**: Categorized global presets + 37 voice presets
+- **MIDI Learn**: Right-click any control for CC mapping
+- **User Presets**: Save/load custom presets
 
 ## Building
 
-```powershell
-cmake -B build -G "Visual Studio 17 2022" -A x64
+```bash
+cmake -B build
 cmake --build build --config Release
 ```
 
+### Test
+```bash
+ctest --test-dir build -C Release
+```
+
+## Dependencies
+
+- JUCE 8.0.4
+- libsidplayfp 2.16.0
+- CMake 3.22+
+
 ## License
 
-GPL v3 - Designed for bundling with GPL audio software (Pedalboard3).
+GPL v3
 
 reSIDfp is GPL v2+ from the libsidplayfp project.
