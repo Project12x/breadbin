@@ -4696,6 +4696,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
 
   switch (presetId) {
   case 1: // Dual Lead - Fat Bass saw + Classic Lead pulse, detuned
+    setParam("voiceMode", 2.0f);
     configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
     configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
     configVoice(2, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
@@ -4717,6 +4718,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
 
   case 2: // Pad Stack - PWM Pad on all voices, lush FX
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 1024, 8, 6, 12, 8, 4);
     setParam("leftDetune", -8.0f);
@@ -4788,6 +4790,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
 
   case 5: // Retro Synth - Mixed voices, vibrato + chorus
+    setParam("voiceMode", 2.0f);
     configVoice(0, SIDEngine::Waveform::Triangle, 0, 2, 4, 10, 6, 6);
     configVoice(1, SIDEngine::Waveform::Pulse, 2048, 0, 6, 8, 4, 2);
     configVoice(2, SIDEngine::Waveform::Sawtooth, 2048, 0, 4, 12, 3, 3);
@@ -4807,6 +4810,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     break;
 
   case 6: { // Chord Stab - Chord memory + delay + filter env stab
+    setParam("voiceMode", 3.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 3, 10, 2, 2);
     setFilters(1400, 5);
@@ -4846,6 +4850,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 7: { // Mod Madness - Everything cranked: both LFOs, mod matrix, WT, FX
+    setParam("voiceMode", 3.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 6, 10, 6, 2);
     setParam("leftDetune", -10.0f);
@@ -5123,6 +5128,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 15: { // SID Brass - Hard sync brass with chorus and filter env
+    setParam("voiceMode", 2.0f);
     // Hard sync gives harmonically rich brass-like timbre
     // Voices 0,3: Brass Saw voice for timbral variety; others: sync lead
     for (int v = 0; v < 6; ++v) {
@@ -5198,6 +5204,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // ---- MORE LEADS ----
 
   case 19: { // Sync Lead - Hard sync sawtooth, biting harmonics
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 10, 3, 3);
       setParam("v" + juce::String(v) + "_sync", 1.0f);
@@ -5300,6 +5307,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // ---- PADS & KEYS ----
 
   case 23: { // Ice Pad - Triangle voices, slow attack, spacious FX
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 10, 4, 14, 10, 6);
     setFilters(700, 4);
@@ -5332,6 +5340,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 24: { // PWM Strings - Slow attack pulse with PWM sweep, lush
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 6, 4, 13, 8, 2);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -5578,6 +5587,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // ---- MODERN MODULATION PACK ----
 
   case 38: { // Drift Pad - Evolving pad with PWM sweep + dual LFOs + FX
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 8, 4, 14, 10, 2);
     setFilters(600, 4);
@@ -5618,6 +5628,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 39: { // Arp Machine - Arp + filter env pluck + mod matrix vel->filter
+    setParam("voiceMode", 3.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 0, 15, 3, 2);
     setFilters(500, 6);
@@ -5750,6 +5761,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 42: { // Poly Chord - Chord memory + PWM sweep + filter env pad
+    setParam("voiceMode", 3.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 4, 4, 13, 6, 2);
     setFilters(700, 5);
@@ -5791,6 +5803,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // ---- BONUS DISTINCT PACK ----
 
   case 43: { // Follin Complex - Tim Follin's multi-waveform melodic lead
+    setParam("voiceMode", 2.0f);
     // Follin signature: waveform variety across voices for rich harmonic
     // content
     configVoice(0, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 12, 4, 3);
@@ -5844,6 +5857,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 46: { // Filter Scream - High-resonance filter sweep lead
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 0, 15, 4, 3);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -5872,6 +5886,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 47: { // Thin Lead - Narrow pulse lead with vibrato + delay
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
     setFilters(1600, 4);
@@ -5891,6 +5906,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 48: { // Wide Organ - Hollow wide-pulse organ + chorus
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 3584, 0, 3, 12, 4, 8);
     setFilters(1200, 3);
@@ -6006,6 +6022,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 53: { // Ethereal Pad - Soft triangle pad + dual LFOs + chorus
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 10, 4, 12, 10, 13);
     setFilters(900, 3);
@@ -6036,6 +6053,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 54: { // Bright Wash - Saw pad + PWM sweep + delay
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 6, 4, 10, 8, 14);
     setFilters(1400, 4);
@@ -6067,6 +6085,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 55: { // Pipe Organ - Square wave organ + wide detune
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 0, 0, 15, 0, 15);
     setFilters(1600, 2);
@@ -6081,6 +6100,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 56: { // Clav Funk - Clavinet pluck + filter env + chorus
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 1536, 0, 10, 4, 2, 16);
     setFilters(800, 6);
@@ -6164,6 +6184,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 60: { // Split Layers - Thin Pulse lead + Pluck Bass mix
+    setParam("voiceMode", 2.0f);
     // Voices 0-2: Thin Pulse lead
     configVoice(0, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
     configVoice(1, SIDEngine::Waveform::Pulse, 512, 0, 0, 15, 2, 7);
@@ -6232,6 +6253,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 62: { // Brass Section - Brass saw voices + velocity->filter + chorus
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 2, 4, 12, 4, 31);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -6269,6 +6291,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 63: { // String Machine - String ensemble + PWM sweep + dual LFOs
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Sawtooth, 0, 8, 4, 12, 8, 32);
     setFilters(1000, 3);
@@ -6297,6 +6320,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 64: { // Retro EP - Electric piano + stereo delay + velocity
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 8, 6, 4, 33);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -6336,6 +6360,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 65: { // Ring Mod Pad - Ring modulated triangle pad + filter sweep
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 6, 4, 12, 8, 26);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
@@ -6366,6 +6391,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 66: { // Velocity Keys - EP with velocity->filter + velocity->PW
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Pulse, 1800, 0, 6, 8, 3, 33);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -6406,6 +6432,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 67: { // Chord Pad - Chord memory + ambient swell + delay
+    setParam("voiceMode", 1.0f);
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 15, 0, 15, 15, 37);
     setFilters(800, 3);
@@ -6442,6 +6469,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 68: { // Harpsichord Suite - Harpsichord pluck + chorus + delay
+    setParam("voiceMode", 2.0f);
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Pulse, 768, 0, 3, 0, 2, 34);
       setParam("v" + juce::String(v) + "_filter", 1.0f);
@@ -6491,6 +6519,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     // Each uses multiple systems simultaneously in musically powerful ways.
 
   case 70: { // Kitchen Sink - Every feature active simultaneously
+    setParam("voiceMode", 3.0f);
     // Both LFOs, mod matrix (all 4 slots), wavetable, filter env, PWM sweep,
     // chord memory, chorus, delay — the ultimate feature demo
     for (int v = 0; v < 6; ++v)
@@ -6575,6 +6604,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 71: { // Sync Sculptor - Hard sync with tempo-synced modulation
+    setParam("voiceMode", 2.0f);
     // Hard sync saw voices with musical modulation creating evolving harmonics
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Sawtooth, 2048, 0, 3, 12, 4, 3);
@@ -6629,6 +6659,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 72: { // Ring Cathedral - Ethereal ring mod bells with space FX
+    setParam("voiceMode", 1.0f);
     // Ring mod triangles with consonant mod offset creating bell harmonics
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 3, 2, 12, 6, 6);
@@ -6671,6 +6702,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 73: { // Matrix Express - All 4 mod slots for maximum expression
+    setParam("voiceMode", 2.0f);
     // Performance-oriented preset: every mod slot mapped for expressive playing
     for (int v = 0; v < 6; ++v)
       configVoice(v, SIDEngine::Waveform::Pulse, 2048, 1, 4, 10, 4, 2);
