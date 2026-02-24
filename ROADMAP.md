@@ -11,7 +11,7 @@
 
 - [x] Stereo Split mode
 - [x] Unison mode with detune
-- [x] Multitimbral mode
+- [x] Multitimbral mode (engine retained; hidden from UI — redundant with per-voice settings)
 
 ## Phase 3: Editor UI ✅
 
@@ -34,9 +34,11 @@
 ## Phase 5: Advanced Features ✅
 
 - [x] Arpeggiator (rate, octave, pattern modes)
-- [x] LFO modulation (Triangle/Saw/Square/S&H → filter/PW/pitch)
+- [x] LFO modulation (Triangle/Saw/Square/S&H/Sine → filter/PW/pitch)
+- [x] LFO tempo sync with DAW BPM tracking
 - [x] Ring modulation (Voice N × Voice N-1)
 - [x] Hard sync (Voice N resets Voice N-1)
+- [x] Per-voice mod offset for sync/ring mod audibility
 - [x] Portamento / Glide (monophonic legato, linear Hz interp)
 - [x] Per-SID detune (±50 cents)
 - [x] Per-voice filter routing (filter enable toggle per voice)
@@ -44,7 +46,7 @@
 - [x] 14-bit pitch bend + mod wheel → filter
 - [x] External audio input (sidechain bus through SID filter)
 - [x] Per-SID pan (equal-power pan law, APVTS-exposed with UI sliders)
-- [x] MIDI Learn system (global CC mapping with visual feedback)
+- [x] MIDI Learn system (global CC mapping with visual feedback, auto-dismiss overlay)
 - [x] Master Volume & Sustain Pedal
 - [x] Preset system (per-voice and global presets with selector UI)
 
@@ -54,59 +56,141 @@
 - [x] Built-in FX: Chorus (JUCE DSP) + Stereo Delay (independent L/R times)
 - [x] Second LFO (LFO2, identical structure, independent controls)
 - [x] Wavetable step sequencer (16 steps, per-step waveform/PW/pitch, WT base -> LFO mod stacking)
-- [x] 4-slot Mod Matrix (6 sources x 5 destinations, bipolar amount)
+- [x] 4-slot Mod Matrix (6 sources x 5 destinations, bipolar amount, per-slot enable)
 - [x] Global presets: full 130+ parameter reset before per-preset overrides
 - [x] Fix: mod wheel + LFO filter modulation stacking (was overwrite)
 - [x] Fix: wavetable PW/pitch now used as LFO base (was overwritten by voice defaults)
 
 ## Phase 7: Production Readiness
 
-### Quick Wins
+### Quick Wins ✅
 
 - [x] Pitch bend range APVTS + UI selector (±2–12 semitones, in Modulation popup)
 - [x] LFO1/LFO2 + Pitch Bend Range moved to Modulation popup (was Mod Matrix)
 - [x] PWM sweep (dedicated triangle oscillator, enable/rate/depth, UI in Modulation popup)
 
-### Composition Tools
+### Composition Tools ✅
 
 - [x] Chord Memory (4 slots x 5 intervals, trigger chords from single key, popup UI)
 - [x] SID File Player (load .SID/.PSID from HVSC, playback with register overlay, snapshot to APVTS presets)
+- [x] SID register hex display + live overlay on main editor controls
 
-### Sound Engine
+### Sound Engine ✅
 
 - [x] Expanded chip variants (4 → 8 models: MOS 6581, 6581 R2, 6581 R3, 6581 R4, 8580, 8580 R5, CSG 9580, 8580D)
 - [x] 8-bit digi mode (direct mix path bypassing 4-bit $D418 limitation)
 - [x] Master volume reworked as output gain (affects voices + digi in both modes)
 - [x] DC blocker improved (5Hz → 20Hz, eliminates SID idle DC offset)
 - [x] Digi sampler (4-bit authentic $D418 playback with WAV loading, pitch tracking, loop)
+- [x] Envelope-following noise gate (replaced hard-threshold gate, adjustable threshold)
+- [x] RT safety audit (eliminated heap allocs and blocking on audio thread)
 
-### Release Engineering
+### Polyphony ✅
 
-- [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
-- [ ] macOS build (AU format)
-- [ ] Linux build (LV2 format)
-- [x] Factory preset pack (69 global presets, 37 voice presets, categorized submenus)
-- [ ] Hard sync audibility study (per-voice pitch offset / cross-SID sync for C64-accurate behavior)
-- [ ] Ring mod audibility study (voice frequency relationships for proper inharmonic sidebands)
-- [ ] User documentation / manual
-- [ ] Marketing assets (screenshots, demo audio)
+- [x] True polyphony with per-note SID pair allocation (up to 8 simultaneous notes)
+- [x] 4-mode voice system (Mono / Paraphonic / Polyphonic / Poly+Para)
+- [x] Paraphonic mode (up to 6 notes across 2 SID engines, shared filter)
+- [x] Poly+Para mode (paraphonic within each poly voice, up to 24 notes)
+- [x] Voice stealing with configurable max notes
+- [x] Per-mode MIDI routing, arpeggiator, chord memory, and sustain pedal integration
+- [x] Factory preset voice mode assignments (32 presets upgraded from mono)
 
-### Cancelled
-
-- [x] ~~3-SID expansion (9-voice architecture)~~ -- Cancelled. Dual SID (6 voices) is the final architecture. � previous attempt caused oscillation; requires careful CPU/stability work
-
-### UI Polish
+### UI Polish ✅
 
 - [x] Chord/Arp exclusivity hardening (event pipeline + UI auto-disable)
 - [x] Chord Memory dual-SID note allocation (up to 6 notes in Stereo/Unison)
 - [x] Mod Matrix slot enable toggles + destination total readouts
 - [x] Wavetable step operations (shift left/right, randomize, clear)
+- [x] Preset browser with categorized submenus + 5 curated favorites
+- [x] Preset navigation buttons (prev/next with wrapping)
+- [x] CPU meter (real-time DSP load, color-coded)
+- [x] User preset saving (Save to File / Save to Preset Menu, persists in %APPDATA%)
+- [x] Font overhaul (Lato + JetBrains Mono)
+- [x] Visual polish pass (panel borders, vignette, rounded popups)
+- [x] Comprehensive tooltip coverage
+- [x] Scrolling LFO display with Hz suffix
+- [x] Preset dirty detection indicator
+- [x] ASIO standalone support
+
+### Release Engineering
+
+- [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
+- [ ] macOS build (AU + VST3 format)
+- [x] Factory preset pack (73 global presets, 37 voice presets, categorized submenus)
+- [ ] Hard sync audibility study (per-voice pitch offset / cross-SID sync for C64-accurate behavior)
+- [ ] Ring mod audibility study (voice frequency relationships for proper inharmonic sidebands)
+- [ ] User documentation / manual
+- [ ] Marketing assets (screenshots, demo audio, demo video)
+- [ ] Code signing (Microsoft Trusted Signing)
+- [ ] Windows installer (Inno Setup)
+- [ ] macOS installer + Apple notarization
+- [ ] GitHub Actions CI/CD for cross-platform builds
+
+### Cancelled
+
+- [x] ~~3-SID expansion (9-voice architecture)~~ — Cancelled. Dual SID (6 voices) is the final architecture.
+
+## Phase 8: Sound Engine Enhancements
+
+### Effects Chain
+
+- [ ] Reverb (algorithmic — the biggest gap in the current FX chain)
+- [ ] Bitcrusher / decimator (thematic fit for chiptune aesthetic)
+- [ ] Phaser / flanger
+- [ ] Simple EQ (tilt or high/low shelf)
+- [ ] Compressor (tame poly mode dynamics)
+
+### Filter & Voice
+
+- [ ] Filter key tracking (cutoff follows pitch, essential for polyphonic playing)
+- [ ] Velocity-to-amplitude (direct velocity sensitivity beyond mod matrix)
+- [ ] Legato mode (distinct from glide — hold envelope vs retrigger on overlapping notes)
+- [ ] Voice priority modes (last/first/highest/lowest note priority for mono/para)
+
+### Modulation
+
+- [ ] Aftertouch as mod source (channel pressure for expressive playing)
+- [ ] LFO key sync (restart LFO phase on each note-on)
+- [ ] Additional LFO shapes (ramp down, exponential, stepped)
+- [ ] Envelope follower (sidechain-style modulation from input)
+- [ ] Per-voice modulation in poly mode (each note gets its own LFO phase)
+
+## Phase 9: UI/UX Modernization
+
+- [ ] Resizable GUI (expected in modern plugins, important for commercial viability)
+- [ ] Visual voice allocation display (show active SID voices in real-time per mode)
+- [ ] A/B comparison (toggle between two parameter states)
+- [ ] Oscilloscope / waveform display
+- [ ] Copy/paste voice settings between voices
+- [ ] Randomize button (full or per-section)
+- [ ] Preset search/filtering within category browser
+- [ ] Dark/light theme options
+
+## Phase 10: Performance & Sequencer
+
+- [ ] More arp patterns (programmable user patterns)
+- [ ] Arp MIDI output (DAW records arpeggiated notes)
+- [ ] Arp hold/latch mode
+- [ ] Built-in step sequencer (note sequencing beyond wavetable timbral steps)
+
+## Phase 11: Format & Platform Expansion
+
+- [ ] CLAP format (Bitwig, growing ecosystem)
+- [ ] AAX format (Pro Tools)
+- [ ] Linux VST3
+
+## Phase 12: Advanced / Niche
+
+- [ ] MPE support (per-note pitch/pressure/slide from Seaboard/Linnstrument)
+- [ ] Microtuning (scale/tuning file support — .scl/.tun)
+- [ ] Oversampling option (reduce aliasing at higher CPU cost)
 
 ## Task Resolution Log
 
 | Date | Feature | Resolution | Commit |
 |------|---------|------------|--------|
-| 2026-02-17 | Preset expansion | 69 global presets (velocity, chord, ring mod), 37 voice presets (categorized submenus), headless sound fix | `83a830b` |`n| 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
+| 2026-02-17 | Preset expansion | 69 global presets (velocity, chord, ring mod), 37 voice presets (categorized submenus), headless sound fix | `83a830b` |
+| 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
 | 2026-02-11 | Per-SID pan UI + dead code removal | Added leftPan/rightPan sliders to SID panels, removed all per-voice pan dead code (APVTS param, VoiceSettings, VoiceParamPtrs, serialization, preset lambdas) | `65113ae` |
 | 2026-02-11 | NTSC frequency fix | `midiNoteToFrequency`/`noteOn`/`setFrequency` now use `getClockHz()` instead of hardcoded PAL | v0.9.2 |
 | 2026-02-11 | Chip model cache churn | `processBlock` updates caches after applying models | v0.9.2 |
@@ -125,3 +209,6 @@
 | 2026-02-23 | 8-bit digi mode | Dual 4-bit/8-bit storage, direct mix path bypassing $D418, bit depth selector UI | `aed8cef` |
 | 2026-02-23 | Master volume fix | Reworked as output gain (was SID volume register), now affects voices + digi in all modes | `aed8cef` |
 | 2026-02-23 | DC blocker improvement | 5Hz → 20Hz 2nd-order Butterworth, eliminates SID idle DC offset/drone | `aed8cef` |
+| 2026-02-23 | True polyphony | 4-mode voice system (Mono/Para/Poly/Poly+Para), per-note SID pair allocation, voice stealing, 406 integration tests | `1f24bce` |
+| 2026-02-23 | Preset voice modes | 32 factory presets assigned to Para/Poly/Poly+Para modes | `a383718` |
+| 2026-02-23 | Multitimbral UI hide | Removed from dual mode selector, engine retained | `dcfb3cd` |
