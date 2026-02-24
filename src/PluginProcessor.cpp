@@ -515,11 +515,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // Voice count gain compensation: normalize output level regardless of
   // how many voices are enabled. 3 voices per SID is the reference level.
   // With fewer enabled voices the SID output drops, so we boost to match.
+  // In Para mode, count only voices that are actually playing a note —
+  // otherwise 1 note uses 1 voice but gets the same gain as Mono's 3 voices.
   int leftVoiceCount = 0, rightVoiceCount = 0;
+  bool isPara = (voiceMode == VoiceMode::Paraphonic);
   for (int v = 0; v < 3; ++v)
-    if (voiceSettings[v].enabled) ++leftVoiceCount;
+    if (voiceSettings[v].enabled && (!isPara || paraVoices[v].midiNote >= 0))
+      ++leftVoiceCount;
   for (int v = 3; v < 6; ++v)
-    if (voiceSettings[v].enabled) ++rightVoiceCount;
+    if (voiceSettings[v].enabled && (!isPara || paraVoices[v].midiNote >= 0))
+      ++rightVoiceCount;
   // Compensation: 3/count (1 voice = 3x, 2 voices = 1.5x, 3 voices = 1x)
   // If 0 voices enabled, use 1.0 (no signal anyway, or digi-only)
   float targetLeftVG = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
@@ -563,13 +568,18 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       for (int ai = 0; ai < activePolyCount; ++ai) {
         auto &pv = polyVoices[activePolyIdx[ai]];
 
+        // Per-voice fade envelope: ramp up on noteOn, ramp down on deactivation
+        float fadeTarget = pv.fadingOut ? 0.0f : 1.0f;
+        pv.fadeGain += gainSmoothCoeff * (fadeTarget - pv.fadeGain);
+
         float sL = pv.sidLeft->clock();
         float sR = pv.sidRight->clock();
 
-        outL += sL * leftGainL * smoothedLeftVoiceGain
-              + sR * rightGainL * smoothedRightVoiceGain;
-        outR += sL * leftGainR * smoothedLeftVoiceGain
-              + sR * rightGainR * smoothedRightVoiceGain;
+        float fade = pv.fadeGain;
+        outL += (sL * leftGainL * smoothedLeftVoiceGain
+              +  sR * rightGainL * smoothedRightVoiceGain) * fade;
+        outR += (sL * leftGainR * smoothedLeftVoiceGain
+              +  sR * rightGainR * smoothedRightVoiceGain) * fade;
       }
 
       // Normalize and apply smoothed master volume
@@ -581,19 +591,23 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         rightChannel[i] = outR;
     }
 
-    // Release detection: decrement timers, deactivate expired voices
-    // Filter envelope is just cutoff modulation — once the SID ADSR finishes
-    // releasing there's no signal left, so we only check the SID release timer.
+    // Release detection: decrement timers, begin fade-out when ADSR expires
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
-      if (pv.releasing) {
+      if (pv.releasing && !pv.fadingOut) {
         pv.releaseSamplesRemaining -= numSamples;
         if (pv.releaseSamplesRemaining <= 0) {
-          pv.active = false;
-          pv.releasing = false;
-          pv.midiNote = -1;
-          pv.filterEnv = FilterEnvelopeState{};
+          pv.fadingOut = true; // fade-out ramp handles final deactivation
         }
+      }
+      // Deactivate fully once fade-out completes
+      if (pv.fadingOut && pv.fadeGain < 0.0001f) {
+        pv.active = false;
+        pv.releasing = false;
+        pv.fadingOut = false;
+        pv.fadeGain = 0.0f;
+        pv.midiNote = -1;
+        pv.filterEnv = FilterEnvelopeState{};
       }
     }
   } else {
@@ -1299,8 +1313,11 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   sid.setDecay(sidVoice, vs.decay);
   sid.setSustain(sidVoice, vs.sustain);
   sid.setRelease(sidVoice, vs.release);
-  sid.setRingMod(sidVoice, vs.ringMod);
-  sid.setSync(sidVoice, vs.sync);
+  // In Para mode, voices play independent notes — ring mod and sync
+  // cause cross-voice intermodulation noise, so force them off
+  bool isPara = (voiceMode == VoiceMode::Paraphonic);
+  sid.setRingMod(sidVoice, isPara ? false : vs.ringMod);
+  sid.setSync(sidVoice, isPara ? false : vs.sync);
 
   // Update per-voice filter routing on this SID
   bool isLeft = (voice < 3);
@@ -1545,6 +1562,8 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.velocity = velocity;
   pv.active = true;
   pv.releasing = false;
+  pv.fadingOut = false;
+  pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
 
@@ -1618,9 +1637,16 @@ void BreadbinProcessor::paraNoteOn(int midiNote, int velocity) {
     if (paraVoices[v].midiNote == -1) {
       paraVoices[v] = {midiNote, velocity};
       paraVoices[v + 3] = {midiNote, velocity};
+      // Disable ring mod/sync for para voices — each voice plays an
+      // independent note, so cross-voice modulation creates noise
+      sidLeft.setRingMod(v, false);
+      sidLeft.setSync(v, false);
       triggerNote(v, midiNote, velocity);
-      if (voiceSettings[v + 3].enabled)
+      if (voiceSettings[v + 3].enabled) {
+        sidRight.setRingMod(v, false);
+        sidRight.setSync(v, false);
         triggerNote(v + 3, midiNote, velocity);
+      }
       return;
     }
   }
@@ -1629,10 +1655,14 @@ void BreadbinProcessor::paraNoteOn(int midiNote, int velocity) {
 
 void BreadbinProcessor::paraNoteOnSID(bool isLeftSID, int midiNote, int velocity) {
   int base = isLeftSID ? 0 : 3;
+  SIDEngine &sid = isLeftSID ? sidLeft : sidRight;
   for (int v = base; v < base + 3; ++v) {
     if (!voiceSettings[v].enabled) continue;
     if (paraVoices[v].midiNote == -1) {
       paraVoices[v] = {midiNote, velocity};
+      // Disable ring mod/sync — para voices play independent notes
+      sid.setRingMod(v % 3, false);
+      sid.setSync(v % 3, false);
       triggerNote(v, midiNote, velocity);
       return;
     }
@@ -1684,6 +1714,11 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
       pv.paraVelocity[slot] = velocity;
       pv.paraCount++;
 
+      // Disable ring mod/sync — para voices play independent notes
+      pv.sidLeft->setRingMod(slot, false);
+      pv.sidLeft->setSync(slot, false);
+      pv.sidRight->setRingMod(slot, false);
+      pv.sidRight->setSync(slot, false);
       // Trigger on this specific SID voice slot
       if (voiceSettings[slot].enabled)
         pv.sidLeft->noteOn(slot, midiNote, velocity, leftDetuneCents);
@@ -1714,6 +1749,8 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   pv.velocity = velocity;
   pv.active = true;
   pv.releasing = false;
+  pv.fadingOut = false;
+  pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
@@ -1792,6 +1829,10 @@ void BreadbinProcessor::polyParaAllNotesOff() {
 void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
   auto &pv = polyVoices[polyIdx];
 
+  // In PolyPara mode, each voice plays an independent note — ring mod
+  // and sync cause cross-voice intermodulation noise, so disable them.
+  bool isPolyPara = (voiceMode == VoiceMode::PolyPara);
+
   // Apply L SID voice settings (voices 0-2)
   for (int v = 0; v < 3; ++v) {
     auto &vs = voiceSettings[v];
@@ -1801,8 +1842,8 @@ void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
     pv.sidLeft->setDecay(v, vs.decay);
     pv.sidLeft->setSustain(v, vs.sustain);
     pv.sidLeft->setRelease(v, vs.release);
-    pv.sidLeft->setRingMod(v, vs.ringMod);
-    pv.sidLeft->setSync(v, vs.sync);
+    pv.sidLeft->setRingMod(v, isPolyPara ? false : vs.ringMod);
+    pv.sidLeft->setSync(v, isPolyPara ? false : vs.sync);
   }
   pv.sidLeft->setFilterVoices(voiceSettings[0].filterEnabled,
                                voiceSettings[1].filterEnabled,
@@ -1817,8 +1858,8 @@ void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
     pv.sidRight->setDecay(v, vs.decay);
     pv.sidRight->setSustain(v, vs.sustain);
     pv.sidRight->setRelease(v, vs.release);
-    pv.sidRight->setRingMod(v, vs.ringMod);
-    pv.sidRight->setSync(v, vs.sync);
+    pv.sidRight->setRingMod(v, isPolyPara ? false : vs.ringMod);
+    pv.sidRight->setSync(v, isPolyPara ? false : vs.sync);
   }
   pv.sidRight->setFilterVoices(voiceSettings[3].filterEnabled,
                                 voiceSettings[4].filterEnabled,

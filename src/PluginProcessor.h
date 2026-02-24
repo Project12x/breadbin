@@ -66,6 +66,9 @@ public:
     uint32_t startSample = 0;       // Monotonic counter for voice stealing
     int releaseSamplesRemaining = 0; // Fallback release timer
     FilterEnvelopeState filterEnv;   // Per-voice filter envelope
+    // Per-voice fade envelope (prevents DC offset pops on activate/deactivate)
+    float fadeGain = 0.0f;           // 0=silent, 1=full — smoothed per-sample
+    bool fadingOut = false;          // true = ramping down to deactivation
     // Poly+Para: per-SID-voice note tracking
     int paraNote[3] = {-1, -1, -1};
     int paraVelocity[3] = {0, 0, 0};

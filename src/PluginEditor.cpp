@@ -1233,6 +1233,23 @@ void BreadbinEditor::timerCallback() {
   }
   }
 
+  // Disable ring mod/sync toggles in para modes (cross-voice modulation
+  // causes intermodulation noise when voices play independent notes)
+  bool paraActive = (vm == BreadbinProcessor::VoiceMode::Paraphonic ||
+                     vm == BreadbinProcessor::VoiceMode::PolyPara);
+  ringModButton.setEnabled(!paraActive);
+  syncButton.setEnabled(!paraActive);
+  modOffsetSlider.setEnabled(!paraActive);
+  if (paraActive) {
+    ringModButton.setAlpha(0.4f);
+    syncButton.setAlpha(0.4f);
+    modOffsetSlider.setAlpha(0.4f);
+  } else {
+    ringModButton.setAlpha(1.0f);
+    syncButton.setAlpha(1.0f);
+    modOffsetSlider.setAlpha(1.0f);
+  }
+
   // SID Player register overlay
   if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
     auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
@@ -6476,7 +6493,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 65: { // Ring Mod Pad - Ring modulated triangle pad + filter sweep
-    setParam("voiceMode", 1.0f);
+    setParam("voiceMode", 2.0f); // Poly: ring mod needs same-note voices
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 6, 4, 12, 8, 26);
       setParam("v" + juce::String(v) + "_ringMod", 1.0f);
@@ -6785,7 +6802,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   }
 
   case 72: { // Ring Cathedral - Ethereal ring mod bells with space FX
-    setParam("voiceMode", 1.0f);
+    setParam("voiceMode", 2.0f); // Poly: ring mod needs same-note voices
     // Ring mod triangles with consonant mod offset creating bell harmonics
     for (int v = 0; v < 6; ++v) {
       configVoice(v, SIDEngine::Waveform::Triangle, 0, 3, 2, 12, 6, 6);
