@@ -460,6 +460,15 @@ private:
   float agingFactor = 0.0f;
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
+  double cachedDetuneL = 1.0; // std::pow(2, leftDetuneCents/1200), cached
+  double cachedDetuneR = 1.0; // std::pow(2, rightDetuneCents/1200), cached
+  // Cached pan law (recalculated only on parameter change)
+  float cachedLeftPanVal = 0.0f;  // last seen pan value
+  float cachedLeftPanL = 0.707107f;  // cos(pi/4) = center default
+  float cachedLeftPanR = 0.707107f;  // sin(pi/4) = center default
+  float cachedRightPanVal = 0.0f;
+  float cachedRightPanL = 0.707107f;
+  float cachedRightPanR = 0.707107f;
   float glideTimeMs = 0.0f;
   SIDEngine::ClockMode clockMode = SIDEngine::ClockMode::PAL;
 
@@ -805,10 +814,17 @@ private:
   int lastArpNote = -1;
   void processArpeggiator(int numSamples);
   void rebuildArpSequence();
+  // Pre-allocated work arrays for rebuildArpSequence (avoids 2.4 KB stack alloc)
+  std::array<int, 128> arpSortBuf{};
+  std::array<int, 512> arpBaseBuf{};
+  // RT-safe RNG (seeded in constructor, never touches std::random_device on audio thread)
+  std::mt19937 arpRng{12345u};
 
   // LFO state
   LFOState lfo;
   LFOState lfo2;
+  std::mt19937 lfoRng{67890u};
+  std::mt19937 lfo2Rng{24680u};
 
   // PWM Sweep state
   double pwmSweepPhase = 0.0;
@@ -842,6 +858,14 @@ private:
 
   // Master Control & MIDI
   float masterVolume = 0.8f;
+
+  // Gain smoothing state (prevents pops on parameter/voice-count changes)
+  // ~5ms exponential smoothing time constant
+  float gainSmoothCoeff = 0.0f; // computed in prepareToPlay
+  float smoothedMasterVol = 0.8f;
+  float smoothedPolyNorm = 1.0f;
+  float smoothedLeftVoiceGain = 1.0f;
+  float smoothedRightVoiceGain = 1.0f;
   bool sustainActive = false;
 
   // Noise gate state (per-channel envelope follower)
@@ -851,6 +875,16 @@ private:
     int holdCounter = 0;
   };
   std::array<NoiseGateState, 2> gateState;
+  // Cached noise gate coefficients (recalculated only on parameter change)
+  struct GateCoeffCache {
+    float prevAttack = -1.0f, prevRelease = -1.0f, prevHold = -1.0f;
+    float prevThreshold = -1.0f;
+    float envAttackCoeff = 0.0f, envReleaseCoeff = 0.0f;
+    float gainAttackCoeff = 0.0f, gainReleaseCoeff = 0.0f;
+    float closeThreshold = 0.0f;
+    int holdSamples = 0;
+  };
+  GateCoeffCache gateCache;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

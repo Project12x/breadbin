@@ -106,6 +106,9 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   delayLineR.reset();
 
   reverb.init(static_cast<float>(sampleRate));
+
+  // Gain smoothing coefficient: ~5ms time constant
+  gainSmoothCoeff = 1.0f - std::exp(-1.0f / (0.005f * static_cast<float>(sampleRate)));
 }
 
 void BreadbinProcessor::releaseResources() { reverb.destroy(); }
@@ -125,8 +128,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // manage the register themselves (4-bit writes $D418, 8-bit zeroes it).
   dualMode = static_cast<DualMode>(static_cast<int>(dualModePtr->load()));
   setAgingFactor(agingPtr->load());
-  leftDetuneCents = leftDetunePtr->load();
-  rightDetuneCents = rightDetunePtr->load();
+  float newLeftDetune = leftDetunePtr->load();
+  float newRightDetune = rightDetunePtr->load();
+  if (newLeftDetune != leftDetuneCents) {
+    leftDetuneCents = newLeftDetune;
+    cachedDetuneL = std::pow(2.0, leftDetuneCents / 1200.0);
+  }
+  if (newRightDetune != rightDetuneCents) {
+    rightDetuneCents = newRightDetune;
+    cachedDetuneR = std::pow(2.0, rightDetuneCents / 1200.0);
+  }
   glideTimeMs = glidePtr->load();
   extInputEnabled = extInputEnablePtr->load() > 0.5f;
   extInputLevel = extInputLevelPtr->load();
@@ -446,18 +457,18 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                 (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0);
             double modHz = hz * pitchMultiplier * bendMultiplier;
             if (voiceSettings[v].enabled)
-              pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
+              pv.sidLeft->setFrequency(v, modHz * cachedDetuneL);
             if (voiceSettings[v + 3].enabled)
-              pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+              pv.sidRight->setFrequency(v, modHz * cachedDetuneR);
           }
         }
       } else {
         double modHz = pv.currentHz * pitchMultiplier * bendMultiplier;
         for (int v = 0; v < 3; ++v) {
           if (voiceSettings[v].enabled)
-            pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
+            pv.sidLeft->setFrequency(v, modHz * cachedDetuneL);
           if (voiceSettings[v + 3].enabled)
-            pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+            pv.sidRight->setFrequency(v, modHz * cachedDetuneR);
         }
       }
     }
@@ -479,18 +490,27 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
-  // Read per-SID pan from APVTS (-1=left, 0=center, +1=right)
-  float leftSidPan = leftPanPtr->load();
-  float rightSidPan = rightPanPtr->load();
-
-  // Standard equal-power pan law: convert [-1,+1] to angle [0, pi/2]
-  constexpr float piOver2 = 1.5707963267948966f;
-  float leftAngle = (leftSidPan + 1.0f) * 0.5f * piOver2;
-  float leftGainL = std::cos(leftAngle);
-  float leftGainR = std::sin(leftAngle);
-  float rightAngle = (rightSidPan + 1.0f) * 0.5f * piOver2;
-  float rightGainL = std::cos(rightAngle);
-  float rightGainR = std::sin(rightAngle);
+  // Read per-SID pan from APVTS — recalculate trig only when changed
+  float newLeftPan = leftPanPtr->load();
+  float newRightPan = rightPanPtr->load();
+  if (newLeftPan != cachedLeftPanVal) {
+    cachedLeftPanVal = newLeftPan;
+    constexpr float piOver2 = 1.5707963267948966f;
+    float angle = (newLeftPan + 1.0f) * 0.5f * piOver2;
+    cachedLeftPanL = std::cos(angle);
+    cachedLeftPanR = std::sin(angle);
+  }
+  if (newRightPan != cachedRightPanVal) {
+    cachedRightPanVal = newRightPan;
+    constexpr float piOver2 = 1.5707963267948966f;
+    float angle = (newRightPan + 1.0f) * 0.5f * piOver2;
+    cachedRightPanL = std::cos(angle);
+    cachedRightPanR = std::sin(angle);
+  }
+  float leftGainL = cachedLeftPanL;
+  float leftGainR = cachedLeftPanR;
+  float rightGainL = cachedRightPanL;
+  float rightGainR = cachedRightPanR;
 
   // Voice count gain compensation: normalize output level regardless of
   // how many voices are enabled. 3 voices per SID is the reference level.
@@ -502,25 +522,23 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     if (voiceSettings[v].enabled) ++rightVoiceCount;
   // Compensation: 3/count (1 voice = 3x, 2 voices = 1.5x, 3 voices = 1x)
   // If 0 voices enabled, use 1.0 (no signal anyway, or digi-only)
-  float leftVoiceGain = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
-  float rightVoiceGain = rightVoiceCount > 0 ? 3.0f / static_cast<float>(rightVoiceCount) : 1.0f;
-
-  // Combine voice compensation into pan gains
-  leftGainL *= leftVoiceGain;
-  leftGainR *= leftVoiceGain;
-  rightGainL *= rightVoiceGain;
-  rightGainR *= rightVoiceGain;
+  float targetLeftVG = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
+  float targetRightVG = rightVoiceCount > 0 ? 3.0f / static_cast<float>(rightVoiceCount) : 1.0f;
+  // Note: voice gain smoothing is applied per-sample in the loops below
 
   if (isPolyActive()) {
     // === POLY SAMPLE GENERATION ===
     // Each active poly voice has its own L/R SID pair. Clock them all
     // and sum with pan law, normalized by active voice count.
 
-    // Count active sources for normalization
-    // PolyPara: count total active notes; Poly: count active voices
+    // Build active voice index list once per block (avoids scanning all
+    // MAX_POLY slots per sample — typically only 2-4 are active)
+    int activePolyIdx[MAX_POLY];
+    int activePolyCount = 0;
     int activeCount = 0;
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       if (polyVoices[pi].active || polyVoices[pi].releasing) {
+        activePolyIdx[activePolyCount++] = pi;
         if (voiceMode == VoiceMode::PolyPara)
           activeCount += std::max(1, polyVoices[pi].paraCount);
         else
@@ -528,28 +546,35 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
     // 1/sqrt(N) normalization preserves perceived loudness across polyphony
-    float polyNorm = activeCount > 0
+    float targetPolyNorm = activeCount > 0
         ? 1.0f / std::sqrt(static_cast<float>(activeCount))
         : 1.0f;
 
     for (int i = 0; i < numSamples; ++i) {
+      // Per-sample gain smoothing to prevent pops
+      smoothedPolyNorm += gainSmoothCoeff * (targetPolyNorm - smoothedPolyNorm);
+      smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
+      smoothedLeftVoiceGain += gainSmoothCoeff * (targetLeftVG - smoothedLeftVoiceGain);
+      smoothedRightVoiceGain += gainSmoothCoeff * (targetRightVG - smoothedRightVoiceGain);
+
       float outL = 0.0f;
       float outR = 0.0f;
 
-      for (int pi = 0; pi < polyMaxNotes; ++pi) {
-        auto &pv = polyVoices[pi];
-        if (!pv.active && !pv.releasing) continue;
+      for (int ai = 0; ai < activePolyCount; ++ai) {
+        auto &pv = polyVoices[activePolyIdx[ai]];
 
         float sL = pv.sidLeft->clock();
         float sR = pv.sidRight->clock();
 
-        outL += sL * leftGainL + sR * rightGainL;
-        outR += sL * leftGainR + sR * rightGainR;
+        outL += sL * leftGainL * smoothedLeftVoiceGain
+              + sR * rightGainL * smoothedRightVoiceGain;
+        outR += sL * leftGainR * smoothedLeftVoiceGain
+              + sR * rightGainR * smoothedRightVoiceGain;
       }
 
-      // Normalize and apply master volume
-      outL *= polyNorm * masterVolume;
-      outR *= polyNorm * masterVolume;
+      // Normalize and apply smoothed master volume
+      outL *= smoothedPolyNorm * smoothedMasterVol;
+      outR *= smoothedPolyNorm * smoothedMasterVol;
 
       leftChannel[i] = outL;
       if (rightChannel)
@@ -600,6 +625,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
 
     for (int i = 0; i < numSamples; ++i) {
+      // Per-sample gain smoothing to prevent pops
+      smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
+      smoothedLeftVoiceGain += gainSmoothCoeff * (targetLeftVG - smoothedLeftVoiceGain);
+      smoothedRightVoiceGain += gainSmoothCoeff * (targetRightVG - smoothedRightVoiceGain);
+
       // Feed external audio to SID filters if enabled
       if (extInputEnabled && inputLeft != nullptr) {
         float extL = inputLeft[i] * extInputLevel;
@@ -627,9 +657,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       float sampleL = sidLeft.clock();
       float sampleR = sidRight.clock();
 
-      // Apply per-SID pan (equal-power pan law) with voice count compensation
-      float outL = (sampleL * leftGainL + sampleR * rightGainL) * digiGain;
-      float outR = (sampleL * leftGainR + sampleR * rightGainR) * digiGain;
+      // Apply per-SID pan (equal-power pan law) with smoothed voice count compensation
+      float outL = (sampleL * leftGainL * smoothedLeftVoiceGain
+                  + sampleR * rightGainL * smoothedRightVoiceGain) * digiGain;
+      float outR = (sampleL * leftGainR * smoothedLeftVoiceGain
+                  + sampleR * rightGainR * smoothedRightVoiceGain) * digiGain;
 
       // Mix 8-bit digi directly into output (bypasses SID volume DAC)
       if (digiBitDepth == 8 && digi8bitSample != 0.0f) {
@@ -637,9 +669,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         outR += digi8bitSample * digiGain;
       }
 
-      // Apply master volume as output gain (covers voices + digi)
-      outL *= masterVolume;
-      outR *= masterVolume;
+      // Apply smoothed master volume as output gain (covers voices + digi)
+      outL *= smoothedMasterVol;
+      outR *= smoothedMasterVol;
 
       leftChannel[i] = outL;
       if (rightChannel)
@@ -768,22 +800,24 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   const float gateThreshold =
       noiseGateThresholdPtr->load(std::memory_order_relaxed);
   if (gateThreshold > 0.0001f) {
-    const float sr = static_cast<float>(getSampleRate());
+    // Recalculate coefficients only when gate parameters change
     const float attackMs = gateAttackPtr->load(std::memory_order_relaxed);
     const float releaseMs = gateReleasePtr->load(std::memory_order_relaxed);
     const float holdMs = gateHoldPtr->load(std::memory_order_relaxed);
-
-    // Time constants: coeff = 1 - exp(-1 / (time_seconds * sampleRate))
-    const float envAttackCoeff =
-        1.0f - std::exp(-1.0f / (0.001f * sr)); // Fast envelope attack (~1ms)
-    const float envReleaseCoeff =
-        1.0f - std::exp(-1.0f / (0.05f * sr)); // Envelope release (~50ms)
-    const float gainAttackCoeff =
-        1.0f - std::exp(-1.0f / (attackMs * 0.001f * sr));
-    const float gainReleaseCoeff =
-        1.0f - std::exp(-1.0f / (releaseMs * 0.001f * sr));
-    const int holdSamples = static_cast<int>(holdMs * 0.001f * sr);
-    const float closeThreshold = gateThreshold * 0.5f; // 6dB hysteresis
+    if (attackMs != gateCache.prevAttack || releaseMs != gateCache.prevRelease ||
+        holdMs != gateCache.prevHold || gateThreshold != gateCache.prevThreshold) {
+      const float sr = static_cast<float>(getSampleRate());
+      gateCache.prevAttack = attackMs;
+      gateCache.prevRelease = releaseMs;
+      gateCache.prevHold = holdMs;
+      gateCache.prevThreshold = gateThreshold;
+      gateCache.envAttackCoeff = 1.0f - std::exp(-1.0f / (0.001f * sr));
+      gateCache.envReleaseCoeff = 1.0f - std::exp(-1.0f / (0.05f * sr));
+      gateCache.gainAttackCoeff = 1.0f - std::exp(-1.0f / (attackMs * 0.001f * sr));
+      gateCache.gainReleaseCoeff = 1.0f - std::exp(-1.0f / (releaseMs * 0.001f * sr));
+      gateCache.holdSamples = static_cast<int>(holdMs * 0.001f * sr);
+      gateCache.closeThreshold = gateThreshold * 0.5f;
+    }
 
     for (int ch = 0; ch < buffer.getNumChannels() && ch < 2; ++ch) {
       auto *channelData = buffer.getWritePointer(ch);
@@ -794,28 +828,28 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
         // Peak envelope follower
         if (inputLevel > gs.envelope)
-          gs.envelope += envAttackCoeff * (inputLevel - gs.envelope);
+          gs.envelope += gateCache.envAttackCoeff * (inputLevel - gs.envelope);
         else
-          gs.envelope += envReleaseCoeff * (inputLevel - gs.envelope);
+          gs.envelope += gateCache.envReleaseCoeff * (inputLevel - gs.envelope);
 
         // Gate state with hysteresis
         bool gateOpen;
         if (gs.envelope >= gateThreshold) {
           gateOpen = true;
-          gs.holdCounter = holdSamples;
+          gs.holdCounter = gateCache.holdSamples;
         } else if (gs.holdCounter > 0) {
           gs.holdCounter--;
           gateOpen = true;
         } else {
-          gateOpen = gs.envelope >= closeThreshold;
+          gateOpen = gs.envelope >= gateCache.closeThreshold;
         }
 
         // Smooth gain transition
         const float targetGain = gateOpen ? 1.0f : 0.0f;
         if (targetGain > gs.gain)
-          gs.gain += gainAttackCoeff * (targetGain - gs.gain);
+          gs.gain += gateCache.gainAttackCoeff * (targetGain - gs.gain);
         else
-          gs.gain += gainReleaseCoeff * (targetGain - gs.gain);
+          gs.gain += gateCache.gainReleaseCoeff * (targetGain - gs.gain);
 
         channelData[i] *= gs.gain;
       }
@@ -1291,15 +1325,15 @@ void BreadbinProcessor::updateAllVoiceFrequencies() {
           if (pv.paraNote[v] >= 0) {
             double hz = 440.0 * std::pow(2.0,
                 (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0) * bendMult;
-            pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
-            pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+            pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
+            pv.sidRight->setFrequency(v, hz * cachedDetuneR);
           }
         }
       } else {
         double hz = pv.currentHz * bendMult;
         for (int v = 0; v < 3; ++v) {
-          pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
-          pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+          pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
+          pv.sidRight->setFrequency(v, hz * cachedDetuneR);
         }
       }
     }
@@ -2070,20 +2104,18 @@ void BreadbinProcessor::rebuildArpSequence() {
   if (arpHeldCount == 0)
     return;
 
-  // Sort held notes into a stack-local array (no heap)
-  std::array<int, 128> sorted{};
+  // Sort held notes into pre-allocated work array (RT-safe, no stack pressure)
   for (int i = 0; i < arpHeldCount; ++i)
-    sorted[i] = arpHeldNotes[i];
-  std::sort(sorted.begin(), sorted.begin() + arpHeldCount);
+    arpSortBuf[i] = arpHeldNotes[i];
+  std::sort(arpSortBuf.begin(), arpSortBuf.begin() + arpHeldCount);
 
   // Build base sequence with octave expansion
   int baseCount = 0;
-  std::array<int, 512> base{};
   for (int oct = 0; oct < arpOctaves; ++oct) {
     for (int i = 0; i < arpHeldCount; ++i) {
-      int transposed = sorted[i] + (oct * 12);
-      if (transposed <= 127 && baseCount < static_cast<int>(base.size())) {
-        base[baseCount++] = transposed;
+      int transposed = arpSortBuf[i] + (oct * 12);
+      if (transposed <= 127 && baseCount < static_cast<int>(arpBaseBuf.size())) {
+        arpBaseBuf[baseCount++] = transposed;
       }
     }
   }
@@ -2092,36 +2124,33 @@ void BreadbinProcessor::rebuildArpSequence() {
   switch (arpPattern) {
   case ArpPattern::Up:
     for (int i = 0; i < baseCount; ++i)
-      arpSequence[i] = base[i];
+      arpSequence[i] = arpBaseBuf[i];
     arpSeqCount = baseCount;
     break;
 
   case ArpPattern::Down:
     for (int i = 0; i < baseCount; ++i)
-      arpSequence[i] = base[baseCount - 1 - i];
+      arpSequence[i] = arpBaseBuf[baseCount - 1 - i];
     arpSeqCount = baseCount;
     break;
 
   case ArpPattern::UpDown:
     for (int i = 0; i < baseCount; ++i)
-      arpSequence[i] = base[i];
+      arpSequence[i] = arpBaseBuf[i];
     arpSeqCount = baseCount;
     if (baseCount > 1) {
       for (int i = baseCount - 2; i > 0; --i) {
         if (arpSeqCount < static_cast<int>(arpSequence.size()))
-          arpSequence[arpSeqCount++] = base[i];
+          arpSequence[arpSeqCount++] = arpBaseBuf[i];
       }
     }
     break;
 
   case ArpPattern::Random:
     for (int i = 0; i < baseCount; ++i)
-      arpSequence[i] = base[i];
+      arpSequence[i] = arpBaseBuf[i];
     arpSeqCount = baseCount;
-    {
-      static std::mt19937 rng(std::random_device{}());
-      std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, rng);
-    }
+    std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, arpRng);
     break;
   }
 
@@ -2190,8 +2219,7 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
 
     // Reshuffle on wrap for random mode
     if (arpPattern == ArpPattern::Random && arpIndex == 0) {
-      static std::mt19937 rng(std::random_device{}());
-      std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, rng);
+      std::shuffle(arpSequence.begin(), arpSequence.begin() + arpSeqCount, arpRng);
     }
   }
 }
@@ -2495,9 +2523,8 @@ void BreadbinProcessor::processLFO(int numSamples) {
   case LFOWaveform::SampleAndHold:
     // Latch new random value on phase wrap
     if (lfo.phase < oldPhase) {
-      static std::mt19937 rng(std::random_device{}());
       std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-      lfo.shValue = dist(rng);
+      lfo.shValue = dist(lfoRng);
     }
     lfo.currentValue = lfo.shValue;
     break;
@@ -2527,9 +2554,8 @@ void BreadbinProcessor::processLFO2(int numSamples) {
     break;
   case LFOWaveform::SampleAndHold:
     if (lfo2.phase < oldPhase) {
-      static std::mt19937 rng2(std::random_device{}());
       std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-      lfo2.shValue = dist(rng2);
+      lfo2.shValue = dist(lfo2Rng);
     }
     lfo2.currentValue = lfo2.shValue;
     break;
