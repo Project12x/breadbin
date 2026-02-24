@@ -3,6 +3,7 @@
 #include "DigiSampler.h"
 #include "SIDEngine.h"
 #include "SidFilePlayer.h"
+#include "dsp/ReverbSC.h"
 #include <algorithm>
 #include <array>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -136,6 +137,9 @@ public:
     DelayTimeR,
     DelayFeedback,
     DelayMix,
+    ReverbDecay,
+    ReverbDamping,
+    ReverbMix,
     PwmSweepRate,
     PwmSweepDepth,
     ArpEnable,
@@ -143,6 +147,7 @@ public:
     ArpPattern,
     ChorusEnable,
     DelayEnable,
+    ReverbEnable,
     FilterEnvEnable,
     ExtInputEnable,
     ClockMode,
@@ -742,6 +747,7 @@ private:
       delayLineL{88200};
   juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>
       delayLineR{88200};
+  ReverbSC reverb;
 
   // FX APVTS pointers
   std::atomic<float> *chorusEnablePtr = nullptr;
@@ -753,6 +759,10 @@ private:
   std::atomic<float> *delayTimeRPtr = nullptr;
   std::atomic<float> *delayFeedbackPtr = nullptr;
   std::atomic<float> *delayMixPtr = nullptr;
+  std::atomic<float> *reverbEnablePtr = nullptr;
+  std::atomic<float> *reverbDecayPtr = nullptr;
+  std::atomic<float> *reverbDampingPtr = nullptr;
+  std::atomic<float> *reverbMixPtr = nullptr;
 
   // SAFETY DSP CHAIN
   // DC blocker / subsonic filter (20Hz high-pass)

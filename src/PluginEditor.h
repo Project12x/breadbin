@@ -1118,6 +1118,22 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       delayTimeLAttach, delayTimeRAttach, delayFBAttach, delayMixAttach;
 
+  // ========== FX: REVERB ==========
+  MappableToggle reverbEnableButton{
+      "Reverb", processor, BreadbinProcessor::ControlParam::ReverbEnable};
+  MappableSlider reverbDecaySlider{
+      processor, BreadbinProcessor::ControlParam::ReverbDecay};
+  MappableSlider reverbDampingSlider{
+      processor, BreadbinProcessor::ControlParam::ReverbDamping};
+  MappableSlider reverbMixSlider{processor,
+                                 BreadbinProcessor::ControlParam::ReverbMix};
+  juce::Label reverbDecayLabel, reverbDampingLabel, reverbMixLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      reverbEnableAttach;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      reverbDecayAttach, reverbDampingAttach, reverbMixAttach;
+
   // ========== WAVETABLE STEP SEQUENCER ==========
   juce::TextButton wavetableButton{"Wavetable"};
   juce::Component::SafePointer<juce::DialogWindow> wavetableWindow;

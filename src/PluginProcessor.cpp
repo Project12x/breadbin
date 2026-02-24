@@ -104,9 +104,11 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   delayLineR.prepare(delaySpec);
   delayLineL.reset();
   delayLineR.reset();
+
+  reverb.init(static_cast<float>(sampleRate));
 }
 
-void BreadbinProcessor::releaseResources() {}
+void BreadbinProcessor::releaseResources() { reverb.destroy(); }
 
 void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                      juce::MidiBuffer &midiMessages) {
@@ -732,6 +734,26 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       left[i] = dryL * (1.0f - mix) + wetL * mix;
       if (right)
         right[i] = dryR * (1.0f - mix) + wetR * mix;
+    }
+  }
+
+  // Reverb
+  if (reverbEnablePtr->load() > 0.5f) {
+    reverb.setFeedback(reverbDecayPtr->load());
+    reverb.setLPFreq(reverbDampingPtr->load());
+    float reverbMix = reverbMixPtr->load();
+
+    auto *left = buffer.getWritePointer(0);
+    auto *right =
+        buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+    for (int i = 0; i < numSamples; ++i) {
+      float dryL = left[i];
+      float dryR = right ? right[i] : dryL;
+      float wetL, wetR;
+      reverb.compute(dryL, dryR, wetL, wetR);
+      left[i] = dryL * (1.0f - reverbMix) + wetL * reverbMix;
+      if (right)
+        right[i] = dryR * (1.0f - reverbMix) + wetR * reverbMix;
     }
   }
 
@@ -2836,6 +2858,24 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
       p->setValueNotifyingHost(normalized);
     break;
   }
+  case ControlParam::ReverbDecay: {
+    auto *p = apvts.getParameter("reverbDecay");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::ReverbDamping: {
+    auto *p = apvts.getParameter("reverbDamping");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
+  case ControlParam::ReverbMix: {
+    auto *p = apvts.getParameter("reverbMix");
+    if (p)
+      p->setValueNotifyingHost(normalized);
+    break;
+  }
   case ControlParam::PwmSweepRate: {
     auto *p = apvts.getParameter("pwmSweepRate");
     if (p)
@@ -2875,6 +2915,12 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
   }
   case ControlParam::DelayEnable: {
     auto *p = apvts.getParameter("delayEnable");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
+  case ControlParam::ReverbEnable: {
+    auto *p = apvts.getParameter("reverbEnable");
     if (p)
       p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
     break;
@@ -3099,6 +3145,12 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Delay Feedback";
   case ControlParam::DelayMix:
     return "Delay Mix";
+  case ControlParam::ReverbDecay:
+    return "Reverb Decay";
+  case ControlParam::ReverbDamping:
+    return "Reverb Damping";
+  case ControlParam::ReverbMix:
+    return "Reverb Mix";
   case ControlParam::PwmSweepRate:
     return "PWM Sweep Rate";
   case ControlParam::PwmSweepDepth:
@@ -3113,6 +3165,8 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Chorus Enable";
   case ControlParam::DelayEnable:
     return "Delay Enable";
+  case ControlParam::ReverbEnable:
+    return "Reverb Enable";
   case ControlParam::FilterEnvEnable:
     return "Filter Env Enable";
   case ControlParam::ExtInputEnable:
@@ -3396,6 +3450,18 @@ BreadbinProcessor::createParameterLayout() {
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"delayMix", 1}, "Delay Mix", 0.0f, 1.0f, 0.3f));
 
+  // FX: Reverb
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"reverbEnable", 1}, "Reverb Enable", false));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"reverbDecay", 1}, "Reverb Decay", 0.1f, 0.95f,
+      0.7f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"reverbDamping", 1}, "Reverb Damping", 1000.0f,
+      16000.0f, 10000.0f));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"reverbMix", 1}, "Reverb Mix", 0.0f, 1.0f, 0.3f));
+
   // Arpeggiator
   layout.add(std::make_unique<juce::AudioParameterBool>(
       juce::ParameterID{"arpEnable", 1}, "Arpeggiator", false));
@@ -3547,6 +3613,10 @@ void BreadbinProcessor::initializeParameterPointers() {
   delayTimeRPtr = apvts.getRawParameterValue("delayTimeR");
   delayFeedbackPtr = apvts.getRawParameterValue("delayFeedback");
   delayMixPtr = apvts.getRawParameterValue("delayMix");
+  reverbEnablePtr = apvts.getRawParameterValue("reverbEnable");
+  reverbDecayPtr = apvts.getRawParameterValue("reverbDecay");
+  reverbDampingPtr = apvts.getRawParameterValue("reverbDamping");
+  reverbMixPtr = apvts.getRawParameterValue("reverbMix");
 
   for (int v = 0; v < 6; ++v) {
     juce::String prefix = "v" + juce::String(v) + "_";

@@ -1055,6 +1055,20 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "delayMix", delayMixSlider);
 
+  // FX: Reverb
+  reverbEnableAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "reverbEnable", reverbEnableButton);
+  reverbDecayAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "reverbDecay", reverbDecaySlider);
+  reverbDampingAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "reverbDamping", reverbDampingSlider);
+  reverbMixAttach =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "reverbMix", reverbMixSlider);
+
   // Wavetable attachments are now in WavetablePanel popup
 
   // Filter Envelope
@@ -2763,13 +2777,36 @@ void BreadbinEditor::setupControls() {
   // Preset prev/next navigation
   presetPrevButton.setButtonText(juce::String::charToString(0x25C0));
   presetPrevButton.setTooltip("Previous preset");
-  presetPrevButton.onClick = [this]() {
-    // Ordered list of all factory preset IDs for sequential navigation
-    static const int ids[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
-                              13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-                              25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-                              37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
-    static const int count = sizeof(ids) / sizeof(ids[0]);
+  // Shared helper: build full navigation list (factory in menu order + user presets)
+  auto buildNavIds = [this]() {
+    // Factory presets in submenu display order (alphabetical within category)
+    static const int factory[] = {
+        // Leads
+        20, 62, 56, 1, 46, 59, 5, 51, 15, 19, 47, 66,
+        // Bass
+        45, 32, 50, 22, 60, 21, 40,
+        // Pads & Keys
+        54, 67, 6, 38, 53, 68, 23, 2, 55, 42, 24, 64, 63, 48,
+        // Arps & Sequences
+        39, 3, 25, 13, 49, 41, 52, 61, 8, 9,
+        // FX & Modulation
+        57, 4, 14, 7, 69, 27, 65, 26, 58,
+        // Showcase
+        75, 76, 77, 70, 73, 72, 71, 74,
+        // Classic C64
+        10, 16, 37, 31, 43, 36, 33, 30, 28, 11, 44, 12, 29, 18, 35, 34, 17};
+    std::vector<int> ids(std::begin(factory), std::end(factory));
+    // Append user presets (already sorted alphabetically by refreshUserPresets)
+    for (int i = 0; i < static_cast<int>(userPresetFiles.size()); ++i)
+      ids.push_back(1000 + i);
+    return ids;
+  };
+
+  presetPrevButton.onClick = [this, buildNavIds]() {
+    auto ids = buildNavIds();
+    int count = static_cast<int>(ids.size());
+    if (count == 0)
+      return;
     int cur = globalPresetSelector.getSelectedId();
     // Remap favorites to real IDs
     constexpr int favMap[][2] = {
@@ -2792,12 +2829,11 @@ void BreadbinEditor::setupControls() {
 
   presetNextButton.setButtonText(juce::String::charToString(0x25B6));
   presetNextButton.setTooltip("Next preset");
-  presetNextButton.onClick = [this]() {
-    static const int ids[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
-                              13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-                              25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-                              37, 38, 39, 40, 41, 42, 43, 44, 45, 46};
-    static const int count = sizeof(ids) / sizeof(ids[0]);
+  presetNextButton.onClick = [this, buildNavIds]() {
+    auto ids = buildNavIds();
+    int count = static_cast<int>(ids.size());
+    if (count == 0)
+      return;
     int cur = globalPresetSelector.getSelectedId();
     constexpr int favMap[][2] = {
         {500, 1}, {501, 10}, {502, 38}, {503, 22}, {504, 25}};
@@ -3156,6 +3192,21 @@ void BreadbinEditor::setupControls() {
                 0.01f, "Delay Feedback");
   setupFXSlider(delayMixSlider, delayMixLabel, "Mix", 0.0f, 1.0f, 0.3f, 0.01f,
                 "Delay Wet/Dry Mix");
+
+  // ===== FX: REVERB =====
+  reverbEnableButton.setTooltip(
+      "Reverb: Algorithmic stereo reverb (Costello FDN)");
+  addAndMakeVisible(reverbEnableButton);
+
+  setupFXSlider(reverbDecaySlider, reverbDecayLabel, "Decay", 0.1f, 0.95f,
+                0.7f, 0.01f, "Reverb Decay Time");
+  setupFXSlider(reverbDampingSlider, reverbDampingLabel, "Damp", 1000.0f,
+                16000.0f, 10000.0f, 100.0f, "Reverb Damping (LP Cutoff Hz)");
+  reverbDampingSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 50,
+                                      18);
+  reverbDampingSlider.setNumDecimalPlacesToDisplay(0);
+  setupFXSlider(reverbMixSlider, reverbMixLabel, "Mix", 0.0f, 1.0f, 0.3f,
+                0.01f, "Reverb Wet/Dry Mix");
 
   // ===== WAVETABLE STEP SEQUENCER =====
   wavetableButton.setTooltip("Wavetable: C64-style step sequencer editor");
@@ -4181,10 +4232,11 @@ void BreadbinEditor::resized() {
 
   bounds.removeFromBottom(10); // Separation from LFO
 
-  // 3. FX: Chorus + Delay (Left-justified, two rows)
-  auto fxArea = bounds.removeFromBottom(58);
+  // 3. FX: Chorus + Delay + Reverb (three rows)
+  auto fxArea = bounds.removeFromBottom(87);
   auto chorusRow = fxArea.removeFromTop(29);
-  auto delayRow = fxArea;
+  auto delayRow = fxArea.removeFromTop(29);
+  auto reverbRow = fxArea;
 
   // Chorus row (right-justified to clear logo)
   auto chorusStack = chorusRow.removeFromRight(500);
@@ -4223,6 +4275,23 @@ void BreadbinEditor::resized() {
   delayMixLabel.setBounds(delayStack.removeFromLeft(28).withHeight(14));
   delayMixSlider.setBounds(
       delayStack.removeFromLeft(66).withHeight(22).translated(0, 3));
+
+  // Reverb row (right-justified to clear logo)
+  auto reverbStack = reverbRow.removeFromRight(500);
+  reverbEnableButton.setBounds(
+      reverbStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
+  reverbStack.removeFromLeft(4);
+  reverbDecayLabel.setBounds(reverbStack.removeFromLeft(38).withHeight(14));
+  reverbDecaySlider.setBounds(
+      reverbStack.removeFromLeft(100).withHeight(22).translated(0, 3));
+  reverbStack.removeFromLeft(4);
+  reverbDampingLabel.setBounds(reverbStack.removeFromLeft(38).withHeight(14));
+  reverbDampingSlider.setBounds(
+      reverbStack.removeFromLeft(120).withHeight(22).translated(0, 3));
+  reverbStack.removeFromLeft(4);
+  reverbMixLabel.setBounds(reverbStack.removeFromLeft(28).withHeight(14));
+  reverbMixSlider.setBounds(
+      reverbStack.removeFromLeft(66).withHeight(22).translated(0, 3));
 
   bounds.removeFromBottom(4);
 
@@ -4605,6 +4674,12 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   setParam("delayFeedback", 0.3f);
   setParam("delayMix", 0.3f);
 
+  // Reverb: off, defaults
+  setParam("reverbEnable", 0.0f);
+  setParam("reverbDecay", 0.7f);
+  setParam("reverbDamping", 10000.0f);
+  setParam("reverbMix", 0.3f);
+
   // Wavetable: off, defaults
   setParam("wtEnable", 0.0f);
   setParam("wtNumSteps", 4.0f);
@@ -4741,6 +4816,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("filterEnvSustain", 0.7f);
     setParam("filterEnvRelease", 3.0f);
     setParam("filterEnvAmount", 0.4f);
+    // Reverb for lush depth
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.75f);
+    setParam("reverbDamping", 8000.0f);
+    setParam("reverbMix", 0.25f);
     break;
 
   case 3: // Arpeggiated - Classic Lead with arp + echo
@@ -5337,6 +5417,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("filterEnvSustain", 0.6f);
     setParam("filterEnvRelease", 4.0f);
     setParam("filterEnvAmount", 0.3f);
+    // Reverb for icy spaciousness
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.85f);
+    setParam("reverbDamping", 6000.0f);
+    setParam("reverbMix", 0.35f);
     break;
   }
 
@@ -5362,6 +5447,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusRate", 0.9f);
     setParam("chorusDepth", 0.3f);
     setParam("chorusMix", 0.35f);
+    // Reverb for string hall
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.8f);
+    setParam("reverbDamping", 7000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -5483,6 +5573,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("lfoWave", 0.0f);
     setParam("lfoRate", 0.2f);
     setParam("lfoDepthPitch", 0.04f);
+    // Reverb for bell shimmer
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.7f);
+    setParam("reverbDamping", 12000.0f);
+    setParam("reverbMix", 0.2f);
     break;
   }
 
@@ -5561,6 +5656,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
       setParam("v" + juce::String(v) + "_filter", 1.0f);
     }
     setFilters(600, 2);
+    // Reverb for soft ambience
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.75f);
+    setParam("reverbDamping", 5000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -5798,6 +5898,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusRate", 0.7f);
     setParam("chorusDepth", 0.3f);
     setParam("chorusMix", 0.35f);
+    // Reverb for chord depth
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.8f);
+    setParam("reverbDamping", 8000.0f);
+    setParam("reverbMix", 0.25f);
     break;
   }
 
@@ -6050,6 +6155,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayTimeR", 750.0f);
     setParam("delayFeedback", 0.5f);
     setParam("delayMix", 0.25f);
+    // Reverb for ethereal wash
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.85f);
+    setParam("reverbDamping", 5000.0f);
+    setParam("reverbMix", 0.35f);
     break;
   }
 
@@ -6317,6 +6427,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusRate", 0.8f);
     setParam("chorusDepth", 0.35f);
     setParam("chorusMix", 0.4f);
+    // Reverb for string hall
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.8f);
+    setParam("reverbDamping", 6000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -6388,6 +6503,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayTimeR", 600.0f);
     setParam("delayFeedback", 0.45f);
     setParam("delayMix", 0.25f);
+    // Reverb for ring mod atmosphere
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.8f);
+    setParam("reverbDamping", 7000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -6466,6 +6586,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayTimeR", 900.0f);
     setParam("delayFeedback", 0.55f);
     setParam("delayMix", 0.35f);
+    // Reverb for ambient pad space
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.85f);
+    setParam("reverbDamping", 6000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -6699,6 +6824,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("chorusRate", 0.6f);
     setParam("chorusDepth", 0.35f);
     setParam("chorusMix", 0.35f);
+    // Reverb for cathedral wash
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.9f);
+    setParam("reverbDamping", 5000.0f);
+    setParam("reverbMix", 0.4f);
     break;
   }
 
@@ -6869,6 +6999,11 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     setParam("delayTimeR", 750.0f);
     setParam("delayFeedback", 0.45f);
     setParam("delayMix", 0.3f);
+    // Reverb for rich chord depth
+    setParam("reverbEnable", 1.0f);
+    setParam("reverbDecay", 0.85f);
+    setParam("reverbDamping", 7000.0f);
+    setParam("reverbMix", 0.3f);
     break;
   }
 
@@ -7105,122 +7240,122 @@ void BreadbinEditor::refreshUserPresets() {
   root->addItem(504, "Chip Sequence");
   root->addSeparator();
 
-  // -- Leads --
+  // -- Leads (alphabetical) --
   {
     juce::PopupMenu sub;
+    sub.addItem(20, "Acid Squelch");
+    sub.addItem(62, "Brass Section");
+    sub.addItem(56, "Clav Funk");
     sub.addItem(1, "Dual Lead");
+    sub.addItem(46, "Filter Scream");
+    sub.addItem(59, "Laser Lead");
     sub.addItem(5, "Retro Synth");
+    sub.addItem(51, "Saw Stack");
     sub.addItem(15, "SID Brass");
     sub.addItem(19, "Sync Lead");
-    sub.addItem(20, "Acid Squelch");
-    sub.addItem(46, "Filter Scream");
     sub.addItem(47, "Thin Lead");
-    sub.addItem(51, "Saw Stack");
-    sub.addItem(56, "Clav Funk");
-    sub.addItem(59, "Laser Lead");
-    sub.addItem(62, "Brass Section");
     sub.addItem(66, "Velocity Keys");
     root->addSubMenu("Leads", sub);
   }
 
-  // -- Bass --
+  // -- Bass (alphabetical) --
   {
     juce::PopupMenu sub;
-    sub.addItem(21, "Sub Bass");
-    sub.addItem(22, "Growl Bass");
-    sub.addItem(32, "Cobra Bass");
-    sub.addItem(40, "Wobble Bass");
     sub.addItem(45, "Arp Bass");
+    sub.addItem(32, "Cobra Bass");
     sub.addItem(50, "Deep Sub");
+    sub.addItem(22, "Growl Bass");
     sub.addItem(60, "Split Layers");
+    sub.addItem(21, "Sub Bass");
+    sub.addItem(40, "Wobble Bass");
     root->addSubMenu("Bass", sub);
   }
 
-  // -- Pads & Keys --
+  // -- Pads & Keys (alphabetical) --
   {
     juce::PopupMenu sub;
-    sub.addItem(2, "Pad Stack");
-    sub.addItem(6, "Chord Stab");
-    sub.addItem(23, "Ice Pad");
-    sub.addItem(24, "PWM Strings");
-    sub.addItem(38, "Drift Pad");
-    sub.addItem(42, "Poly Chord");
-    sub.addItem(48, "Wide Organ");
-    sub.addItem(53, "Ethereal Pad");
     sub.addItem(54, "Bright Wash");
-    sub.addItem(55, "Pipe Organ");
-    sub.addItem(63, "String Machine");
-    sub.addItem(64, "Retro EP");
     sub.addItem(67, "Chord Pad");
+    sub.addItem(6, "Chord Stab");
+    sub.addItem(38, "Drift Pad");
+    sub.addItem(53, "Ethereal Pad");
     sub.addItem(68, "Harpsichord Suite");
+    sub.addItem(23, "Ice Pad");
+    sub.addItem(2, "Pad Stack");
+    sub.addItem(55, "Pipe Organ");
+    sub.addItem(42, "Poly Chord");
+    sub.addItem(24, "PWM Strings");
+    sub.addItem(64, "Retro EP");
+    sub.addItem(63, "String Machine");
+    sub.addItem(48, "Wide Organ");
     root->addSubMenu("Pads & Keys", sub);
   }
 
-  // -- Arps & Sequences --
+  // -- Arps & Sequences (alphabetical) --
   {
     juce::PopupMenu sub;
-    sub.addItem(3, "Arpeggiated");
-    sub.addItem(8, "WT Arpeggio");
-    sub.addItem(9, "WT Morph");
-    sub.addItem(13, "Hubbard Arp");
-    sub.addItem(25, "Chip Sequence");
     sub.addItem(39, "Arp Machine");
-    sub.addItem(41, "Sequence Morph");
+    sub.addItem(3, "Arpeggiated");
+    sub.addItem(25, "Chip Sequence");
+    sub.addItem(13, "Hubbard Arp");
     sub.addItem(49, "Pluck Sequence");
+    sub.addItem(41, "Sequence Morph");
     sub.addItem(52, "Stab Machine");
     sub.addItem(61, "Texture Morph");
+    sub.addItem(8, "WT Arpeggio");
+    sub.addItem(9, "WT Morph");
     root->addSubMenu("Arps & Sequences", sub);
   }
 
-  // -- FX & Modulation --
+  // -- FX & Modulation (alphabetical) --
   {
     juce::PopupMenu sub;
+    sub.addItem(57, "Drum Kit");
     sub.addItem(4, "Fat Unison");
     sub.addItem(14, "Galway Sweep");
     sub.addItem(7, "Mod Madness");
-    sub.addItem(26, "S&H Glitch");
-    sub.addItem(27, "Ring Bell");
-    sub.addItem(57, "Drum Kit");
-    sub.addItem(58, "Wind Noise");
-    sub.addItem(65, "Ring Mod Pad");
     sub.addItem(69, "Percussion Ensemble");
+    sub.addItem(27, "Ring Bell");
+    sub.addItem(65, "Ring Mod Pad");
+    sub.addItem(26, "S&H Glitch");
+    sub.addItem(58, "Wind Noise");
     root->addSubMenu("FX & Modulation", sub);
   }
 
-  // -- Showcase (demonstrates full feature depth) --
+  // -- Showcase (alphabetical) --
   {
     juce::PopupMenu sub;
-    sub.addItem(70, "Kitchen Sink");
-    sub.addItem(71, "Sync Sculptor");
-    sub.addItem(72, "Ring Cathedral");
-    sub.addItem(73, "Matrix Express");
-    sub.addItem(74, "WT Kaleidoscope");
     sub.addItem(75, "Chord Cathedral");
     sub.addItem(76, "Dual Worlds");
     sub.addItem(77, "Glide Machine");
+    sub.addItem(70, "Kitchen Sink");
+    sub.addItem(73, "Matrix Express");
+    sub.addItem(72, "Ring Cathedral");
+    sub.addItem(71, "Sync Sculptor");
+    sub.addItem(74, "WT Kaleidoscope");
     root->addSubMenu("Showcase", sub);
   }
 
-  // -- Classic C64 (last - niche/educational) --
+  // -- Classic C64 (alphabetical) --
   {
     juce::PopupMenu sub;
     sub.addItem(10, "Commando");
-    sub.addItem(11, "Ninja Bass");
-    sub.addItem(12, "Ocean Loader");
     sub.addItem(16, "Cybernoid");
-    sub.addItem(17, "Wizball");
-    sub.addItem(18, "Thing Bounce");
-    sub.addItem(28, "Monty Lead");
-    sub.addItem(29, "Sanxion Buzz");
-    sub.addItem(30, "Last Ninja");
-    sub.addItem(31, "Delta Run");
-    sub.addItem(33, "IK Lead");
-    sub.addItem(34, "Turbo Saw");
-    sub.addItem(35, "Times of Lore");
-    sub.addItem(36, "Hawkeye Pluck");
     sub.addItem(37, "Deflektor Bell");
+    sub.addItem(31, "Delta Run");
     sub.addItem(43, "Follin Complex");
+    sub.addItem(36, "Hawkeye Pluck");
+    sub.addItem(33, "IK Lead");
+    sub.addItem(30, "Last Ninja");
+    sub.addItem(28, "Monty Lead");
+    sub.addItem(11, "Ninja Bass");
     sub.addItem(44, "Noise Drums");
+    sub.addItem(12, "Ocean Loader");
+    sub.addItem(29, "Sanxion Buzz");
+    sub.addItem(18, "Thing Bounce");
+    sub.addItem(35, "Times of Lore");
+    sub.addItem(34, "Turbo Saw");
+    sub.addItem(17, "Wizball");
     root->addSubMenu("Classic C64", sub);
   }
 
