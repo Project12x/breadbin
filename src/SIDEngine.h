@@ -103,6 +103,17 @@ private:
   int sampleBufferPos = 0;
   int sampleBufferSize = 0;
 
+  // DC offset removal (3-layer approach for SID's notorious DC problems):
+  // 1. Idle offset calibration — measured at prepare(), subtracted from every sample
+  // 2. Adaptive DC estimator — fast response to large steps, slow for residual
+  // 3. Safety HPF in PluginProcessor catches any remaining drift
+  float idleOffset = 0.0f;       // Measured resting DC level of the SID
+  float dcEstimate = 0.0f;       // Running DC estimate (leaky integrator)
+  float dcAlphaSlow = 0.0001f;   // ~10ms tracking for steady-state drift
+  float dcAlphaFast = 0.002f;    // ~0.5ms tracking for large DC steps
+  float dcStepThreshold = 0.002f; // Threshold to trigger fast tracking
+  int dcFastSamplesLeft = 0;     // Samples remaining in forced fast-track mode
+
   // Voice state cache
   struct VoiceCache {
     uint8_t waveform = 0x10; // Triangle default

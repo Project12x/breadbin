@@ -1233,10 +1233,15 @@ void BreadbinEditor::timerCallback() {
   }
   }
 
-  // Disable ring mod/sync toggles in para modes (cross-voice modulation
-  // causes intermodulation noise when voices play independent notes)
+  // Show para stacking controls only in Para/P+P modes
   bool paraActive = (vm == BreadbinProcessor::VoiceMode::Paraphonic ||
                      vm == BreadbinProcessor::VoiceMode::PolyPara);
+  paraSpreadSlider.setVisible(paraActive);
+  paraSpreadLabel.setVisible(paraActive);
+  paraRetrigButton.setVisible(paraActive);
+
+  // Disable ring mod/sync toggles in para modes (cross-voice modulation
+  // causes intermodulation noise when voices play independent notes)
   ringModButton.setEnabled(!paraActive);
   syncButton.setEnabled(!paraActive);
   modOffsetSlider.setEnabled(!paraActive);
@@ -2721,6 +2726,24 @@ void BreadbinEditor::setupControls() {
   polyVoiceCountLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(polyVoiceCountLabel);
 
+  // Paraphonic stacking controls
+  paraSpreadSlider.setRange(0.0, 50.0, 0.1);
+  paraSpreadSlider.setTextValueSuffix(" ct");
+  paraSpreadSlider.setTooltip("Per-voice detune spread in cents (voice stacking thickness)");
+  addAndMakeVisible(paraSpreadSlider);
+  paraSpreadAttachment = std::make_unique<
+      juce::AudioProcessorValueTreeState::SliderAttachment>(
+      processor.apvts, "paraSpread", paraSpreadSlider);
+  paraSpreadLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  paraSpreadLabel.setJustificationType(juce::Justification::centred);
+  addAndMakeVisible(paraSpreadLabel);
+
+  paraRetrigButton.setTooltip("Multi-trigger: retrigger filter envelope on each new note");
+  addAndMakeVisible(paraRetrigButton);
+  paraRetrigAttachment = std::make_unique<
+      juce::AudioProcessorValueTreeState::ButtonAttachment>(
+      processor.apvts, "paraFilterRetrig", paraRetrigButton);
+
   // Global Factory Presets
   globalPresetLabel.setText("Patch:", juce::dontSendNotification);
   globalPresetLabel.setColour(juce::Label::textColourId,
@@ -3996,6 +4019,9 @@ void BreadbinEditor::resized() {
   voiceModeSelector.setBounds(topRow.removeFromLeft(65).withHeight(22).translated(0, 3));
   polyMaxNotesSelector.setBounds(topRow.removeFromLeft(42).withHeight(22).translated(0, 3));
   polyVoiceCountLabel.setBounds(topRow.removeFromLeft(30));
+  paraSpreadLabel.setBounds(topRow.removeFromLeft(40));
+  paraSpreadSlider.setBounds(topRow.removeFromLeft(60).withHeight(22).translated(0, 3));
+  paraRetrigButton.setBounds(topRow.removeFromLeft(55).withHeight(22).translated(0, 3));
   topRow.removeFromLeft(pad);
 
   globalPresetLabel.setBounds(topRow.removeFromLeft(40));
@@ -4612,7 +4638,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
     processor.getVoiceSettings(v).presetId = 1; // "-- Select --"
   }
 
-  setParam("noiseGateThreshold", 0.01f);
+  setParam("noiseGateThreshold", 0.02f);
   setParam("gateAttack", 1.0f);
   setParam("gateRelease", 50.0f);
   setParam("gateHold", 10.0f);
@@ -4743,6 +4769,8 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   // Poly mode: off, default max notes
   setParam("voiceMode", 0.0f);
   setParam("polyMaxNotes", 4.0f);
+  setParam("paraSpread", 0.0f);
+  setParam("paraFilterRetrig", 1.0f);
 
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
   // preference)

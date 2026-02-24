@@ -900,6 +900,17 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       polyMaxNotesAttachment;
 
+  // Paraphonic stacking controls
+  MappableSlider paraSpreadSlider{processor,
+                                  BreadbinProcessor::ControlParam::ParaSpread};
+  juce::Label paraSpreadLabel{"ParaSpread", "SPREAD"};
+  MappableToggle paraRetrigButton{"Retrig", processor,
+                                  BreadbinProcessor::ControlParam::ParaFilterRetrig};
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      paraSpreadAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      paraRetrigAttachment;
+
   // Time Machine (aging)
   MappableSlider agingSlider{processor, BreadbinProcessor::ControlParam::Aging};
   juce::Label agingLabel{"Aging", "AGING"};

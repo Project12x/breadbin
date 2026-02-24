@@ -65,6 +65,7 @@ public:
     bool isGliding = false;
     uint32_t startSample = 0;       // Monotonic counter for voice stealing
     int releaseSamplesRemaining = 0; // Fallback release timer
+    int releaseSamplesTotal = 0;     // Total release duration (for fade overlap)
     FilterEnvelopeState filterEnv;   // Per-voice filter envelope
     // Per-voice fade envelope (prevents DC offset pops on activate/deactivate)
     float fadeGain = 0.0f;           // 0=silent, 1=full — smoothed per-sample
@@ -172,6 +173,8 @@ public:
     DigiBitDepth,
     VoiceMode,
     PolyMaxNotes,
+    ParaSpread,
+    ParaFilterRetrig,
   };
 
   static juce::String getParamName(ControlParam param);
@@ -425,6 +428,17 @@ private:
   std::array<ParaVoiceState, 6> paraVoices{{
       {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}}};
 
+  // Paraphonic held-note tracking (for voice stacking / redistribution)
+  struct ParaHeldNote { int midiNote = -1; int velocity = 0; };
+  std::array<ParaHeldNote, 3> paraHeldNotes{};
+  int paraHeldCount = 0;
+  std::array<float, 3> paraVoiceSpreadCents{};  // per-voice spread offset
+
+  // Para feature pointers
+  std::atomic<float> *paraSpreadPtr = nullptr;
+  std::atomic<float> *paraFilterRetrigPtr = nullptr;
+  bool filterEnvRetriggerFlag = false;
+
   // Cached filter mode for poly voice replication (set by editor)
   bool filterLPLeft = true, filterBPLeft = false, filterHPLeft = false;
   bool filterLPRight = true, filterBPRight = false, filterHPRight = false;
@@ -451,6 +465,7 @@ private:
   void paraNoteOff(int midiNote);
   void paraNoteOffSID(bool isLeftSID, int midiNote);
   void paraAllNotesOff();
+  void redistributeParaVoices();
 
   // Poly+Para voice management
   void polyParaNoteOn(int midiNote, int velocity);

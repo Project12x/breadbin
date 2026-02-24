@@ -41,6 +41,49 @@ void SIDEngine::prepare(double sampleRate) {
 
   // Initialize filter
   updateFilterRegisters();
+
+  // Warm up reSIDfp's external filter (1.6Hz HPF) so its internal state
+  // converges to the chip's idle bias. Without this, Vlp/Vhp start at 0
+  // and the filter takes ~100ms to charge up, causing a DC surge on startup.
+  {
+    short warmupBuf[64];
+    int warmupCycles = static_cast<int>(clockHz * 0.060); // 60ms warmup
+    while (warmupCycles > 0) {
+      int batch = std::min(warmupCycles, 1000);
+      sid->clock(static_cast<unsigned int>(batch), warmupBuf);
+      warmupCycles -= batch;
+    }
+  }
+
+  // Calibrate idle DC offset: with all voices gated off and volume at max,
+  // read the resting output level. This captures the chip's inherent bias
+  // (6581: ~5V, 8580: ~4.8V) which we subtract from every sample.
+  {
+    short calBuf[64];
+    // Clock a few more host-samples to get a stable reading
+    int calSamples = 0;
+    float calSum = 0.0f;
+    for (int i = 0; i < 8; ++i) {
+      int n = sid->clock(static_cast<unsigned int>(clockRatio) + 1, calBuf);
+      for (int j = 0; j < n; ++j) {
+        calSum += static_cast<float>(calBuf[j]) / 32768.0f;
+        ++calSamples;
+      }
+    }
+    idleOffset = calSamples > 0 ? calSum / static_cast<float>(calSamples) : 0.0f;
+    dcEstimate = 0.0f;
+  }
+
+  // Adaptive DC estimator alphas (sample-rate dependent)
+  // Slow: ~7Hz tracking for steady-state envelope drift
+  // Fast: ~70Hz tracking for gate/waveform DC steps
+  dcAlphaSlow = static_cast<float>(2.0 * 3.14159265358979323846 * 7.0 / sampleRate);
+  dcAlphaFast = static_cast<float>(2.0 * 3.14159265358979323846 * 70.0 / sampleRate);
+  dcStepThreshold = 0.005f;
+
+  // Clear sample buffer so we don't return stale warmup/calibration data
+  sampleBufferSize = 0;
+  sampleBufferPos = 0;
 }
 
 void SIDEngine::setChipModel(ChipModel model) {
@@ -143,12 +186,23 @@ float SIDEngine::clock() {
     totalCycles += cyclesToRun;
   }
 
-  // Convert to float and buffer
+  // Convert to float, remove DC offset, and buffer
   if (samplesProduced > 0) {
     sampleBufferSize = samplesProduced;
     sampleBufferPos = 0;
     for (int i = 0; i < samplesProduced && i < 8; ++i) {
-      sampleBuffer[i] = static_cast<float>(outputBuffer[i]) / 32768.0f;
+      float x = static_cast<float>(outputBuffer[i]) / 32768.0f;
+      // Layer 1: subtract calibrated idle offset (removes static bias)
+      x -= idleOffset;
+      // Layer 2: adaptive DC estimator — fast for large steps, slow for drift.
+      // Also uses fast alpha when a gate transition was recently signalled.
+      float diff = x - dcEstimate;
+      bool forceFast = dcFastSamplesLeft > 0;
+      if (forceFast) --dcFastSamplesLeft;
+      float alpha = (forceFast || std::abs(diff) > dcStepThreshold)
+                        ? dcAlphaFast : dcAlphaSlow;
+      dcEstimate += alpha * diff;
+      sampleBuffer[i] = x - dcEstimate;
     }
     return sampleBuffer[sampleBufferPos++];
   }
@@ -184,6 +238,9 @@ void SIDEngine::noteOn(int voice, int midiNote, int velocity,
   // Gate on with current waveform
   voiceCache[voice].gateOn = true;
   updateVoiceRegisters(voice);
+
+  // Hint DC estimator: gate transition shifts envelope-dependent voice bias
+  dcFastSamplesLeft = static_cast<int>(hostSampleRate * 0.020);
 }
 
 void SIDEngine::noteOff(int voice) {
@@ -192,6 +249,10 @@ void SIDEngine::noteOff(int voice) {
 
   voiceCache[voice].gateOn = false;
   updateVoiceRegisters(voice);
+
+  // Hint DC estimator: gate transition causes a DC shift from the envelope-
+  // dependent voice bias. Force fast-track mode for 20ms to catch it.
+  dcFastSamplesLeft = static_cast<int>(hostSampleRate * 0.020);
 }
 
 void SIDEngine::setFrequency(int voice, double hz) {

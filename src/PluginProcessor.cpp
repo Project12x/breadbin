@@ -591,13 +591,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         rightChannel[i] = outR;
     }
 
-    // Release detection: decrement timers, begin fade-out when ADSR expires
+    // Release detection: decrement timers, begin fade-out before ADSR finishes
+    // so the software fade overlaps the critical DC transition at end of release
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (pv.releasing && !pv.fadingOut) {
         pv.releaseSamplesRemaining -= numSamples;
-        if (pv.releaseSamplesRemaining <= 0) {
-          pv.fadingOut = true; // fade-out ramp handles final deactivation
+        // Start fade when 80% of ADSR release has elapsed (last 20%)
+        int fadeThreshold = pv.releaseSamplesTotal / 5;
+        if (pv.releaseSamplesRemaining <= fadeThreshold) {
+          pv.fadingOut = true;
         }
       }
       // Deactivate fully once fade-out completes
@@ -1214,7 +1217,10 @@ void BreadbinProcessor::triggerNote(int voiceIndex, int midiNote,
     bool hasRing = voiceParamPtrs[voiceIndex].ringMod->load() > 0.5f;
     float offsetSemitones = voiceParamPtrs[voiceIndex].modOffset->load();
 
-    if ((hasSync || hasRing) && std::abs(offsetSemitones) > 0.01f) {
+    // Skip mod offset in para modes — ring/sync are disabled so the offset
+    // has no musical purpose, and it would detune voice 2's para note
+    bool isPara = (voiceMode == VoiceMode::Paraphonic);
+    if (!isPara && (hasSync || hasRing) && std::abs(offsetSemitones) > 0.01f) {
       // Only SID voice 2 gets the offset (carrier). Voices 0,1 stay at
       // base frequency to serve as modulators.
       if (sidVoice == 2) {
@@ -1306,25 +1312,45 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
 
   SIDEngine &sid = (voice < 3) ? sidLeft : sidRight;
   int sidVoice = voice % 3;
-
-  sid.setWaveform(sidVoice, vs.waveform);
-  sid.setPulseWidth(sidVoice, vs.pulseWidth);
-  sid.setAttack(sidVoice, vs.attack);
-  sid.setDecay(sidVoice, vs.decay);
-  sid.setSustain(sidVoice, vs.sustain);
-  sid.setRelease(sidVoice, vs.release);
-  // In Para mode, voices play independent notes — ring mod and sync
-  // cause cross-voice intermodulation noise, so force them off
+  bool isLeft = (voice < 3);
   bool isPara = (voiceMode == VoiceMode::Paraphonic);
+
+  // In Para mode, all SID voices share the master voice's timbre settings
+  // (voice 0 for left SID, voice 3 for right SID) so chord notes match.
+  // This mirrors real paraphonic synths where only pitch is per-voice.
+  if (isPara && sidVoice != 0) {
+    auto &master = voiceSettings[isLeft ? 0 : 3];
+    sid.setWaveform(sidVoice, master.waveform);
+    sid.setPulseWidth(sidVoice, master.pulseWidth);
+    sid.setAttack(sidVoice, master.attack);
+    sid.setDecay(sidVoice, master.decay);
+    sid.setSustain(sidVoice, master.sustain);
+    sid.setRelease(sidVoice, master.release);
+  } else {
+    sid.setWaveform(sidVoice, vs.waveform);
+    sid.setPulseWidth(sidVoice, vs.pulseWidth);
+    sid.setAttack(sidVoice, vs.attack);
+    sid.setDecay(sidVoice, vs.decay);
+    sid.setSustain(sidVoice, vs.sustain);
+    sid.setRelease(sidVoice, vs.release);
+  }
+
+  // In Para mode, ring mod and sync cause cross-voice intermodulation
+  // noise since voices play independent notes, so force them off
   sid.setRingMod(sidVoice, isPara ? false : vs.ringMod);
   sid.setSync(sidVoice, isPara ? false : vs.sync);
 
   // Update per-voice filter routing on this SID
-  bool isLeft = (voice < 3);
   int startV = isLeft ? 0 : 3;
-  sid.setFilterVoices(voiceParamPtrs[startV + 0].filter->load() > 0.5f,
-                      voiceParamPtrs[startV + 1].filter->load() > 0.5f,
-                      voiceParamPtrs[startV + 2].filter->load() > 0.5f);
+  if (isPara) {
+    // All voices share master voice's filter routing for consistent timbre
+    bool masterFilter = voiceParamPtrs[startV].filter->load() > 0.5f;
+    sid.setFilterVoices(masterFilter, masterFilter, masterFilter);
+  } else {
+    sid.setFilterVoices(voiceParamPtrs[startV + 0].filter->load() > 0.5f,
+                        voiceParamPtrs[startV + 1].filter->load() > 0.5f,
+                        voiceParamPtrs[startV + 2].filter->load() > 0.5f);
+  }
 }
 
 void BreadbinProcessor::updateAllVoiceFrequencies() {
@@ -1355,10 +1381,13 @@ void BreadbinProcessor::updateAllVoiceFrequencies() {
       }
     }
   } else {
-    // Mono: apply pitch bend to all active voices
+    // Mono/Para: apply pitch bend to all active voices
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         float detune = (v < 3) ? leftDetuneCents : rightDetuneCents;
+        // Add per-voice spread in paraphonic mode
+        if (voiceMode == VoiceMode::Paraphonic)
+          detune += paraVoiceSpreadCents[v % 3];
         double note = static_cast<double>(voices[v].note) + bendSemitones +
                       (detune / 100.0);
         double hz = 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
@@ -1384,6 +1413,13 @@ void BreadbinProcessor::processFilterEnvelope(int numSamples) {
     filterEnv.stage = FilterEnvelopeState::Stage::Attack;
   } else if (!gateOn && filterEnv.gateWasOn) {
     filterEnv.stage = FilterEnvelopeState::Stage::Release;
+  } else if (gateOn && filterEnv.gateWasOn && filterEnvRetriggerFlag) {
+    // Multi-trigger: retrigger attack on each new noteOn in para mode
+    bool retrig = paraFilterRetrigPtr && paraFilterRetrigPtr->load() > 0.5f;
+    if (retrig) {
+      filterEnv.stage = FilterEnvelopeState::Stage::Attack;
+    }
+    filterEnvRetriggerFlag = false;
   }
   filterEnv.gateWasOn = gateOn;
 
@@ -1605,8 +1641,9 @@ void BreadbinProcessor::polyNoteOff(int midiNote) {
         if (voiceSettings[v].enabled)
           maxRel = std::max(maxRel, voiceSettings[v].release);
       float releaseSec = std::min(kSidReleaseTimes[maxRel], 3.0f);
-      pv.releaseSamplesRemaining =
+      pv.releaseSamplesTotal =
           static_cast<int>(releaseSec * hostSampleRate) + 512;
+      pv.releaseSamplesRemaining = pv.releaseSamplesTotal;
       return; // Only release one voice per noteOff
     }
   }
@@ -1630,37 +1667,138 @@ void BreadbinProcessor::polyAllNotesOff() {
 
 // ==================== PARAPHONIC VOICE MANAGEMENT ====================
 
-void BreadbinProcessor::paraNoteOn(int midiNote, int velocity) {
-  // Stereo/Unison: mirror allocation across both SIDs (same slot index)
+void BreadbinProcessor::redistributeParaVoices() {
+  // Voice stacking with detune spread for analog thickness (Korg Mono/Poly).
+  // Stacking only activates when spread > 0 — without spread, digital
+  // oscillators at the same frequency just drive the SID filter harder
+  // with no audible benefit. With spread=0, use simple 1:1 voice mapping.
+  //
+  // With spread > 0:
+  //   1 held: all 3 voices on that note, spread = [-s, 0, +s]
+  //   2 held: voices 0,1 on note[0] (spread -s/2, +s/2), voice 2 on note[1]
+  //   3 held: 1:1:1, no spread
+  //
+  // With spread = 0: first-free-slot assignment (1 voice per note)
+
+  float spreadCents = paraSpreadPtr ? paraSpreadPtr->load() : 0.0f;
+  bool stackingEnabled = spreadCents > 0.01f;
+
+  // Build target assignment: which note each SID voice should play
+  struct VoiceTarget { int midiNote = -1; int velocity = 0; float spread = 0.0f; };
+  std::array<VoiceTarget, 3> target{};
+
+  if (paraHeldCount == 0) {
+    // All released — nothing to assign
+  } else if (!stackingEnabled) {
+    // No spread: simple 1:1 mapping (1 voice per held note, rest silent)
+    for (int i = 0; i < paraHeldCount && i < 3; ++i) {
+      target[i].midiNote = paraHeldNotes[i].midiNote;
+      target[i].velocity = paraHeldNotes[i].velocity;
+    }
+  } else if (paraHeldCount == 1) {
+    // Stack all 3 voices on the single note with spread
+    for (int v = 0; v < 3; ++v) {
+      target[v].midiNote = paraHeldNotes[0].midiNote;
+      target[v].velocity = paraHeldNotes[0].velocity;
+    }
+    target[0].spread = -spreadCents;
+    target[1].spread = 0.0f;
+    target[2].spread = spreadCents;
+  } else if (paraHeldCount == 2) {
+    // 2+1: voices 0,1 on note[0] with half spread, voice 2 on note[1]
+    target[0] = {paraHeldNotes[0].midiNote, paraHeldNotes[0].velocity, -spreadCents * 0.5f};
+    target[1] = {paraHeldNotes[0].midiNote, paraHeldNotes[0].velocity,  spreadCents * 0.5f};
+    target[2] = {paraHeldNotes[1].midiNote, paraHeldNotes[1].velocity, 0.0f};
+  } else {
+    // 1:1:1 — standard paraphonic, no spread
+    for (int v = 0; v < 3; ++v) {
+      target[v].midiNote = paraHeldNotes[v].midiNote;
+      target[v].velocity = paraHeldNotes[v].velocity;
+      target[v].spread = 0.0f;
+    }
+  }
+
+  // Store spread for pitch bend updates
+  for (int v = 0; v < 3; ++v)
+    paraVoiceSpreadCents[v] = target[v].spread;
+
+  // Apply assignments to SID voices, minimizing gate retriggers
   for (int v = 0; v < 3; ++v) {
-    if (!voiceSettings[v].enabled) continue;
-    if (paraVoices[v].midiNote == -1) {
-      paraVoices[v] = {midiNote, velocity};
-      paraVoices[v + 3] = {midiNote, velocity};
-      // Disable ring mod/sync for para voices — each voice plays an
-      // independent note, so cross-voice modulation creates noise
+    int prevNote = paraVoices[v].midiNote;
+    int newNote = target[v].midiNote;
+
+    if (newNote == -1) {
+      // Voice should be silent
+      if (prevNote != -1) {
+        paraVoices[v] = {-1, 0};
+        paraVoices[v + 3] = {-1, 0};
+        releaseNote(v);
+        if (voiceSettings[v + 3].enabled)
+          releaseNote(v + 3);
+      }
+    } else if (prevNote == newNote) {
+      // Same note — just update frequency for spread change (no gate retrigger)
+      float detune = leftDetuneCents + target[v].spread;
+      double note = static_cast<double>(newNote) + (detune / 100.0);
+      double hz = 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
+      sidLeft.setFrequency(v, hz);
+      voices[v].currentHz = hz;
+      voices[v].targetHz = hz;
+
+      if (voiceSettings[v + 3].enabled) {
+        float detuneR = rightDetuneCents + target[v].spread;
+        double noteR = static_cast<double>(newNote) + (detuneR / 100.0);
+        double hzR = 440.0 * std::pow(2.0, (noteR - 69.0) / 12.0);
+        sidRight.setFrequency(v, hzR);
+        voices[v + 3].currentHz = hzR;
+        voices[v + 3].targetHz = hzR;
+      }
+      paraVoices[v] = {newNote, target[v].velocity};
+      paraVoices[v + 3] = {newNote, target[v].velocity};
+    } else {
+      // Different note — full gate trigger
+      paraVoices[v] = {newNote, target[v].velocity};
+      paraVoices[v + 3] = {newNote, target[v].velocity};
       sidLeft.setRingMod(v, false);
       sidLeft.setSync(v, false);
-      triggerNote(v, midiNote, velocity);
+      triggerNote(v, newNote, target[v].velocity);
       if (voiceSettings[v + 3].enabled) {
         sidRight.setRingMod(v, false);
         sidRight.setSync(v, false);
-        triggerNote(v + 3, midiNote, velocity);
+        triggerNote(v + 3, newNote, target[v].velocity);
       }
-      return;
     }
   }
-  // Pool full — no free voice
+}
+
+void BreadbinProcessor::paraNoteOn(int midiNote, int velocity) {
+  // Check if note already held (ignore duplicates)
+  for (int i = 0; i < paraHeldCount; ++i) {
+    if (paraHeldNotes[i].midiNote == midiNote)
+      return;
+  }
+  // Pool full
+  if (paraHeldCount >= 3)
+    return;
+
+  // Add to held notes
+  paraHeldNotes[paraHeldCount++] = {midiNote, velocity};
+
+  // Set filter retrigger flag for multi-trigger mode
+  filterEnvRetriggerFlag = true;
+
+  // Redistribute voices across held notes
+  redistributeParaVoices();
 }
 
 void BreadbinProcessor::paraNoteOnSID(bool isLeftSID, int midiNote, int velocity) {
+  // PolyPara uses this path — keep original behavior (no stacking)
   int base = isLeftSID ? 0 : 3;
   SIDEngine &sid = isLeftSID ? sidLeft : sidRight;
   for (int v = base; v < base + 3; ++v) {
     if (!voiceSettings[v].enabled) continue;
     if (paraVoices[v].midiNote == -1) {
       paraVoices[v] = {midiNote, velocity};
-      // Disable ring mod/sync — para voices play independent notes
       sid.setRingMod(v % 3, false);
       sid.setSync(v % 3, false);
       triggerNote(v, midiNote, velocity);
@@ -1670,15 +1808,26 @@ void BreadbinProcessor::paraNoteOnSID(bool isLeftSID, int midiNote, int velocity
 }
 
 void BreadbinProcessor::paraNoteOff(int midiNote) {
-  for (int v = 0; v < 6; ++v) {
-    if (paraVoices[v].midiNote == midiNote) {
-      paraVoices[v] = {-1, 0};
-      releaseNote(v);
+  // Find and remove from held notes
+  bool found = false;
+  for (int i = 0; i < paraHeldCount; ++i) {
+    if (paraHeldNotes[i].midiNote == midiNote) {
+      found = true;
+      // Shift remaining notes down
+      for (int j = i; j < paraHeldCount - 1; ++j)
+        paraHeldNotes[j] = paraHeldNotes[j + 1];
+      paraHeldNotes[--paraHeldCount] = {-1, 0};
+      break;
     }
   }
+  if (!found) return;
+
+  // Redistribute remaining voices
+  redistributeParaVoices();
 }
 
 void BreadbinProcessor::paraNoteOffSID(bool isLeftSID, int midiNote) {
+  // PolyPara uses this path — keep original behavior
   int base = isLeftSID ? 0 : 3;
   for (int v = base; v < base + 3; ++v) {
     if (paraVoices[v].midiNote == midiNote) {
@@ -1690,6 +1839,11 @@ void BreadbinProcessor::paraNoteOffSID(bool isLeftSID, int midiNote) {
 }
 
 void BreadbinProcessor::paraAllNotesOff() {
+  paraHeldCount = 0;
+  for (int i = 0; i < 3; ++i) {
+    paraHeldNotes[i] = {-1, 0};
+    paraVoiceSpreadCents[i] = 0.0f;
+  }
   for (int v = 0; v < 6; ++v) {
     paraVoices[v] = {-1, 0};
     if (voices[v].active)
@@ -1798,8 +1952,9 @@ void BreadbinProcessor::polyParaNoteOff(int midiNote) {
             if (voiceSettings[v].enabled)
               maxRel = std::max(maxRel, voiceSettings[v].release);
           float releaseSec = std::min(kSidReleaseTimes[maxRel], 3.0f);
-          pv.releaseSamplesRemaining =
+          pv.releaseSamplesTotal =
               static_cast<int>(releaseSec * hostSampleRate) + 512;
+          pv.releaseSamplesRemaining = pv.releaseSamplesTotal;
         }
         return;
       }
@@ -2451,11 +2606,15 @@ void BreadbinProcessor::applyModMatrix() {
 
   // Apply pulse width mod
   if (pwMod != 0.0f) {
+    bool isPara = (voiceMode == VoiceMode::Paraphonic);
     int pwOffset = static_cast<int>(pwMod * 2048.0f);
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
-        int basePW = voiceSettings[v].pulseWidth;
+        // In para mode, all voices use master voice's PW (timbre inheritance)
+        int masterIdx = (v < 3) ? 0 : 3;
+        int basePW = isPara ? voiceSettings[masterIdx].pulseWidth
+                            : voiceSettings[v].pulseWidth;
         int modPW = std::clamp(basePW + pwOffset, 0, 4095);
         sid.setPulseWidth(v % 3, modPW);
       }
@@ -2638,10 +2797,15 @@ void BreadbinProcessor::applyLFOModulation() {
   if (sweepDepth > 0.0f)
     pwMod += static_cast<int>(pwmSweepCurrentValue * sweepDepth * 2048.0f);
   if (anyVoiceActive) {
+    bool isPara = (voiceMode == VoiceMode::Paraphonic);
     for (int v = 0; v < 6; ++v) {
       if (!voices[v].active)
         continue;
-      int basePW = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
+      // In para mode, all voices use master voice's PW (timbre inheritance)
+      int masterIdx = (v < 3) ? 0 : 3;
+      int basePW = wtActive ? wtStep.pulseWidth
+                   : (isPara ? voiceSettings[masterIdx].pulseWidth
+                             : voiceSettings[v].pulseWidth);
       int modPW = std::clamp(basePW + pwMod, 0, 4095);
       SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
       sid.setPulseWidth(v % 3, modPW);
@@ -3100,6 +3264,18 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
       p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
     break;
   }
+  case ControlParam::ParaSpread: {
+    auto *p = apvts.getParameter("paraSpread");
+    if (p)
+      p->setValueNotifyingHost(p->convertTo0to1(value / 127.0f * 50.0f));
+    break;
+  }
+  case ControlParam::ParaFilterRetrig: {
+    auto *p = apvts.getParameter("paraFilterRetrig");
+    if (p)
+      p->setValueNotifyingHost(value >= 64 ? 1.0f : 0.0f);
+    break;
+  }
   default:
     break;
   }
@@ -3276,6 +3452,10 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Voice Mode";
   case ControlParam::PolyMaxNotes:
     return "Poly Max Notes";
+  case ControlParam::ParaSpread:
+    return "Para Spread";
+  case ControlParam::ParaFilterRetrig:
+    return "Para Filter Retrig";
   default:
     return "Unknown";
   }
@@ -3290,7 +3470,7 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"masterVol", 1}, "Master Volume", 0.0f, 1.0f, 0.8f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"noiseGateThreshold", 1}, "Noise Gate Threshold", 0.0f,
-      0.1f, 0.01f));
+      0.1f, 0.02f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"gateAttack", 1}, "Gate Attack",
       juce::NormalisableRange<float>(0.1f, 50.0f, 0.1f), 1.0f));
@@ -3348,6 +3528,10 @@ BreadbinProcessor::createParameterLayout() {
       juce::StringArray{"Mono", "Para", "Poly", "Poly+Para"}, 0));
   layout.add(std::make_unique<juce::AudioParameterInt>(
       juce::ParameterID{"polyMaxNotes", 1}, "Poly Max Notes", 1, 8, 4));
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"paraSpread", 1}, "Para Spread", 0.0f, 50.0f, 0.0f));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"paraFilterRetrig", 1}, "Para Filter Retrigger", true));
 
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"leftPan", 1}, "Left SID Pan", -1.0f, 1.0f, -1.0f));
@@ -3599,6 +3783,8 @@ void BreadbinProcessor::initializeParameterPointers() {
   digiBitDepthPtr = apvts.getRawParameterValue("digiBitDepth");
   voiceModePtr = apvts.getRawParameterValue("voiceMode");
   polyMaxNotesPtr = apvts.getRawParameterValue("polyMaxNotes");
+  paraSpreadPtr = apvts.getRawParameterValue("paraSpread");
+  paraFilterRetrigPtr = apvts.getRawParameterValue("paraFilterRetrig");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");
   pitchBendRangePtr = apvts.getRawParameterValue("pitchBendRange");

@@ -2718,20 +2718,24 @@ void testParaphonicNoteOffCorrect() {
   param->setValueNotifyingHost(param->convertTo0to1(1.0f)); // Paraphonic
   warmUp(*p);
 
-  // Play 2 notes
+  // Play 3 notes to fill all slots
   juce::MidiBuffer midi1;
   midi1.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
   midi1.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 2);
   processBlock(*p, 512, &midi1);
   int before = p->getActiveParaVoiceCount();
 
-  // Release note 60
+  // Release all 3 notes — voices should go silent
   juce::MidiBuffer midi2;
   midi2.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  midi2.addEvent(juce::MidiMessage::noteOff(1, 64), 1);
+  midi2.addEvent(juce::MidiMessage::noteOff(1, 67), 2);
   processBlock(*p, 512, &midi2);
   int after = p->getActiveParaVoiceCount();
 
-  ASSERT_TRUE(after < before, "Para voice count decreased after note-off");
+  ASSERT_TRUE(before > 0 && after == 0,
+              "Para voice count decreased after note-off");
 }
 
 void testPolyParaFillsExistingVoice() {
