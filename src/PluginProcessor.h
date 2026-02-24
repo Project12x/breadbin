@@ -18,6 +18,15 @@ public:
   // Dual SID routing modes
   enum class DualMode { StereoSplit, Unison, Multitimbral };
 
+  // Voice allocation modes
+  enum class VoiceMode { Mono = 0, Paraphonic = 1, Polyphonic = 2, PolyPara = 3 };
+
+  // Paraphonic per-voice state
+  struct ParaVoiceState {
+    int midiNote;
+    int velocity;
+  };
+
   // Arpeggiator patterns
   enum class ArpPattern { Up, Down, UpDown, Random };
   enum class LFOWaveform { Triangle, Sawtooth, Square, SampleAndHold, Sine };
@@ -56,6 +65,10 @@ public:
     uint32_t startSample = 0;       // Monotonic counter for voice stealing
     int releaseSamplesRemaining = 0; // Fallback release timer
     FilterEnvelopeState filterEnv;   // Per-voice filter envelope
+    // Poly+Para: per-SID-voice note tracking
+    int paraNote[3] = {-1, -1, -1};
+    int paraVelocity[3] = {0, 0, 0};
+    int paraCount = 0;
   };
   static constexpr int MAX_POLY = 12;
 
@@ -149,7 +162,7 @@ public:
     DigiRootNote,
     DigiLoop,
     DigiBitDepth,
-    PolyEnable,
+    VoiceMode,
     PolyMaxNotes,
   };
 
@@ -390,13 +403,19 @@ private:
   size_t sidResampleBufCapacity =
       0; // Track allocated capacity to avoid RT resize
 
+  // Voice mode state
+  VoiceMode voiceMode = VoiceMode::Mono;
+  std::atomic<float> *voiceModePtr = nullptr;
+
   // Poly voice pool (pre-allocated, activated on demand)
   std::array<PolyVoice, MAX_POLY> polyVoices;
   uint32_t polyNoteCounter = 0;
-  bool polyEnabled = false;
-  int polyMaxNotes = 6;
-  std::atomic<float> *polyEnablePtr = nullptr;
+  int polyMaxNotes = 4;
   std::atomic<float> *polyMaxNotesPtr = nullptr;
+
+  // Paraphonic: per-SID-voice note allocation (mono SIDs only)
+  std::array<ParaVoiceState, 6> paraVoices{{
+      {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}}};
 
   // Cached filter mode for poly voice replication (set by editor)
   bool filterLPLeft = true, filterBPLeft = false, filterHPLeft = false;
@@ -417,6 +436,18 @@ private:
   void polyAllNotesOff();
   void applySettingsToPolyVoice(int polyIdx);
   void processPolyFilterEnvelope(int polyIdx, int numSamples);
+
+  // Paraphonic voice management (mono SIDs)
+  void paraNoteOn(int midiNote, int velocity);
+  void paraNoteOnSID(bool isLeftSID, int midiNote, int velocity);
+  void paraNoteOff(int midiNote);
+  void paraNoteOffSID(bool isLeftSID, int midiNote);
+  void paraAllNotesOff();
+
+  // Poly+Para voice management
+  void polyParaNoteOn(int midiNote, int velocity);
+  void polyParaNoteOff(int midiNote);
+  void polyParaAllNotesOff();
 
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
@@ -519,14 +550,34 @@ public:
     return count;
   }
 
-  // Polyphony accessors
-  bool isPolyEnabled() const { return polyEnabled; }
+  // Voice mode accessors
+  VoiceMode getVoiceMode() const { return voiceMode; }
+  bool isPolyActive() const {
+    return voiceMode == VoiceMode::Polyphonic || voiceMode == VoiceMode::PolyPara;
+  }
+  bool isParaActive() const {
+    return voiceMode == VoiceMode::Paraphonic || voiceMode == VoiceMode::PolyPara;
+  }
   int getPolyMaxNotes() const { return polyMaxNotes; }
   int getActivePolyVoiceCount() const {
     int count = 0;
     for (int i = 0; i < polyMaxNotes; ++i)
       if (polyVoices[i].active || polyVoices[i].releasing)
         ++count;
+    return count;
+  }
+  int getActiveParaVoiceCount() const {
+    int count = 0;
+    for (int i = 0; i < 6; ++i)
+      if (paraVoices[i].midiNote != -1)
+        ++count;
+    return count;
+  }
+  int getTotalActiveNoteCount() const {
+    int count = 0;
+    for (int i = 0; i < polyMaxNotes; ++i)
+      if (polyVoices[i].active || polyVoices[i].releasing)
+        count += polyVoices[i].paraCount;
     return count;
   }
 

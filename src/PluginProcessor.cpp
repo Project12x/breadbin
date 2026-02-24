@@ -129,7 +129,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   extInputEnabled = extInputEnablePtr->load() > 0.5f;
   extInputLevel = extInputLevelPtr->load();
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
-  polyEnabled = polyEnablePtr->load() > 0.5f;
+  voiceMode = static_cast<VoiceMode>(
+      juce::jlimit(0, 3, static_cast<int>(voiceModePtr->load())));
   polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
   bool digiEnabled = digiEnablePtr->load() > 0.5f;
   digiSampler.setRootNote(static_cast<int>(digiRootNotePtr->load()));
@@ -230,7 +231,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   if (chipModelDirty.exchange(false, std::memory_order_relaxed)) {
     sidLeft.setChipModel(chipModelLeft);
     sidRight.setChipModel(chipModelRight);
-    if (polyEnabled) {
+    if (isPolyActive()) {
       for (int pi = 0; pi < polyMaxNotes; ++pi) {
         polyVoices[pi].sidLeft->setChipModel(chipModelLeft);
         polyVoices[pi].sidRight->setChipModel(chipModelRight);
@@ -239,7 +240,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
   if (clockModeDirty.exchange(false, std::memory_order_relaxed)) {
     setClockMode(clockMode);
-    if (polyEnabled) {
+    if (isPolyActive()) {
       for (int pi = 0; pi < polyMaxNotes; ++pi) {
         polyVoices[pi].sidLeft->setClockMode(clockMode);
         polyVoices[pi].sidRight->setClockMode(clockMode);
@@ -259,7 +260,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
 
   // Sync voice settings to active poly voices (waveform, ADSR, filter, etc.)
-  if (polyEnabled) {
+  if (isPolyActive()) {
     for (int pi = 0; pi < polyMaxNotes; ++pi)
       if (polyVoices[pi].active || polyVoices[pi].releasing)
         applySettingsToPolyVoice(pi);
@@ -287,7 +288,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     double samplesPerGlide = hostSampleRate * glideTimeSec;
     double glideRate = static_cast<double>(numSamples) / samplesPerGlide;
 
-    if (polyEnabled) {
+    if (isPolyActive()) {
       // Poly glide: process per-poly-voice
       for (int pi = 0; pi < polyMaxNotes; ++pi) {
         auto &pv = polyVoices[pi];
@@ -365,7 +366,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // LFO/mod matrix/PWM sweep have already computed their values and written to
   // the mono SIDs (sidLeft/sidRight). We extract the effective offsets and apply
   // them to each poly voice's SID pair for PW, pitch, and filter cutoff.
-  if (polyEnabled) {
+  if (isPolyActive()) {
     // Compute global PW modulation offset
     float val1 = lfo.enabled ? lfo.currentValue : 0.0f;
     float val2 = lfo2.enabled ? lfo2.currentValue : 0.0f;
@@ -433,15 +434,29 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
 
       // Apply pitch modulation + pitch bend to all voices
-      double baseHz = pv.currentHz;
       double bendSemitones = pitchBendValue * pitchBendRange;
       double bendMultiplier = std::pow(2.0, bendSemitones / 12.0);
-      double modHz = baseHz * pitchMultiplier * bendMultiplier;
-      for (int v = 0; v < 3; ++v) {
-        if (voiceSettings[v].enabled)
-          pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
-        if (voiceSettings[v + 3].enabled)
-          pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+      if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
+        // PolyPara: each SID voice has its own note frequency
+        for (int v = 0; v < 3; ++v) {
+          if (pv.paraNote[v] >= 0) {
+            double hz = 440.0 * std::pow(2.0,
+                (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0);
+            double modHz = hz * pitchMultiplier * bendMultiplier;
+            if (voiceSettings[v].enabled)
+              pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
+            if (voiceSettings[v + 3].enabled)
+              pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+          }
+        }
+      } else {
+        double modHz = pv.currentHz * pitchMultiplier * bendMultiplier;
+        for (int v = 0; v < 3; ++v) {
+          if (voiceSettings[v].enabled)
+            pv.sidLeft->setFrequency(v, modHz * std::pow(2.0, leftDetuneCents / 1200.0));
+          if (voiceSettings[v + 3].enabled)
+            pv.sidRight->setFrequency(v, modHz * std::pow(2.0, rightDetuneCents / 1200.0));
+        }
       }
     }
   }
@@ -494,19 +509,25 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   rightGainL *= rightVoiceGain;
   rightGainR *= rightVoiceGain;
 
-  if (polyEnabled) {
+  if (isPolyActive()) {
     // === POLY SAMPLE GENERATION ===
     // Each active poly voice has its own L/R SID pair. Clock them all
     // and sum with pan law, normalized by active voice count.
 
-    // Count active poly voices for normalization
-    int activePolyCount = 0;
-    for (int pi = 0; pi < polyMaxNotes; ++pi)
-      if (polyVoices[pi].active || polyVoices[pi].releasing)
-        ++activePolyCount;
+    // Count active sources for normalization
+    // PolyPara: count total active notes; Poly: count active voices
+    int activeCount = 0;
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      if (polyVoices[pi].active || polyVoices[pi].releasing) {
+        if (voiceMode == VoiceMode::PolyPara)
+          activeCount += std::max(1, polyVoices[pi].paraCount);
+        else
+          ++activeCount;
+      }
+    }
     // 1/sqrt(N) normalization preserves perceived loudness across polyphony
-    float polyNorm = activePolyCount > 0
-        ? 1.0f / std::sqrt(static_cast<float>(activePolyCount))
+    float polyNorm = activeCount > 0
+        ? 1.0f / std::sqrt(static_cast<float>(activeCount))
         : 1.0f;
 
     for (int i = 0; i < numSamples; ++i) {
@@ -812,8 +833,8 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       }
     }
 
-    // Digi sampler: trigger on note-on (mono only; disabled in poly mode)
-    if (!polyEnabled && digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
+    // Digi sampler: trigger on note-on (mono only; digi modulates $D418 volume)
+    if (voiceMode == VoiceMode::Mono && digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
       digiSampler.noteOn(note, hostSampleRate);
 
     // Chord memory takes priority and does not feed arp tracking.
@@ -849,27 +870,40 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     if (arpEnabled)
       return;
 
-    // Poly mode: each note gets its own SID pair
-    if (polyEnabled) {
-      polyNoteOn(note, lastVelocity);
-      return;
-    }
-
-    if (dualMode == DualMode::Multitimbral) {
-      // Channel 1 -> left SID, Channel 2 -> right SID
-      if (channel == 2) {
-        rightNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(false); // right SID
+    // Route note-on through voice mode
+    switch (voiceMode) {
+    case VoiceMode::Mono:
+      if (dualMode == DualMode::Multitimbral) {
+        if (channel == 2) {
+          rightNoteQueue.addIfNotAlreadyThere(note);
+          updateSIDFromQueue(false);
+        } else {
+          leftNoteQueue.addIfNotAlreadyThere(note);
+          updateSIDFromQueue(true);
+        }
       } else {
         leftNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(true); // left SID
+        rightNoteQueue.addIfNotAlreadyThere(note);
+        updateSIDFromQueue(true);
+        updateSIDFromQueue(false);
       }
-    } else {
-      // Stereo/Unison: both SIDs play the same notes
-      leftNoteQueue.addIfNotAlreadyThere(note);
-      rightNoteQueue.addIfNotAlreadyThere(note);
-      updateSIDFromQueue(true);  // left
-      updateSIDFromQueue(false); // right
+      break;
+    case VoiceMode::Paraphonic:
+      if (dualMode == DualMode::Multitimbral) {
+        if (channel == 2)
+          paraNoteOnSID(false, note, lastVelocity);
+        else
+          paraNoteOnSID(true, note, lastVelocity);
+      } else {
+        paraNoteOn(note, lastVelocity);
+      }
+      break;
+    case VoiceMode::Polyphonic:
+      polyNoteOn(note, lastVelocity);
+      break;
+    case VoiceMode::PolyPara:
+      polyParaNoteOn(note, lastVelocity);
+      break;
     }
   } else if (msg.isNoteOff()) {
     const int note = msg.getNoteNumber();
@@ -906,46 +940,74 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
     // If arp is enabled, handle release when no notes held
     if (arpEnabled) {
       if (arpHeldCount == 0 && lastArpNote >= 0 && !sustainActive) {
-        if (polyEnabled)
+        switch (voiceMode) {
+        case VoiceMode::Mono:
+          for (int v = 0; v < 6; ++v) releaseNote(v);
+          break;
+        case VoiceMode::Paraphonic:
+          paraAllNotesOff();
+          break;
+        case VoiceMode::Polyphonic:
           polyAllNotesOff();
-        else
-          for (int v = 0; v < 6; ++v)
-            releaseNote(v);
+          break;
+        case VoiceMode::PolyPara:
+          polyParaAllNotesOff();
+          break;
+        }
         lastArpNote = -1;
       }
       return;
     }
 
-    // Poly mode: release matching poly voice
-    if (polyEnabled) {
-      if (!sustainActive)
-        polyNoteOff(note);
-      return;
-    }
-
-    // If sustain is active, don't remove from queue yet
+    // Route note-off through voice mode
     if (sustainActive)
       return;
 
-    // Remove from queue(s)
-    leftNoteQueue.removeFirstMatchingValue(note);
-    rightNoteQueue.removeFirstMatchingValue(note);
-
-    // Update SIDs to play the previous note (or off if queue empty)
-    updateSIDFromQueue(true);  // left
-    updateSIDFromQueue(false); // right
+    switch (voiceMode) {
+    case VoiceMode::Mono:
+      leftNoteQueue.removeFirstMatchingValue(note);
+      rightNoteQueue.removeFirstMatchingValue(note);
+      updateSIDFromQueue(true);
+      updateSIDFromQueue(false);
+      break;
+    case VoiceMode::Paraphonic:
+      if (dualMode == DualMode::Multitimbral) {
+        if (msg.getChannel() == 2)
+          paraNoteOffSID(false, note);
+        else
+          paraNoteOffSID(true, note);
+      } else {
+        paraNoteOff(note);
+      }
+      break;
+    case VoiceMode::Polyphonic:
+      polyNoteOff(note);
+      break;
+    case VoiceMode::PolyPara:
+      polyParaNoteOff(note);
+      break;
+    }
   } else if (msg.isAllNotesOff()) {
     arpHeldCount = 0;
     arpSeqCount = 0;
     lastArpNote = -1;
 
-    if (polyEnabled) {
-      polyAllNotesOff();
-    } else {
+    switch (voiceMode) {
+    case VoiceMode::Mono:
       leftNoteQueue.clear();
       rightNoteQueue.clear();
       for (int v = 0; v < 6; ++v)
         releaseNote(v);
+      break;
+    case VoiceMode::Paraphonic:
+      paraAllNotesOff();
+      break;
+    case VoiceMode::Polyphonic:
+      polyAllNotesOff();
+      break;
+    case VoiceMode::PolyPara:
+      polyParaAllNotesOff();
+      break;
     }
   } else if (msg.isPitchWheel()) {
     // Convert 14-bit value (0-16383, center=8192) to -1.0 to +1.0
@@ -965,10 +1027,9 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
       if (sustainActive != pedalDown) {
         sustainActive = pedalDown;
 
-        if (!sustainActive) {
-          // In poly mode, release all active poly voices that aren't physically held
-          if (polyEnabled && !arpEnabled) {
-            // Release poly voices whose notes are no longer physically held
+        if (!sustainActive && !arpEnabled) {
+          // Release notes that are no longer physically held
+          if (isPolyActive()) {
             for (int i = 0; i < polyMaxNotes; ++i) {
               auto &pv = polyVoices[i];
               if (pv.active && !pv.releasing) {
@@ -979,15 +1040,30 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
                     break;
                   }
                 }
-                if (!held)
-                  polyNoteOff(pv.midiNote);
+                if (!held) {
+                  if (voiceMode == VoiceMode::PolyPara)
+                    polyParaNoteOff(pv.midiNote);
+                  else
+                    polyNoteOff(pv.midiNote);
+                }
               }
             }
-          }
-          // If arp is NOT enabled, we need to release notes that are only
-          // held by sustain
-          if (!arpEnabled && !polyEnabled) {
-            // Check left SID queue
+          } else if (voiceMode == VoiceMode::Paraphonic) {
+            for (int v = 0; v < 6; ++v) {
+              if (paraVoices[v].midiNote >= 0) {
+                bool held = false;
+                for (int ai = 0; ai < arpHeldCount; ++ai) {
+                  if (arpHeldNotes[ai] == paraVoices[v].midiNote) {
+                    held = true;
+                    break;
+                  }
+                }
+                if (!held)
+                  paraNoteOff(paraVoices[v].midiNote);
+              }
+            }
+          } else {
+            // Mono: clean up note queues
             for (int i = leftNoteQueue.size(); --i >= 0;) {
               int n = leftNoteQueue[i];
               bool found = false;
@@ -1002,7 +1078,6 @@ void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
             }
             updateSIDFromQueue(true);
 
-            // Check right SID queue
             for (int i = rightNoteQueue.size(); --i >= 0;) {
               int n = rightNoteQueue[i];
               bool found = false;
@@ -1182,16 +1257,28 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
 void BreadbinProcessor::updateAllVoiceFrequencies() {
   float bendSemitones = pitchBendValue * static_cast<float>(pitchBendRange);
 
-  if (polyEnabled) {
-    // Poly: apply pitch bend to all active poly voice SIDs
+  if (isPolyActive()) {
+    // Poly/PolyPara: apply pitch bend to all active poly voice SIDs
     double bendMult = std::pow(2.0, bendSemitones / 12.0);
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (!pv.active && !pv.releasing) continue;
-      double hz = pv.currentHz * bendMult;
-      for (int v = 0; v < 3; ++v) {
-        pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
-        pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+      if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
+        // PolyPara: each SID voice has its own note
+        for (int v = 0; v < 3; ++v) {
+          if (pv.paraNote[v] >= 0) {
+            double hz = 440.0 * std::pow(2.0,
+                (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0) * bendMult;
+            pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
+            pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+          }
+        }
+      } else {
+        double hz = pv.currentHz * bendMult;
+        for (int v = 0; v < 3; ++v) {
+          pv.sidLeft->setFrequency(v, hz * std::pow(2.0, leftDetuneCents / 1200.0));
+          pv.sidRight->setFrequency(v, hz * std::pow(2.0, rightDetuneCents / 1200.0));
+        }
       }
     }
   } else {
@@ -1458,6 +1545,186 @@ void BreadbinProcessor::polyAllNotesOff() {
         pv.sidLeft->noteOff(v);
         pv.sidRight->noteOff(v);
       }
+      pv.active = false;
+      pv.releasing = false;
+      pv.midiNote = -1;
+      pv.filterEnv = FilterEnvelopeState{};
+    }
+  }
+}
+
+// ==================== PARAPHONIC VOICE MANAGEMENT ====================
+
+void BreadbinProcessor::paraNoteOn(int midiNote, int velocity) {
+  // Stereo/Unison: mirror allocation across both SIDs (same slot index)
+  for (int v = 0; v < 3; ++v) {
+    if (!voiceSettings[v].enabled) continue;
+    if (paraVoices[v].midiNote == -1) {
+      paraVoices[v] = {midiNote, velocity};
+      paraVoices[v + 3] = {midiNote, velocity};
+      triggerNote(v, midiNote, velocity);
+      if (voiceSettings[v + 3].enabled)
+        triggerNote(v + 3, midiNote, velocity);
+      return;
+    }
+  }
+  // Pool full — no free voice
+}
+
+void BreadbinProcessor::paraNoteOnSID(bool isLeftSID, int midiNote, int velocity) {
+  int base = isLeftSID ? 0 : 3;
+  for (int v = base; v < base + 3; ++v) {
+    if (!voiceSettings[v].enabled) continue;
+    if (paraVoices[v].midiNote == -1) {
+      paraVoices[v] = {midiNote, velocity};
+      triggerNote(v, midiNote, velocity);
+      return;
+    }
+  }
+}
+
+void BreadbinProcessor::paraNoteOff(int midiNote) {
+  for (int v = 0; v < 6; ++v) {
+    if (paraVoices[v].midiNote == midiNote) {
+      paraVoices[v] = {-1, 0};
+      releaseNote(v);
+    }
+  }
+}
+
+void BreadbinProcessor::paraNoteOffSID(bool isLeftSID, int midiNote) {
+  int base = isLeftSID ? 0 : 3;
+  for (int v = base; v < base + 3; ++v) {
+    if (paraVoices[v].midiNote == midiNote) {
+      paraVoices[v] = {-1, 0};
+      releaseNote(v);
+      return;
+    }
+  }
+}
+
+void BreadbinProcessor::paraAllNotesOff() {
+  for (int v = 0; v < 6; ++v) {
+    paraVoices[v] = {-1, 0};
+    if (voices[v].active)
+      releaseNote(v);
+  }
+}
+
+// ==================== POLY+PARA VOICE MANAGEMENT ====================
+
+void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
+  // 1. Check existing active poly voices for a free SID voice slot
+  for (int pi = 0; pi < polyMaxNotes; ++pi) {
+    auto &pv = polyVoices[pi];
+    if (pv.active && !pv.releasing && pv.paraCount < 3) {
+      int slot = -1;
+      for (int s = 0; s < 3; ++s) {
+        if (pv.paraNote[s] == -1) { slot = s; break; }
+      }
+      if (slot < 0) continue;
+
+      pv.paraNote[slot] = midiNote;
+      pv.paraVelocity[slot] = velocity;
+      pv.paraCount++;
+
+      // Trigger on this specific SID voice slot
+      if (voiceSettings[slot].enabled)
+        pv.sidLeft->noteOn(slot, midiNote, velocity, leftDetuneCents);
+      if (voiceSettings[slot + 3].enabled)
+        pv.sidRight->noteOn(slot, midiNote, velocity, rightDetuneCents);
+      return;
+    }
+  }
+
+  // 2. No free slots — allocate a new poly voice
+  int idx = findFreePolyVoice();
+  if (idx < 0)
+    idx = findStealablePolyVoice();
+  if (idx < 0)
+    return;
+
+  auto &pv = polyVoices[idx];
+
+  // If stealing, release the old note first
+  if (pv.active || pv.releasing) {
+    for (int v = 0; v < 3; ++v) {
+      pv.sidLeft->noteOff(v);
+      pv.sidRight->noteOff(v);
+    }
+  }
+
+  pv.midiNote = midiNote;
+  pv.velocity = velocity;
+  pv.active = true;
+  pv.releasing = false;
+  pv.startSample = polyNoteCounter++;
+  pv.filterEnv = FilterEnvelopeState{};
+  pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
+  pv.currentHz = pv.targetHz;
+  pv.isGliding = false;
+
+  // Initialize para tracking
+  pv.paraNote[0] = midiNote;
+  pv.paraVelocity[0] = velocity;
+  pv.paraCount = 1;
+  for (int i = 1; i < 3; ++i) {
+    pv.paraNote[i] = -1;
+    pv.paraVelocity[i] = 0;
+  }
+
+  applySettingsToPolyVoice(idx);
+
+  // Trigger only voice 0 (first para slot)
+  if (voiceSettings[0].enabled)
+    pv.sidLeft->noteOn(0, midiNote, velocity, leftDetuneCents);
+  if (voiceSettings[3].enabled)
+    pv.sidRight->noteOn(0, midiNote, velocity, rightDetuneCents);
+}
+
+void BreadbinProcessor::polyParaNoteOff(int midiNote) {
+  for (int pi = 0; pi < polyMaxNotes; ++pi) {
+    auto &pv = polyVoices[pi];
+    if (!pv.active || pv.releasing) continue;
+
+    for (int slot = 0; slot < 3; ++slot) {
+      if (pv.paraNote[slot] == midiNote) {
+        pv.sidLeft->noteOff(slot);
+        pv.sidRight->noteOff(slot);
+        pv.paraNote[slot] = -1;
+        pv.paraVelocity[slot] = 0;
+        pv.paraCount--;
+
+        // If no more para notes, start releasing the whole poly voice
+        if (pv.paraCount <= 0) {
+          pv.paraCount = 0;
+          pv.releasing = true;
+          pv.filterEnv.stage = FilterEnvelopeState::Stage::Release;
+          int maxRel = 0;
+          for (int v = 0; v < 6; ++v)
+            if (voiceSettings[v].enabled)
+              maxRel = std::max(maxRel, voiceSettings[v].release);
+          float releaseSec = std::min(kSidReleaseTimes[maxRel], 3.0f);
+          pv.releaseSamplesRemaining =
+              static_cast<int>(releaseSec * hostSampleRate) + 512;
+        }
+        return;
+      }
+    }
+  }
+}
+
+void BreadbinProcessor::polyParaAllNotesOff() {
+  for (int i = 0; i < MAX_POLY; ++i) {
+    auto &pv = polyVoices[i];
+    if (pv.active || pv.releasing) {
+      for (int v = 0; v < 3; ++v) {
+        pv.sidLeft->noteOff(v);
+        pv.sidRight->noteOff(v);
+        pv.paraNote[v] = -1;
+        pv.paraVelocity[v] = 0;
+      }
+      pv.paraCount = 0;
       pv.active = false;
       pv.releasing = false;
       pv.midiNote = -1;
@@ -1734,8 +2001,10 @@ void BreadbinProcessor::setStateInformation(const void *data, int sizeInBytes) {
         }
       }
 
-      // Kill any active poly voices on state restore
+      // Kill any active voices on state restore
       polyAllNotesOff();
+      polyParaAllNotesOff();
+      paraAllNotesOff();
 
       stateRestored = true;
     }
@@ -1858,24 +2127,38 @@ void BreadbinProcessor::processArpeggiator(int numSamples) {
 
     // Release previous note if different
     if (lastArpNote >= 0 && lastArpNote != note) {
-      if (polyEnabled) {
+      switch (voiceMode) {
+      case VoiceMode::Mono:
+        for (int v = 0; v < 6; ++v)
+          if (voices[v].note == lastArpNote) releaseNote(v);
+        break;
+      case VoiceMode::Paraphonic:
+        paraNoteOff(lastArpNote);
+        break;
+      case VoiceMode::Polyphonic:
         polyNoteOff(lastArpNote);
-      } else {
-        for (int v = 0; v < 6; ++v) {
-          if (voices[v].note == lastArpNote)
-            releaseNote(v);
-        }
+        break;
+      case VoiceMode::PolyPara:
+        polyParaNoteOff(lastArpNote);
+        break;
       }
     }
 
     // Trigger new note
-    if (polyEnabled) {
+    switch (voiceMode) {
+    case VoiceMode::Mono:
+      for (int v = 0; v < 6; ++v)
+        if (voiceSettings[v].enabled) triggerNote(v, note, lastVelocity);
+      break;
+    case VoiceMode::Paraphonic:
+      paraNoteOn(note, lastVelocity);
+      break;
+    case VoiceMode::Polyphonic:
       polyNoteOn(note, lastVelocity);
-    } else {
-      for (int v = 0; v < 6; ++v) {
-        if (voiceSettings[v].enabled)
-          triggerNote(v, note, lastVelocity);
-      }
+      break;
+    case VoiceMode::PolyPara:
+      polyParaNoteOn(note, lastVelocity);
+      break;
     }
 
     lastArpNote = note;
@@ -1927,29 +2210,48 @@ void BreadbinProcessor::triggerChordDualSID(int rootNote, int velocity) {
       notes[count++] = juce::jlimit(0, 127, rootNote + interval);
   }
 
-  if (polyEnabled) {
-    // Poly: each chord note gets its own SID pair
+  switch (voiceMode) {
+  case VoiceMode::Polyphonic:
     for (int n = 0; n < count; ++n)
       polyNoteOn(notes[n], velocity);
-  } else {
+    break;
+  case VoiceMode::PolyPara:
+    for (int n = 0; n < count; ++n)
+      polyParaNoteOn(notes[n], velocity);
+    break;
+  case VoiceMode::Paraphonic:
+  case VoiceMode::Mono:
+  default:
     for (int v = 0; v < 6; ++v) {
       if (v < count && voiceSettings[v].enabled)
         triggerNote(v, notes[v], velocity);
       else if (voices[v].active)
         releaseNote(v);
     }
+    break;
   }
 }
 
 void BreadbinProcessor::releaseChord(bool isLeftSID) {
-  if (polyEnabled) {
-    // Poly: release all active poly voices
+  switch (voiceMode) {
+  case VoiceMode::Polyphonic:
     polyAllNotesOff();
-  } else {
-    const int base = isLeftSID ? 0 : 3;
-    for (int v = base; v < base + 3; ++v)
-      if (voices[v].active)
-        releaseNote(v);
+    break;
+  case VoiceMode::PolyPara:
+    polyParaAllNotesOff();
+    break;
+  case VoiceMode::Paraphonic:
+    paraAllNotesOff();
+    break;
+  case VoiceMode::Mono:
+  default:
+    {
+      const int base = isLeftSID ? 0 : 3;
+      for (int v = base; v < base + 3; ++v)
+        if (voices[v].active)
+          releaseNote(v);
+    }
+    break;
   }
 }
 
@@ -2849,8 +3151,8 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Digi Loop";
   case ControlParam::DigiBitDepth:
     return "Digi Bit Depth";
-  case ControlParam::PolyEnable:
-    return "Poly Enable";
+  case ControlParam::VoiceMode:
+    return "Voice Mode";
   case ControlParam::PolyMaxNotes:
     return "Poly Max Notes";
   default:
@@ -2919,9 +3221,10 @@ BreadbinProcessor::createParameterLayout() {
       juce::ParameterID{"digiBitDepth", 1}, "Digi Bit Depth",
       juce::StringArray{"4-bit", "8-bit"}, 0));
 
-  // Polyphony
-  layout.add(std::make_unique<juce::AudioParameterBool>(
-      juce::ParameterID{"polyEnable", 1}, "Poly Enable", false));
+  // Voice Mode + Polyphony
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"voiceMode", 1}, "Voice Mode",
+      juce::StringArray{"Mono", "Para", "Poly", "Poly+Para"}, 0));
   layout.add(std::make_unique<juce::AudioParameterInt>(
       juce::ParameterID{"polyMaxNotes", 1}, "Poly Max Notes", 1, 8, 4));
 
@@ -3161,7 +3464,7 @@ void BreadbinProcessor::initializeParameterPointers() {
   digiRootNotePtr = apvts.getRawParameterValue("digiRootNote");
   digiLoopPtr = apvts.getRawParameterValue("digiLoop");
   digiBitDepthPtr = apvts.getRawParameterValue("digiBitDepth");
-  polyEnablePtr = apvts.getRawParameterValue("polyEnable");
+  voiceModePtr = apvts.getRawParameterValue("voiceMode");
   polyMaxNotesPtr = apvts.getRawParameterValue("polyMaxNotes");
   leftPanPtr = apvts.getRawParameterValue("leftPan");
   rightPanPtr = apvts.getRawParameterValue("rightPan");

@@ -2558,11 +2558,11 @@ void testPolyModeProducesSound() {
   warmUp(*p);
 
   // Enable poly mode
-  auto *param = p->apvts.getParameter("polyEnable");
-  param->setValueNotifyingHost(1.0f);
+  auto *param = p->apvts.getParameter("voiceMode");
+  param->setValueNotifyingHost(param->convertTo0to1(2.0f)); // Polyphonic
   warmUp(*p);
 
-  ASSERT_TRUE(p->isPolyEnabled(), "Poly mode enabled");
+  ASSERT_TRUE(p->isPolyActive(), "Poly mode enabled");
 
   // Send note via MIDI
   juce::MidiBuffer midi;
@@ -2582,8 +2582,8 @@ void testPolyMultipleNotesAllocateSeparateVoices() {
   warmUp(*p);
 
   // Enable poly with max 6
-  auto *polyParam = p->apvts.getParameter("polyEnable");
-  polyParam->setValueNotifyingHost(1.0f);
+  auto *polyParam = p->apvts.getParameter("voiceMode");
+  polyParam->setValueNotifyingHost(polyParam->convertTo0to1(2.0f)); // Polyphonic
   warmUp(*p);
 
   // Send 3 different notes
@@ -2603,7 +2603,7 @@ void testPolyMonoUnaffectedWhenDisabled() {
   warmUp(*p);
 
   // Poly stays off (default)
-  ASSERT_TRUE(!p->isPolyEnabled(), "Poly mode off by default");
+  ASSERT_TRUE(!p->isPolyActive(), "Poly mode off by default");
 
   // Send note via mono path
   juce::MidiBuffer midi;
@@ -2623,8 +2623,8 @@ void testPolyVoiceStealing() {
   warmUp(*p);
 
   // Enable poly with max 2 voices
-  auto *polyParam = p->apvts.getParameter("polyEnable");
-  polyParam->setValueNotifyingHost(1.0f);
+  auto *polyParam = p->apvts.getParameter("voiceMode");
+  polyParam->setValueNotifyingHost(polyParam->convertTo0to1(2.0f)); // Polyphonic
   auto *maxParam = p->apvts.getParameter("polyMaxNotes");
   maxParam->setValueNotifyingHost(maxParam->convertTo0to1(2.0f));
   warmUp(*p);
@@ -2651,8 +2651,8 @@ void testPolyNoteOffReleasesCorrectVoice() {
   warmUp(*p);
 
   // Enable poly
-  auto *polyParam = p->apvts.getParameter("polyEnable");
-  polyParam->setValueNotifyingHost(1.0f);
+  auto *polyParam = p->apvts.getParameter("voiceMode");
+  polyParam->setValueNotifyingHost(polyParam->convertTo0to1(2.0f)); // Polyphonic
   warmUp(*p);
 
   // Play 2 notes
@@ -2681,6 +2681,100 @@ void testPolyNoteOffReleasesCorrectVoice() {
   int postRelease = p->getActivePolyVoiceCount();
   ASSERT_TRUE(postRelease == 1,
               "Released voice freed after release timer");
+}
+
+// ==================== PARAPHONIC + POLY+PARA TESTS ====================
+
+void testParaphonicSeparateNotes() {
+  std::printf("--- Paraphonic assigns separate notes to voices ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  // Enable paraphonic mode
+  auto *param = p->apvts.getParameter("voiceMode");
+  param->setValueNotifyingHost(param->convertTo0to1(1.0f)); // Paraphonic
+  warmUp(*p);
+
+  ASSERT_TRUE(p->isParaActive(), "Para mode enabled");
+
+  // Send 3 notes
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 2);
+  processBlock(*p, 512, &midi);
+
+  ASSERT_TRUE(p->getActiveParaVoiceCount() >= 3,
+              "At least 3 para voices allocated");
+}
+
+void testParaphonicNoteOffCorrect() {
+  std::printf("--- Paraphonic note-off releases correct voice ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto *param = p->apvts.getParameter("voiceMode");
+  param->setValueNotifyingHost(param->convertTo0to1(1.0f)); // Paraphonic
+  warmUp(*p);
+
+  // Play 2 notes
+  juce::MidiBuffer midi1;
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi1.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  processBlock(*p, 512, &midi1);
+  int before = p->getActiveParaVoiceCount();
+
+  // Release note 60
+  juce::MidiBuffer midi2;
+  midi2.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &midi2);
+  int after = p->getActiveParaVoiceCount();
+
+  ASSERT_TRUE(after < before, "Para voice count decreased after note-off");
+}
+
+void testPolyParaFillsExistingVoice() {
+  std::printf("--- PolyPara fills existing voice before allocating new ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto *param = p->apvts.getParameter("voiceMode");
+  param->setValueNotifyingHost(param->convertTo0to1(3.0f)); // PolyPara
+  warmUp(*p);
+
+  // Send 2 notes — should both go into same poly voice
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  processBlock(*p, 512, &midi);
+
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 1,
+              "Both notes share one poly voice");
+  ASSERT_TRUE(p->getTotalActiveNoteCount() == 2,
+              "Total note count is 2");
+}
+
+void testPolyParaOverflowAllocatesNew() {
+  std::printf("--- PolyPara allocates new voice on overflow ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto *param = p->apvts.getParameter("voiceMode");
+  param->setValueNotifyingHost(param->convertTo0to1(3.0f)); // PolyPara
+  warmUp(*p);
+
+  // Send 4 notes — 3 fit in first poly voice, 4th needs a new one
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 1);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 2);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 72, (juce::uint8)100), 3);
+  processBlock(*p, 512, &midi);
+
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 2,
+              "4 notes use 2 poly voices (3+1)");
+  ASSERT_TRUE(p->getTotalActiveNoteCount() == 4,
+              "Total note count is 4");
 }
 
 // ============================================================================
@@ -2802,6 +2896,12 @@ int main() {
   testPolyMonoUnaffectedWhenDisabled();
   testPolyVoiceStealing();
   testPolyNoteOffReleasesCorrectVoice();
+
+  // ==================== PARAPHONIC + POLY+PARA TESTS ====================
+  testParaphonicSeparateNotes();
+  testParaphonicNoteOffCorrect();
+  testPolyParaFillsExistingVoice();
+  testPolyParaOverflowAllocatesNew();
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);

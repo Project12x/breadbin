@@ -1182,16 +1182,41 @@ void BreadbinEditor::timerCallback() {
     cpuLoadLabel.setText(txt, juce::dontSendNotification);
   }
 
-  // Poly voice count (active/max)
-  if (processor.isPolyEnabled()) {
+  // Voice count display + show/hide max notes selector
+  auto vm = processor.getVoiceMode();
+  bool showMaxNotes = (vm == BreadbinProcessor::VoiceMode::Polyphonic ||
+                       vm == BreadbinProcessor::VoiceMode::PolyPara);
+  polyMaxNotesSelector.setVisible(showMaxNotes);
+
+  switch (vm) {
+  case BreadbinProcessor::VoiceMode::Mono:
+    polyVoiceCountLabel.setVisible(false);
+    break;
+  case BreadbinProcessor::VoiceMode::Paraphonic: {
+    int active = processor.getActiveParaVoiceCount();
+    polyVoiceCountLabel.setText(
+        juce::String(active) + "/6", juce::dontSendNotification);
+    polyVoiceCountLabel.setVisible(true);
+    break;
+  }
+  case BreadbinProcessor::VoiceMode::Polyphonic: {
     int active = processor.getActivePolyVoiceCount();
     int maxN = processor.getPolyMaxNotes();
     polyVoiceCountLabel.setText(
         juce::String(active) + "/" + juce::String(maxN),
         juce::dontSendNotification);
     polyVoiceCountLabel.setVisible(true);
-  } else {
-    polyVoiceCountLabel.setVisible(false);
+    break;
+  }
+  case BreadbinProcessor::VoiceMode::PolyPara: {
+    int total = processor.getTotalActiveNoteCount();
+    int maxTotal = processor.getPolyMaxNotes() * 3;
+    polyVoiceCountLabel.setText(
+        juce::String(total) + "/" + juce::String(maxTotal),
+        juce::dontSendNotification);
+    polyVoiceCountLabel.setVisible(true);
+    break;
+  }
   }
 
   // SID Player register overlay
@@ -2634,17 +2659,26 @@ void BreadbinEditor::setupControls() {
   };
   addAndMakeVisible(dualModeSelector);
 
-  // Poly mode toggle + max notes selector
-  polyEnableButton.setTooltip("Enable true polyphony (each note gets its own SID pair)");
-  addAndMakeVisible(polyEnableButton);
-  polyEnableAttachment = std::make_unique<
-      juce::AudioProcessorValueTreeState::ButtonAttachment>(
-      processor.apvts, "polyEnable", polyEnableButton);
+  // Voice mode selector + max notes
+  voiceModeSelector.addItem("Mono", 1);
+  voiceModeSelector.addItem("Para", 2);
+  voiceModeSelector.addItem("Poly", 3);
+  voiceModeSelector.addItem("P+P", 4);
+  voiceModeSelector.setSelectedId(1, juce::dontSendNotification);
+  voiceModeSelector.setTooltip(
+      "Mono: All voices same note\n"
+      "Para: Each voice different note (shared filter)\n"
+      "Poly: Each note gets own SID pair\n"
+      "P+P: Poly voices with paraphonic sub-allocation");
+  addAndMakeVisible(voiceModeSelector);
+  voiceModeAttachment = std::make_unique<
+      juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+      processor.apvts, "voiceMode", voiceModeSelector);
 
   for (int i = 1; i <= 8; ++i)
     polyMaxNotesSelector.addItem(juce::String(i), i);
   polyMaxNotesSelector.setSelectedId(4, juce::dontSendNotification);
-  polyMaxNotesSelector.setTooltip("Maximum polyphonic voices (1-12)");
+  polyMaxNotesSelector.setTooltip("Maximum polyphonic voices (1-8)");
   addAndMakeVisible(polyMaxNotesSelector);
   polyMaxNotesAttachment = std::make_unique<
       juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
@@ -3890,7 +3924,7 @@ void BreadbinEditor::resized() {
   modeLabel.setBounds(topRow.removeFromLeft(45));
   dualModeSelector.setBounds(topRow.removeFromLeft(105));
   topRow.removeFromLeft(pad);
-  polyEnableButton.setBounds(topRow.removeFromLeft(42));
+  voiceModeSelector.setBounds(topRow.removeFromLeft(65).withHeight(22).translated(0, 3));
   polyMaxNotesSelector.setBounds(topRow.removeFromLeft(42).withHeight(22).translated(0, 3));
   polyVoiceCountLabel.setBounds(topRow.removeFromLeft(30));
   topRow.removeFromLeft(pad);
@@ -4614,7 +4648,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   processor.getDigiSampler().unload();
 
   // Poly mode: off, default max notes
-  setParam("polyEnable", 0.0f);
+  setParam("voiceMode", 0.0f);
   setParam("polyMaxNotes", 4.0f);
 
   // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
