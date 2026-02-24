@@ -2070,7 +2070,7 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   g.setFont(panelProFont.withHeight(10.0f));
   // Hint text is left of the slot buttons (x=155+); limit width to avoid overlap
   g.drawFittedText("Play a chord and click Learn, or set intervals manually "
-                   "(up to 6 notes; 3 per SID in Multitimbral)",
+                   "(up to 6 notes; 3 per SID)",
                    10, 28, 140, 28, juce::Justification::centredLeft, 2);
 
   // Divider below header
@@ -2649,10 +2649,11 @@ void BreadbinEditor::setupControls() {
 
   dualModeSelector.addItem("Stereo Split", 1);
   dualModeSelector.addItem("Unison", 2);
-  dualModeSelector.addItem("Multitimbral", 3);
+  // Multitimbral (ID 3) kept in engine but hidden from UI — redundant with
+  // per-voice settings. Re-add here if needed for niche use.
   dualModeSelector.setSelectedId(1);
   dualModeSelector.setTooltip("Stereo: L/R SID split\nUnison: Both SIDs "
-                              "together\nMultitimbral: Separate MIDI channels");
+                              "together");
   dualModeSelector.onChange = [this]() {
     processor.setDualMode(static_cast<BreadbinProcessor::DualMode>(
         dualModeSelector.getSelectedId() - 1));
