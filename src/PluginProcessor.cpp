@@ -258,9 +258,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
-  // Sync voice settings every block for now.
-  // TODO: Wire APVTS change listener to set voiceSettingsDirty[v] = true on
-  // parameter change, then guard this with the dirty flag for efficiency.
+  // Sync voice settings from APVTS (skips SID writes if unchanged)
   for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
     // Release voice immediately when toggled off
@@ -335,12 +333,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   }
 
   // Process LFO modulation
-  if (lfo.enabled) {
-    processLFO(numSamples);
-  }
-  if (lfo2.enabled) {
-    processLFO2(numSamples);
-  }
+  if (lfo.enabled)
+    tickLFO(lfo, lfoRng, numSamples);
+  if (lfo2.enabled)
+    tickLFO(lfo2, lfo2Rng, numSamples);
 
   // PWM Sweep phase (triangle oscillator, block-rate)
   if (pwmSweepEnablePtr->load() > 0.5f) {
@@ -1302,10 +1298,14 @@ void BreadbinProcessor::applyVoiceSettings(int voice) {
   vs.decay = static_cast<int>(ptrs.decay->load());
   vs.sustain = static_cast<int>(ptrs.sustain->load());
   vs.release = static_cast<int>(ptrs.release->load());
-  // per-voice pan removed (now per-SID: leftPan/rightPan)
   vs.ringMod = ptrs.ringMod->load() > 0.5f;
   vs.sync = ptrs.sync->load() > 0.5f;
   vs.filterEnabled = ptrs.filter->load() > 0.5f;
+
+  // Skip SID register writes if nothing changed since last block
+  if (vs == prevVoiceSettings[voice])
+    return;
+  prevVoiceSettings[voice] = vs;
 
   SIDEngine &sid = (voice < 3) ? sidLeft : sidRight;
   int sidVoice = voice % 3;
@@ -1422,44 +1422,8 @@ void BreadbinProcessor::processFilterEnvelope(int numSamples) {
 
   float dt =
       static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
-  float attack = filterEnvAttackPtr->load();
-  float decay = filterEnvDecayPtr->load();
-  float sustain = filterEnvSustainPtr->load();
-  float release = filterEnvReleasePtr->load();
-
-  switch (filterEnv.stage) {
-  case FilterEnvelopeState::Stage::Attack:
-    filterEnv.currentValue += dt / attack;
-    if (filterEnv.currentValue >= 1.0f) {
-      filterEnv.currentValue = 1.0f;
-      filterEnv.stage = FilterEnvelopeState::Stage::Decay;
-    }
-    break;
-  case FilterEnvelopeState::Stage::Decay: {
-    float decayRate = dt / decay;
-    filterEnv.currentValue -= decayRate * (filterEnv.currentValue - sustain);
-    if (filterEnv.currentValue <= sustain + 0.001f) {
-      filterEnv.currentValue = sustain;
-      filterEnv.stage = FilterEnvelopeState::Stage::Sustain;
-    }
-    break;
-  }
-  case FilterEnvelopeState::Stage::Sustain:
-    filterEnv.currentValue = sustain;
-    break;
-  case FilterEnvelopeState::Stage::Release: {
-    float releaseRate = dt / release;
-    filterEnv.currentValue -= releaseRate * filterEnv.currentValue;
-    if (filterEnv.currentValue <= 0.001f) {
-      filterEnv.currentValue = 0.0f;
-      filterEnv.stage = FilterEnvelopeState::Stage::Idle;
-    }
-    break;
-  }
-  case FilterEnvelopeState::Stage::Idle:
-    filterEnv.currentValue = 0.0f;
-    break;
-  }
+  filterEnv.tick(dt, filterEnvAttackPtr->load(), filterEnvDecayPtr->load(),
+                 filterEnvSustainPtr->load(), filterEnvReleasePtr->load());
 }
 
 void BreadbinProcessor::applyFilterModulation() {
@@ -2051,44 +2015,8 @@ void BreadbinProcessor::processPolyFilterEnvelope(int polyIdx, int numSamples) {
   env.gateWasOn = gateOn;
 
   float dt = static_cast<float>(numSamples) / static_cast<float>(hostSampleRate);
-  float attack = filterEnvAttackPtr->load();
-  float decay = filterEnvDecayPtr->load();
-  float sustain = filterEnvSustainPtr->load();
-  float release = filterEnvReleasePtr->load();
-
-  switch (env.stage) {
-  case FilterEnvelopeState::Stage::Attack:
-    env.currentValue += dt / attack;
-    if (env.currentValue >= 1.0f) {
-      env.currentValue = 1.0f;
-      env.stage = FilterEnvelopeState::Stage::Decay;
-    }
-    break;
-  case FilterEnvelopeState::Stage::Decay: {
-    float decayRate = dt / decay;
-    env.currentValue -= decayRate * (env.currentValue - sustain);
-    if (env.currentValue <= sustain + 0.001f) {
-      env.currentValue = sustain;
-      env.stage = FilterEnvelopeState::Stage::Sustain;
-    }
-    break;
-  }
-  case FilterEnvelopeState::Stage::Sustain:
-    env.currentValue = sustain;
-    break;
-  case FilterEnvelopeState::Stage::Release: {
-    float releaseRate = dt / release;
-    env.currentValue -= releaseRate * env.currentValue;
-    if (env.currentValue <= 0.001f) {
-      env.currentValue = 0.0f;
-      env.stage = FilterEnvelopeState::Stage::Idle;
-    }
-    break;
-  }
-  case FilterEnvelopeState::Stage::Idle:
-    env.currentValue = 0.0f;
-    break;
-  }
+  env.tick(dt, filterEnvAttackPtr->load(), filterEnvDecayPtr->load(),
+           filterEnvSustainPtr->load(), filterEnvReleasePtr->load());
 }
 
 // ==================== END POLY VOICE MANAGEMENT ====================
@@ -2705,67 +2633,34 @@ void BreadbinProcessor::processWavetable(int numSamples) {
   }
 }
 
-void BreadbinProcessor::processLFO(int numSamples) {
-  // Advance phase
+void BreadbinProcessor::tickLFO(LFOState &s, std::mt19937 &rng,
+                                int numSamples) {
   double phaseInc =
-      (static_cast<double>(lfo.rate) * numSamples) / hostSampleRate;
-  double oldPhase = lfo.phase;
-  lfo.phase += phaseInc;
-  lfo.phase -= std::floor(lfo.phase); // Wrap to 0-1
+      (static_cast<double>(s.rate) * numSamples) / hostSampleRate;
+  double oldPhase = s.phase;
+  s.phase += phaseInc;
+  s.phase -= std::floor(s.phase);
 
-  // Generate waveform value (-1.0 to +1.0)
-  float p = static_cast<float>(lfo.phase);
-  switch (lfo.waveform) {
+  float p = static_cast<float>(s.phase);
+  switch (s.waveform) {
   case LFOWaveform::Triangle:
-    lfo.currentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
+    s.currentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
     break;
   case LFOWaveform::Sawtooth:
-    lfo.currentValue = 2.0f * p - 1.0f;
+    s.currentValue = 2.0f * p - 1.0f;
     break;
   case LFOWaveform::Square:
-    lfo.currentValue = (p < 0.5f) ? 1.0f : -1.0f;
+    s.currentValue = (p < 0.5f) ? 1.0f : -1.0f;
     break;
   case LFOWaveform::SampleAndHold:
-    // Latch new random value on phase wrap
-    if (lfo.phase < oldPhase) {
+    if (s.phase < oldPhase) {
       std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-      lfo.shValue = dist(lfoRng);
+      s.shValue = dist(rng);
     }
-    lfo.currentValue = lfo.shValue;
+    s.currentValue = s.shValue;
     break;
   case LFOWaveform::Sine:
-    lfo.currentValue = std::sin(p * juce::MathConstants<float>::twoPi);
-    break;
-  }
-}
-
-void BreadbinProcessor::processLFO2(int numSamples) {
-  double phaseInc =
-      (static_cast<double>(lfo2.rate) * numSamples) / hostSampleRate;
-  double oldPhase = lfo2.phase;
-  lfo2.phase += phaseInc;
-  lfo2.phase -= std::floor(lfo2.phase);
-
-  float p = static_cast<float>(lfo2.phase);
-  switch (lfo2.waveform) {
-  case LFOWaveform::Triangle:
-    lfo2.currentValue = (p < 0.5f) ? (4.0f * p - 1.0f) : (3.0f - 4.0f * p);
-    break;
-  case LFOWaveform::Sawtooth:
-    lfo2.currentValue = 2.0f * p - 1.0f;
-    break;
-  case LFOWaveform::Square:
-    lfo2.currentValue = (p < 0.5f) ? 1.0f : -1.0f;
-    break;
-  case LFOWaveform::SampleAndHold:
-    if (lfo2.phase < oldPhase) {
-      std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-      lfo2.shValue = dist(lfo2Rng);
-    }
-    lfo2.currentValue = lfo2.shValue;
-    break;
-  case LFOWaveform::Sine:
-    lfo2.currentValue = std::sin(p * juce::MathConstants<float>::twoPi);
+    s.currentValue = std::sin(p * juce::MathConstants<float>::twoPi);
     break;
   }
 }

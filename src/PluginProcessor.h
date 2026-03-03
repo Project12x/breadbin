@@ -50,6 +50,43 @@ public:
     Stage stage = Stage::Idle;
     bool gateWasOn = false;
     float currentValue = 0.0f; // 0.0-1.0 envelope output
+
+    // Advance ADSR by dt seconds with given parameters
+    void tick(float dt, float attack, float decay, float sustain, float release) {
+      switch (stage) {
+      case Stage::Attack:
+        currentValue += dt / attack;
+        if (currentValue >= 1.0f) {
+          currentValue = 1.0f;
+          stage = Stage::Decay;
+        }
+        break;
+      case Stage::Decay: {
+        float rate = dt / decay;
+        currentValue -= rate * (currentValue - sustain);
+        if (currentValue <= sustain + 0.001f) {
+          currentValue = sustain;
+          stage = Stage::Sustain;
+        }
+        break;
+      }
+      case Stage::Sustain:
+        currentValue = sustain;
+        break;
+      case Stage::Release: {
+        float rate = dt / release;
+        currentValue -= rate * currentValue;
+        if (currentValue <= 0.001f) {
+          currentValue = 0.0f;
+          stage = Stage::Idle;
+        }
+        break;
+      }
+      case Stage::Idle:
+        currentValue = 0.0f;
+        break;
+      }
+    }
   };
 
   // Polyphony: each held note gets its own L/R SID engine pair
@@ -240,6 +277,15 @@ public:
     bool ringMod = false;      // Ring modulation with previous voice
     bool sync = false;         // Hard sync with previous voice
     bool filterEnabled = true; // Route this voice through filter
+
+    bool operator==(const VoiceSettings &o) const {
+      return enabled == o.enabled && waveform == o.waveform &&
+             pulseWidth == o.pulseWidth && attack == o.attack &&
+             decay == o.decay && sustain == o.sustain &&
+             release == o.release && ringMod == o.ringMod &&
+             sync == o.sync && filterEnabled == o.filterEnabled;
+    }
+    bool operator!=(const VoiceSettings &o) const { return !(*this == o); }
   };
   VoiceSettings &getVoiceSettings(int voice) { return voiceSettings[voice]; }
   const VoiceSettings &getVoiceSettings(int voice) const {
@@ -541,6 +587,7 @@ private:
 
   // Per-voice settings storage
   std::array<VoiceSettings, 6> voiceSettings;
+  std::array<VoiceSettings, 6> prevVoiceSettings; // For dirty-check skip
 
   // Note queues for last-note priority (one per SID)
   juce::Array<int> leftNoteQueue;  // Notes held on left SID
@@ -804,8 +851,7 @@ private:
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
   void prepareSafetyChain(double sampleRate, int samplesPerBlock);
   void updateAllVoiceFrequencies(); // Apply pitch bend to all active voices
-  void processLFO(int numSamples);  // Advance LFO1 phase
-  void processLFO2(int numSamples); // Advance LFO2 phase
+  void tickLFO(LFOState &state, std::mt19937 &rng, int numSamples);
   void applyLFOModulation();    // Apply LFO1+LFO2 to PW and pitch destinations
   void applyFilterModulation(); // Unified filter cutoff modulation (mod wheel +
                                 // LFO + filter env)
