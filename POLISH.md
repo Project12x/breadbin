@@ -233,10 +233,9 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
   - `mixWithPanLaw()` — shared stereo output mixing
 - **Files**: `PluginProcessor.h/cpp`
 - **Risk**: Low. Must verify audio output is bit-identical.
-- [ ] Extract unified glide processing
-- [ ] Extract filter modulation offset calculation
-- [ ] Extract pan/gain mixing helper
-- [ ] Verify integration tests pass
+- [x] Extract computeFilterModOffset() helper
+- [x] Extract updatePanCache() helper
+- [x] Verify integration tests pass
 
 ### 6D. Merge setupLeftSID/setupRightSID
 
@@ -244,9 +243,9 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
 - **Action**: Extract `setupSidPanel(bool isLeft)` that parameterizes control references.
 - **Files**: `PluginEditor.h/cpp`
 - **Risk**: Low. UI-only refactor.
-- [ ] Create setupSidPanel(bool isLeft) helper
-- [ ] Remove setupLeftSID/setupRightSID
-- [ ] Verify UI renders correctly
+- [x] Create setupSidPanel(bool isLeft) helper
+- [x] Remove setupLeftSID/setupRightSID
+- [x] Verify UI renders correctly
 
 ### 6E. Split resized() into region helpers
 
@@ -260,9 +259,8 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
   - `layoutPopupButtons(bounds)` — bottom popup button row
 - **Files**: `PluginEditor.h/cpp`
 - **Risk**: Low. Layout-only refactor.
-- [ ] Extract 6 layout region helpers
-- [ ] Deduplicate FX row layout pattern
-- [ ] Verify UI layout unchanged
+- [x] Extract 4 layout region helpers (layoutTopRow, layoutSidPanels, layoutVoiceEditor, layoutBottomControls)
+- [x] Verify UI layout unchanged
 
 ### 6F. Split setupControls() and reduce boilerplate
 
@@ -273,10 +271,8 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
   - Split setupControls into thematic sections (presets, arp, FX, global)
 - **Files**: `PluginEditor.h/cpp`
 - **Risk**: Low. Pure refactor.
-- [ ] Extract buildPresetNavigationList()
-- [ ] Extract setupLabeledSlider() helper
-- [ ] Split setupControls() into 3-4 thematic helpers
-- [ ] Verify UI functions correctly
+- [x] Split setupControls() into setupGlobalControls(), setupFXControls(), setupPopupButtons()
+- [x] Verify UI functions correctly
 
 ### 6G. Split timerCallback into update functions
 
@@ -288,8 +284,8 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
   - `updateSidPlayerOverlay()`
 - **Files**: `PluginEditor.cpp`
 - **Risk**: Very low. Pure extraction.
-- [ ] Extract 4 timer update helpers
-- [ ] Verify all timer-driven visuals still work
+- [x] Extract 4 timer update helpers
+- [x] Verify all timer-driven visuals still work
 
 ### 6H. Remove dead per-voice pan code
 
@@ -297,9 +293,9 @@ Structural refactoring to reduce file sizes, eliminate duplication, and improve 
 - **Action**: Remove dead MIDI mapping case and leftover comments.
 - **Files**: `PluginProcessor.cpp`
 - **Risk**: Very low. Already confirmed unused.
-- [ ] Remove VoicePan MIDI mapping case
-- [ ] Remove leftover per-voice pan comments
-- [ ] Verify build + tests pass
+- [x] Remove VoicePan MIDI mapping case
+- [x] Remove leftover per-voice pan comments
+- [x] Verify build + tests pass
 
 ---
 

@@ -858,6 +858,12 @@ public:
   void updateFxBypassVisuals();
   void updateSidPlayerOverlay();
 
+  // resized() layout subsections
+  void layoutTopRow(juce::Rectangle<int> &bounds);
+  void layoutSidPanels(juce::Rectangle<int> &bounds);
+  void layoutVoiceEditor(juce::Rectangle<int> &bounds);
+  void layoutBottomControls(juce::Rectangle<int> &bounds);
+
 private:
   BreadbinProcessor &processor;
 
@@ -1241,8 +1247,10 @@ private:
   juce::TooltipWindow tooltipWindow{this, 500}; // 500ms delay before showing
 
   void setupControls();
-  void setupLeftSID();
-  void setupRightSID();
+  void setupGlobalControls();  // Mode, presets, master vol, ext in, clock
+  void setupFXControls();      // Chorus, delay, reverb, filter envelope
+  void setupPopupButtons();    // Wavetable, mod matrix, chord, SID player, digi, overlays
+  void setupSidPanel(bool isLeft);
   void setupVoiceEditor();
   void selectVoice(int voice);
   void loadVoiceToUI(int voice);

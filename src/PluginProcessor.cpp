@@ -398,13 +398,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     if (wtActive)
       semitoneMod += static_cast<float>(wtStep.pitchOffset);
 
-    // Compute global filter mod offset (same as applyFilterModulation)
-    int filterModOffset = 0;
-    filterModOffset += static_cast<int>(modWheelValue * 1000.0f);
-    if (lfo.enabled && lfo.depthFilter > 0.0f)
-      filterModOffset += static_cast<int>(val1 * lfo.depthFilter * 1024.0f);
-    if (lfo2.enabled && lfo2.depthFilter > 0.0f)
-      filterModOffset += static_cast<int>(val2 * lfo2.depthFilter * 1024.0f);
+    int filterModOffset = computeFilterModOffset();
 
     double pitchMultiplier =
         (semitoneMod != 0.0f) ? std::pow(2.0, semitoneMod / 12.0) : 1.0;
@@ -504,22 +498,8 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
   }
 
   // Read per-SID pan from APVTS — recalculate trig only when changed
-  float newLeftPan = leftPanPtr->load();
-  float newRightPan = rightPanPtr->load();
-  if (newLeftPan != cachedLeftPanVal) {
-    cachedLeftPanVal = newLeftPan;
-    constexpr float piOver2 = 1.5707963267948966f;
-    float angle = (newLeftPan + 1.0f) * 0.5f * piOver2;
-    cachedLeftPanL = std::cos(angle);
-    cachedLeftPanR = std::sin(angle);
-  }
-  if (newRightPan != cachedRightPanVal) {
-    cachedRightPanVal = newRightPan;
-    constexpr float piOver2 = 1.5707963267948966f;
-    float angle = (newRightPan + 1.0f) * 0.5f * piOver2;
-    cachedRightPanL = std::cos(angle);
-    cachedRightPanR = std::sin(angle);
-  }
+  updatePanCache(leftPanPtr->load(), cachedLeftPanVal, cachedLeftPanL, cachedLeftPanR);
+  updatePanCache(rightPanPtr->load(), cachedRightPanVal, cachedRightPanL, cachedRightPanR);
   float leftGainL = cachedLeftPanL;
   float leftGainR = cachedLeftPanR;
   float rightGainL = cachedRightPanL;
@@ -1413,49 +1393,42 @@ void BreadbinProcessor::processFilterEnvelope(int numSamples) {
 }
 
 void BreadbinProcessor::applyFilterModulation() {
-  // Unified filter cutoff modulation: base + mod wheel + LFO + filter
-  // envelope
-  int modOffsetLeft = 0;
-  int modOffsetRight = 0;
+  int modOffset = computeFilterModOffset();
 
-  // Mod wheel: adds 0-1000 to filter cutoff
-  int modWheelOffset = static_cast<int>(modWheelValue * 1000.0f);
-  modOffsetLeft += modWheelOffset;
-  modOffsetRight += modWheelOffset;
-
-  // LFO1 filter depth
-  if (lfo.enabled && lfo.depthFilter > 0.0f) {
-    int lfoOffset =
-        static_cast<int>(lfo.currentValue * lfo.depthFilter * 1024.0f);
-    modOffsetLeft += lfoOffset;
-    modOffsetRight += lfoOffset;
-  }
-
-  // LFO2 filter depth
-  if (lfo2.enabled && lfo2.depthFilter > 0.0f) {
-    int lfo2Offset =
-        static_cast<int>(lfo2.currentValue * lfo2.depthFilter * 1024.0f);
-    modOffsetLeft += lfo2Offset;
-    modOffsetRight += lfo2Offset;
-  }
-
-  // Filter envelope
+  // Filter envelope (global, for mono/para paths)
   if (filterEnvEnablePtr->load() > 0.5f) {
     float envAmount = filterEnvAmountPtr->load();
-    int envOffset =
+    modOffset +=
         static_cast<int>(filterEnv.currentValue * envAmount * 2047.0f);
-    modOffsetLeft += envOffset;
-    modOffsetRight += envOffset;
   }
 
   // Apply combined modulation
-  int leftCutoff = juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffsetLeft);
+  int leftCutoff = juce::jlimit(0, 2047, baseFilterCutoffLeft + modOffset);
   int rightCutoff =
-      juce::jlimit(0, 2047, baseFilterCutoffRight + modOffsetRight);
+      juce::jlimit(0, 2047, baseFilterCutoffRight + modOffset);
   lastAppliedCutoffLeft = leftCutoff;
   lastAppliedCutoffRight = rightCutoff;
   sidLeft.setFilterCutoff(leftCutoff);
   sidRight.setFilterCutoff(rightCutoff);
+}
+
+int BreadbinProcessor::computeFilterModOffset() const {
+  int offset = static_cast<int>(modWheelValue * 1000.0f);
+  if (lfo.enabled && lfo.depthFilter > 0.0f)
+    offset += static_cast<int>(lfo.currentValue * lfo.depthFilter * 1024.0f);
+  if (lfo2.enabled && lfo2.depthFilter > 0.0f)
+    offset += static_cast<int>(lfo2.currentValue * lfo2.depthFilter * 1024.0f);
+  return offset;
+}
+
+void BreadbinProcessor::updatePanCache(float panValue, float &cachedPan,
+                                       float &gainL, float &gainR) {
+  if (panValue == cachedPan) return;
+  cachedPan = panValue;
+  constexpr float piOver2 = 1.5707963267948966f;
+  float angle = (panValue + 1.0f) * 0.5f * piOver2;
+  gainL = std::cos(angle);
+  gainR = std::sin(angle);
 }
 
 void BreadbinProcessor::setMasterVolume(float vol) {

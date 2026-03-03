@@ -858,6 +858,8 @@ private:
   void applyLFOModulation();    // Apply LFO1+LFO2 to PW and pitch destinations
   void applyFilterModulation(); // Unified filter cutoff modulation (mod wheel +
                                 // LFO + filter env)
+  int computeFilterModOffset() const; // Mod wheel + LFO1 + LFO2 filter offset
+  void updatePanCache(float panValue, float &cachedPan, float &gainL, float &gainR);
   void processFilterEnvelope(int numSamples); // Advance filter envelope
 
   // processBlock subsystems (extracted for readability)
