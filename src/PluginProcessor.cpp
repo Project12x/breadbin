@@ -1552,6 +1552,23 @@ int BreadbinProcessor::findFreePolyVoice() const {
   return -1;
 }
 
+void BreadbinProcessor::normalizePolyNoteCounters() {
+  // Prevent uint32_t wrap by renumbering when counter gets large.
+  // Preserves relative order of all active voices.
+  if (polyNoteCounter < 0x80000000u)
+    return;
+  uint32_t minVal = UINT32_MAX;
+  for (int i = 0; i < MAX_POLY; ++i)
+    if (polyVoices[i].active || polyVoices[i].releasing)
+      minVal = std::min(minVal, polyVoices[i].startSample);
+  if (minVal == UINT32_MAX)
+    minVal = 0;
+  for (int i = 0; i < MAX_POLY; ++i)
+    if (polyVoices[i].active || polyVoices[i].releasing)
+      polyVoices[i].startSample -= minVal;
+  polyNoteCounter -= minVal;
+}
+
 int BreadbinProcessor::findStealablePolyVoice() const {
   int limit = polyMaxNotes;
   int oldest = -1;
@@ -3926,20 +3943,30 @@ void BreadbinProcessor::snapshotSidPlayerToAPVTS() {
   }
 
   // Filter cutoff (11-bit: reg 0x15 bits 0-2 + reg 0x16)
+  // Not an APVTS param — set via processor fields + SID engines directly
   int cutoff = (snapshot.regs[0x15] & 0x07) | (snapshot.regs[0x16] << 3);
-  setParam("leftCutoff", static_cast<float>(cutoff));
+  setBaseFilterCutoff(true, cutoff);
+  setBaseFilterCutoff(false, cutoff);
+  sidLeft.setFilterCutoff(cutoff);
+  sidRight.setFilterCutoff(cutoff);
 
   // Filter resonance (reg 0x17 hi nibble, 0-15)
   int resonance = (snapshot.regs[0x17] >> 4) & 0x0F;
-  setParam("leftResonance", static_cast<float>(resonance));
+  setBaseFilterResonance(true, resonance);
+  setBaseFilterResonance(false, resonance);
+  sidLeft.setFilterResonance(resonance);
+  sidRight.setFilterResonance(resonance);
 
   // Filter mode (reg 0x18 bits 4-6)
   uint8_t modeReg = snapshot.regs[0x18];
-  setParam("leftLP", (modeReg & 0x10) ? 1.0f : 0.0f);
-  setParam("leftBP", (modeReg & 0x20) ? 1.0f : 0.0f);
-  setParam("leftHP", (modeReg & 0x40) ? 1.0f : 0.0f);
+  bool lp = (modeReg & 0x10) != 0;
+  bool bp = (modeReg & 0x20) != 0;
+  bool hp = (modeReg & 0x40) != 0;
+  sidLeft.setFilterMode(lp, bp, hp);
+  sidRight.setFilterMode(lp, bp, hp);
+  cacheFilterMode(lp, bp, hp, lp, bp, hp);
 
   // Master volume (reg 0x18 lo nibble, 0-15 -> 0.0-1.0)
   int sidVol = modeReg & 0x0F;
-  setParam("masterVolume", static_cast<float>(sidVol) / 15.0f);
+  setParam("masterVol", static_cast<float>(sidVol) / 15.0f);
 }

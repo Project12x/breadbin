@@ -447,6 +447,7 @@ public:
 private:
 
   // Poly voice management
+  void normalizePolyNoteCounters();
   int findFreePolyVoice() const;
   int findStealablePolyVoice() const;
   void polyNoteOn(int midiNote, int velocity);
