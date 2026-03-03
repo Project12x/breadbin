@@ -2658,7 +2658,7 @@ void BreadbinProcessor::processWavetable(int numSamples) {
       hostSampleRate / static_cast<double>(wavetable.rateHz);
   wavetable.timer += numSamples;
 
-  if (wavetable.timer >= samplesPerStep) {
+  while (wavetable.timer >= samplesPerStep) {
     wavetable.timer -= samplesPerStep;
 
     // Advance step

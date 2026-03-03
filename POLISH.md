@@ -70,14 +70,9 @@ Fixes that affect audio output quality or DAW integration.
 - [ ] Implement sub-block WT stepping (or per-sample if overhead is negligible)
 - [ ] Test: verify smooth stepping at 200Hz WT rate
 
-### 2C. Sustain pedal release uses arp held-note tracking
-- **Issue**: When sustain pedal is released, the code iterates `arpHeldNotes` to find notes to release — but this container is also used by the arpeggiator. When arp is disabled, `arpHeldNotes` may not accurately reflect held keys.
-- **Action**: Audit the note-on/off path. If `arpHeldNotes` is always populated regardless of arp state, document this. Otherwise, use a separate `sustainedNotes` set.
-- **Files**: `PluginProcessor.cpp` (handleMidiEvent sustain pedal section)
-- **Risk**: Low. Needs careful audit of note tracking across all voice modes.
-- [ ] Audit arpHeldNotes population in all voice modes
-- [ ] Fix or document behavior
-- [ ] Test: sustain pedal in mono/poly/para modes with arp disabled
+### 2C. ~~Sustain pedal release uses arp held-note tracking~~ VERIFIED OK
+
+- **Audit result**: `arpHeldNotes` is populated on every note-on/off regardless of arp state. It functions as a general "physically held keys" tracker. Sustain pedal release correctly uses it to identify notes no longer held. Naming is misleading but behavior is correct. No fix needed.
 
 ---
 
