@@ -329,9 +329,12 @@ public:
     rangeMin = min;
     rangeMax = max;
   }
-  void setValues(float base, float modulated) {
+  bool setValues(float base, float modulated) {
+    if (base == baseValue && modulated == modulatedValue)
+      return false;
     baseValue = base;
     modulatedValue = modulated;
+    return true;
   }
   void paint(juce::Graphics &g) override {
     auto bounds = getLocalBounds().toFloat();

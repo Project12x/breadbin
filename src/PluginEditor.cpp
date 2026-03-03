@@ -1131,49 +1131,47 @@ void BreadbinEditor::timerCallback() {
     repaint();
   }
 
-  // Update modulation meters
-  cutoffMeterL.setValues(
-      static_cast<float>(processor.getBaseFilterCutoff(true)),
-      static_cast<float>(processor.getLastAppliedCutoffLeft()));
-  cutoffMeterL.repaint();
+  // Update modulation meters (only repaint when values change)
+  if (cutoffMeterL.setValues(
+          static_cast<float>(processor.getBaseFilterCutoff(true)),
+          static_cast<float>(processor.getLastAppliedCutoffLeft())))
+    cutoffMeterL.repaint();
 
-  cutoffMeterR.setValues(
-      static_cast<float>(processor.getBaseFilterCutoff(false)),
-      static_cast<float>(processor.getLastAppliedCutoffRight()));
-  cutoffMeterR.repaint();
+  if (cutoffMeterR.setValues(
+          static_cast<float>(processor.getBaseFilterCutoff(false)),
+          static_cast<float>(processor.getLastAppliedCutoffRight())))
+    cutoffMeterR.repaint();
 
-  pwMeter.setValues(
-      static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
-      static_cast<float>(processor.getLastAppliedPW()));
-  pwMeter.repaint();
+  if (pwMeter.setValues(
+          static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
+          static_cast<float>(processor.getLastAppliedPW())))
+    pwMeter.repaint();
 
-  pitchMeter.setValues(0.0f, processor.getLastAppliedPitchOffset());
-  pitchMeter.repaint();
+  if (pitchMeter.setValues(0.0f, processor.getLastAppliedPitchOffset()))
+    pitchMeter.repaint();
 
-  resMeterL.setValues(
-      static_cast<float>(processor.getBaseFilterResonance(true)),
-      static_cast<float>(processor.getLastAppliedResLeft()));
-  resMeterL.repaint();
+  if (resMeterL.setValues(
+          static_cast<float>(processor.getBaseFilterResonance(true)),
+          static_cast<float>(processor.getLastAppliedResLeft())))
+    resMeterL.repaint();
 
-  resMeterR.setValues(
-      static_cast<float>(processor.getBaseFilterResonance(false)),
-      static_cast<float>(processor.getLastAppliedResRight()));
-  resMeterR.repaint();
+  if (resMeterR.setValues(
+          static_cast<float>(processor.getBaseFilterResonance(false)),
+          static_cast<float>(processor.getLastAppliedResRight())))
+    resMeterR.repaint();
 
-  // Update filter response displays
+  // Update filter response displays (setters have internal dirty checks)
   filterDisplay_L.setCutoff(processor.getBaseFilterCutoff(true));
   filterDisplay_L.setResonance(processor.getBaseFilterResonance(true));
   filterDisplay_L.setModes(leftLPButton.getToggleState(),
                             leftBPButton.getToggleState(),
                             leftHPButton.getToggleState());
-  filterDisplay_L.repaint();
 
   filterDisplay_R.setCutoff(processor.getBaseFilterCutoff(false));
   filterDisplay_R.setResonance(processor.getBaseFilterResonance(false));
   filterDisplay_R.setModes(rightLPButton.getToggleState(),
                             rightBPButton.getToggleState(),
                             rightHPButton.getToggleState());
-  filterDisplay_R.repaint();
 
   // Preset dirty indicator
   presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
@@ -1250,6 +1248,77 @@ void BreadbinEditor::timerCallback() {
     ringModButton.setAlpha(1.0f);
     syncButton.setAlpha(1.0f);
     modOffsetSlider.setAlpha(1.0f);
+  }
+
+  // Grey out voice 1-5 buttons in para mode (all voices share V1 settings)
+  if (paraActive) {
+    for (int i = 1; i < 3; ++i)
+      leftVoiceButtons[i].setAlpha(0.35f);
+    for (int i = 0; i < 3; ++i)
+      rightVoiceButtons[i].setAlpha(0.35f);
+    leftVoiceButtons[0].setAlpha(1.0f);
+    // Show "SHARED" hint when editing non-primary voice
+    if (selectedVoice > 0) {
+      juce::String sidName = selectedVoice < 3 ? "L" : "R";
+      voiceEditorLabel.setText(
+          "VOICE " + juce::String(selectedVoice + 1) + " (" + sidName +
+              ") SHARED",
+          juce::dontSendNotification);
+    }
+  } else {
+    for (int i = 0; i < 3; ++i) {
+      leftVoiceButtons[i].setAlpha(1.0f);
+      rightVoiceButtons[i].setAlpha(1.0f);
+    }
+  }
+
+  // FX bypass visual feedback — dim controls when effect is disabled
+  {
+    float chorusAlpha = chorusEnableButton.getToggleState() ? 1.0f : 0.35f;
+    chorusRateSlider.setAlpha(chorusAlpha);
+    chorusDepthSlider.setAlpha(chorusAlpha);
+    chorusMixSlider.setAlpha(chorusAlpha);
+    chorusRateLabel.setAlpha(chorusAlpha);
+    chorusDepthLabel.setAlpha(chorusAlpha);
+    chorusMixLabel.setAlpha(chorusAlpha);
+
+    float delayAlpha = delayEnableButton.getToggleState() ? 1.0f : 0.35f;
+    delayTimeLSlider.setAlpha(delayAlpha);
+    delayTimeRSlider.setAlpha(delayAlpha);
+    delayFeedbackSlider.setAlpha(delayAlpha);
+    delayMixSlider.setAlpha(delayAlpha);
+    delayTimeLLabel.setAlpha(delayAlpha);
+    delayTimeRLabel.setAlpha(delayAlpha);
+    delayFBLabel.setAlpha(delayAlpha);
+    delayMixLabel.setAlpha(delayAlpha);
+
+    float reverbAlpha = reverbEnableButton.getToggleState() ? 1.0f : 0.35f;
+    reverbDecaySlider.setAlpha(reverbAlpha);
+    reverbDampingSlider.setAlpha(reverbAlpha);
+    reverbMixSlider.setAlpha(reverbAlpha);
+    reverbDecayLabel.setAlpha(reverbAlpha);
+    reverbDampingLabel.setAlpha(reverbAlpha);
+    reverbMixLabel.setAlpha(reverbAlpha);
+  }
+
+  // Mod matrix activity indicators — show active slot count on button
+  {
+    int activeSlots = 0;
+    for (int i = 0; i < 4; ++i) {
+      auto *enableParam = processor.apvts.getRawParameterValue(
+          "mod" + juce::String(i) + "_enable");
+      if (enableParam && enableParam->load() >= 0.5f) {
+        auto *srcParam = processor.apvts.getRawParameterValue(
+            "mod" + juce::String(i) + "_src");
+        if (srcParam && static_cast<int>(srcParam->load()) > 0)
+          ++activeSlots;
+      }
+    }
+    if (activeSlots > 0)
+      modMatrixButton.setButtonText(
+          "Modulation [" + juce::String(activeSlots) + "]");
+    else
+      modMatrixButton.setButtonText("Modulation");
   }
 
   // SID Player register overlay

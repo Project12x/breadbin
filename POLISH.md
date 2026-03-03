@@ -124,35 +124,35 @@ Visual improvements and usability enhancements.
 - **Action**: Cache previous values and only `repaint()` when they differ (threshold comparison for float values).
 - **Files**: `PluginEditor.cpp` (timerCallback)
 - **Risk**: Very low. Reduces unnecessary UI work.
-- [ ] Add cached previous values for all metered displays
-- [ ] Conditional repaint on value change
-- [ ] Verify visual update still works
+- [x] Add cached previous values for all metered displays
+- [x] Conditional repaint on value change
+- [x] Verify visual update still works
 
 ### 4B. Para mode voice editor clarity
 - **Issue**: In Paraphonic mode, all voices share the same filter and ADSR settings inherited from voice 0. The voice editor still shows individual voice tabs, which is misleading — edits to voices 1-5 are overridden.
 - **Action**: When in Para mode, either (a) disable/grey out voice 1-5 tabs with a "Shared from V0" label, or (b) auto-sync edits across all voices with visual indication.
 - **Files**: `PluginEditor.cpp` (voice editor section)
 - **Risk**: Low. UI-only change.
-- [ ] Detect para mode in voice editor
-- [ ] Grey out or annotate inherited voices
-- [ ] Test: switch between modes, verify UI updates
+- [x] Detect para mode in voice editor
+- [x] Grey out or annotate inherited voices
+- [x] Test: switch between modes, verify UI updates
 
 ### 4C. FX bypass visual feedback
 - **Issue**: FX enable/disable toggles exist but aren't visually prominent. When an effect is bypassed, there's no strong visual cue (e.g., dimmed section, strikethrough label).
 - **Action**: When FX is disabled, reduce opacity of the entire effect's control group or add a "BYPASSED" overlay.
 - **Files**: `PluginEditor.cpp` (FX section)
 - **Risk**: Very low. Visual-only.
-- [ ] Add visual dimming/overlay for bypassed FX sections
-- [ ] Test: toggle each FX on/off, verify visual feedback
+- [x] Add visual dimming/overlay for bypassed FX sections
+- [x] Test: toggle each FX on/off, verify visual feedback
 
 ### 4D. Mod matrix activity indicators on main panel
 - **Issue**: When mod matrix slots are active, there's no indication on the main panel — user must open the Modulation popup to see routing status.
 - **Action**: Add small LED-style indicators next to the Modulation button showing how many slots are active (e.g., 4 dots, lit when slot is enabled).
 - **Files**: `PluginEditor.h/cpp`
 - **Risk**: Low. Additive UI feature.
-- [ ] Add mod slot indicator component
-- [ ] Update in timerCallback when slot enable states change
-- [ ] Position near Modulation popup button
+- [x] Add mod slot indicator component
+- [x] Update in timerCallback when slot enable states change
+- [x] Position near Modulation popup button
 
 ---
 
