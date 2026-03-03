@@ -911,12 +911,6 @@ private:
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       paraRetrigAttachment;
 
-  // Time Machine (aging)
-  MappableSlider agingSlider{processor, BreadbinProcessor::ControlParam::Aging};
-  juce::Label agingLabel{"Aging", "AGING"};
-  juce::Label agingStartLabel;
-  juce::Label agingEndLabel;
-
   // Master Volume
   juce::Label masterVolLabel{"Master", "MASTER"};
   MappableSlider masterVolSlider{processor,
@@ -1038,8 +1032,6 @@ private:
       chipLeftAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       chipRightAttach;
-  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-      agingAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
       leftDetuneAttach;
   std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>

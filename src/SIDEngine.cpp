@@ -150,16 +150,6 @@ void SIDEngine::setClockMode(ClockMode mode) {
     prepare(hostSampleRate);
 }
 
-void SIDEngine::setAgingFactor(float aging) {
-  agingFactor = std::clamp(aging, 0.0f, 1.0f);
-
-  // Aging shifts filter cutoff down and adds slight nonlinearity
-  // Real aged SIDs can have cutoff drift of ~10-20%
-  agingCutoffOffset = static_cast<int>(-200.0f * agingFactor);
-
-  // Update filter with new aging offset
-  updateFilterRegisters();
-}
 
 float SIDEngine::clock() {
   // If we have a buffered sample, return it
@@ -425,14 +415,10 @@ void SIDEngine::updateVoiceRegisters(int voice) {
 }
 
 void SIDEngine::updateFilterRegisters() {
-  // Apply aging offset to cutoff
-  int adjustedCutoff = static_cast<int>(filterCutoff) + agingCutoffOffset;
-  adjustedCutoff = std::clamp(adjustedCutoff, 0, 2047);
-
   // FC Lo (3 bits)
-  writeRegister(0x15, adjustedCutoff & 0x07);
+  writeRegister(0x15, filterCutoff & 0x07);
   // FC Hi (8 bits)
-  writeRegister(0x16, (adjustedCutoff >> 3) & 0xFF);
+  writeRegister(0x16, (filterCutoff >> 3) & 0xFF);
 
   // Resonance + voice routing
   writeRegister(0x17, (filterResonance << 4) | filterVoiceMask);

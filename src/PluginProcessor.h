@@ -101,7 +101,6 @@ public:
   enum class ControlParam {
     None = 0,
     MasterVolume,
-    Aging,
     LeftCutoff,
     LeftResonance,
     RightCutoff,
@@ -216,9 +215,6 @@ public:
   void setRightChipModel(SIDEngine::ChipModel model);
   // Convenience: set both at once
   void setBothChipModels(SIDEngine::ChipModel model);
-
-  float getAgingFactor() const { return agingFactor; }
-  void setAgingFactor(float aging);
 
   // MIDI collector for virtual keyboard (standalone)
   juce::MidiMessageCollector &getMidiMessageCollector() {
@@ -475,7 +471,6 @@ private:
   DualMode dualMode = DualMode::StereoSplit;
   SIDEngine::ChipModel chipModelLeft = SIDEngine::ChipModel::MOS6581;
   SIDEngine::ChipModel chipModelRight = SIDEngine::ChipModel::MOS8580;
-  float agingFactor = 0.0f;
   float leftDetuneCents = 0.0f;
   float rightDetuneCents = 0.0f;
   double cachedDetuneL = 1.0; // std::pow(2, leftDetuneCents/1200), cached
@@ -640,7 +635,6 @@ private:
   std::atomic<float> *dualModePtr = nullptr;
   std::atomic<float> *chipLeftPtr = nullptr;
   std::atomic<float> *chipRightPtr = nullptr;
-  std::atomic<float> *agingPtr = nullptr;
   std::atomic<float> *leftDetunePtr = nullptr;
   std::atomic<float> *rightDetunePtr = nullptr;
   std::atomic<float> *glidePtr = nullptr;

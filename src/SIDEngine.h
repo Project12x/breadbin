@@ -36,8 +36,6 @@ public:
   void setChipModel(ChipModel model);
   void setClockMode(ClockMode mode);
   ClockMode getClockMode() const { return currentClockMode; }
-  void setAgingFactor(float aging); // 0.0 = fresh, 1.0 = vintage
-
   // Generate one sample at host sample rate (handles internal clock/resample)
   float clock();
 
@@ -93,10 +91,6 @@ private:
   // Resampling state
   double clockAccumulator = 0.0;
   double clockRatio = 1.0;
-
-  // Aging simulation
-  float agingFactor = 0.0f;
-  int agingCutoffOffset = 0;
 
   // Sample output buffer (reSIDfp doesn't produce 1 sample per call)
   float sampleBuffer[8] = {};

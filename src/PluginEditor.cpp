@@ -996,9 +996,6 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   chipRightAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processor.apvts, "chipRight", rightChipSelector);
-  agingAttach =
-      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-          processor.apvts, "aging", agingSlider);
   leftDetuneAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
           processor.apvts, "leftDetune", leftDetuneSlider);
@@ -2783,8 +2780,6 @@ void BreadbinEditor::setupControls() {
             dualModeSelector.setSelectedId(
                 static_cast<int>(processor.getDualMode()) + 1,
                 juce::dontSendNotification);
-            agingSlider.setValue(processor.getAgingFactor(),
-                                 juce::dontSendNotification);
             clockModeSelector.setSelectedId(
                 static_cast<int>(processor.getClockMode()) + 1,
                 juce::dontSendNotification);
@@ -3014,34 +3009,6 @@ void BreadbinEditor::setupControls() {
   loadVoiceButton.setTooltip("Load settings for this voice from a .voice file");
   loadVoiceButton.onClick = [this]() { loadVoicePresetFromFile(); };
   addAndMakeVisible(loadVoiceButton);
-
-  // Chip Age (Time Machine)
-  agingLabel.setText("Chip Age:", juce::dontSendNotification);
-  agingLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  agingLabel.setFont(retroFont.withHeight(7.0f));
-  addAndMakeVisible(agingLabel);
-
-  agingStartLabel.setText("Fresh", juce::dontSendNotification);
-  agingStartLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingStartLabel.setFont(proFont.withHeight(10.0f));
-  addAndMakeVisible(agingStartLabel);
-
-  agingEndLabel.setText("Vintage", juce::dontSendNotification);
-  agingEndLabel.setColour(juce::Label::textColourId, juce::Colours::grey);
-  agingEndLabel.setFont(proFont.withHeight(10.0f));
-  addAndMakeVisible(agingEndLabel);
-
-  agingSlider.setRange(0.0, 1.0, 0.01);
-  agingSlider.setDoubleClickReturnValue(true, 0.0);
-  agingSlider.setValue(0.0);
-  agingSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  agingSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-  agingSlider.setTooltip(
-      "Time Machine: Simulates capacitor aging from 1982 to now");
-  agingSlider.onValueChange = [this]() {
-    processor.setAgingFactor(static_cast<float>(agingSlider.getValue()));
-  };
-  addAndMakeVisible(agingSlider);
 
   // ========== ARPEGGIATOR ==========
   arpEnableButton.setTooltip(
@@ -4239,11 +4206,6 @@ void BreadbinEditor::resized() {
   clockModeLabel.setBounds(bottomStack.removeFromRight(40));
   bottomStack.removeFromRight(pad * 2);
 
-  agingEndLabel.setBounds(bottomStack.removeFromRight(50));
-  agingSlider.setBounds(bottomStack.removeFromRight(120));
-  agingStartLabel.setBounds(bottomStack.removeFromRight(40));
-  agingLabel.setBounds(bottomStack.removeFromRight(60));
-
   bounds.removeFromBottom(8); // Increased pad
 
   // 2. Middle Row: Arpeggiator (Right-justified, Toggle on Left)
@@ -4772,8 +4734,7 @@ void BreadbinEditor::applyGlobalPreset(int presetId) {
   setParam("paraSpread", 0.0f);
   setParam("paraFilterRetrig", 1.0f);
 
-  // Note: masterVol, chipLeft/Right, aging, extInput left unchanged (user
-  // preference)
+  // Note: masterVol, chipLeft/Right, extInput left unchanged (user preference)
 
   // ---- VOICE CONFIGURATION HELPER ----
   // Sets voice waveform/ADSR via APVTS, assigns voice preset ID, syncs engine
@@ -7237,8 +7198,6 @@ void BreadbinEditor::loadPresetFromFile() {
           dualModeSelector.setSelectedId(
               static_cast<int>(processor.getDualMode()) + 1,
               juce::dontSendNotification);
-          agingSlider.setValue(processor.getAgingFactor(),
-                               juce::dontSendNotification);
           // pitchBendRange now APVTS-managed, auto-restored
           clockModeSelector.setSelectedId(
               static_cast<int>(processor.getClockMode()) + 1,

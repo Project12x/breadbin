@@ -19,7 +19,6 @@
 - [x] Mode and model selectors
 - [x] ADSR envelope controls
 - [x] Filter controls (cutoff, resonance, LP/BP/HP)
-- [x] Time Machine aging slider
 - [x] Virtual MIDI keyboard (standalone)
 
 ## Phase 4: Polish & Testing ✅

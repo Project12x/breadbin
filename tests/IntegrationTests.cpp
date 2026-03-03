@@ -284,7 +284,6 @@ void testAPVTSParameters() {
   check("dualMode");
   check("chipLeft");
   check("chipRight");
-  check("aging");
   check("leftDetune");
   check("rightDetune");
   check("glide");

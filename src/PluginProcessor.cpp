@@ -60,8 +60,6 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     pv.sidRight->setChipModel(chipModelRight);
     pv.sidLeft->setClockMode(clockMode);
     pv.sidRight->setClockMode(clockMode);
-    pv.sidLeft->setAgingFactor(agingFactor);
-    pv.sidRight->setAgingFactor(agingFactor);
   }
 
   // Initialize MIDI collector for virtual keyboard
@@ -127,7 +125,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   // SID volume register set to max for voice rendering; digi modes
   // manage the register themselves (4-bit writes $D418, 8-bit zeroes it).
   dualMode = static_cast<DualMode>(static_cast<int>(dualModePtr->load()));
-  setAgingFactor(agingPtr->load());
   float newLeftDetune = leftDetunePtr->load();
   float newRightDetune = rightDetunePtr->load();
   if (newLeftDetune != leftDetuneCents) {
@@ -1532,15 +1529,6 @@ void BreadbinProcessor::setBothChipModels(SIDEngine::ChipModel model) {
   setRightChipModel(model);
 }
 
-void BreadbinProcessor::setAgingFactor(float aging) {
-  agingFactor = aging;
-  sidLeft.setAgingFactor(aging);
-  sidRight.setAgingFactor(aging);
-  for (auto &pv : polyVoices) {
-    pv.sidLeft->setAgingFactor(aging);
-    pv.sidRight->setAgingFactor(aging);
-  }
-}
 
 // ==================== POLY VOICE MANAGEMENT ====================
 
@@ -2910,9 +2898,6 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
   case ControlParam::MasterVolume:
     setMasterVolume(normalized);
     break;
-  case ControlParam::Aging:
-    setAgingFactor(normalized);
-    break;
   case ControlParam::LeftCutoff:
     baseFilterCutoffLeft = static_cast<int>(normalized * 2047.0f);
     sidLeft.setFilterCutoff(baseFilterCutoffLeft);
@@ -3310,8 +3295,6 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
   switch (param) {
   case ControlParam::MasterVolume:
     return "Master Volume";
-  case ControlParam::Aging:
-    return "Chip Age";
   case ControlParam::LeftCutoff:
     return "Left SID Cutoff";
   case ControlParam::LeftResonance:
@@ -3493,8 +3476,6 @@ BreadbinProcessor::createParameterLayout() {
       juce::StringArray{"MOS 6581", "MOS 6581 R2", "MOS 6581 R3", "MOS 6581 R4",
                          "MOS 8580", "MOS 8580 R5", "CSG 9580", "MOS 8580D"},
       4));
-  layout.add(std::make_unique<juce::AudioParameterFloat>(
-      juce::ParameterID{"aging", 1}, "Chip Age", 0.0f, 1.0f, 0.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"leftDetune", 1}, "Left Detune", -50.0f, 50.0f, 0.0f));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
@@ -3770,7 +3751,6 @@ void BreadbinProcessor::initializeParameterPointers() {
   dualModePtr = apvts.getRawParameterValue("dualMode");
   chipLeftPtr = apvts.getRawParameterValue("chipLeft");
   chipRightPtr = apvts.getRawParameterValue("chipRight");
-  agingPtr = apvts.getRawParameterValue("aging");
   leftDetunePtr = apvts.getRawParameterValue("leftDetune");
   rightDetunePtr = apvts.getRawParameterValue("rightDetune");
   glidePtr = apvts.getRawParameterValue("glide");

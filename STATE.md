@@ -9,7 +9,6 @@
 - Dual SID emulation via reSIDfp (6 voices: 3 per chip)
 - Three stereo modes (Split, Unison, Multitimbral)
 - Per-channel chip selection (6581/8580)
-- Time Machine aging simulation
 - Waveform selection (Triangle, Saw, Pulse, Noise)
 - ADSR envelope controls
 - Filter (Cutoff, Resonance, LP/BP/HP) with per-voice routing
