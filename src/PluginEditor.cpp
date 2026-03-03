@@ -1127,11 +1127,16 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
 
 void BreadbinEditor::timerCallback() {
   midiLearnOverlay.tick();
-  if (midiLearnOverlay.isShowingAnything()) {
+  if (midiLearnOverlay.isShowingAnything())
     repaint();
-  }
 
-  // Update modulation meters (only repaint when values change)
+  updateModulationMeters();
+  updateVoiceCountDisplay();
+  updateFxBypassVisuals();
+  updateSidPlayerOverlay();
+}
+
+void BreadbinEditor::updateModulationMeters() {
   if (cutoffMeterL.setValues(
           static_cast<float>(processor.getBaseFilterCutoff(true)),
           static_cast<float>(processor.getLastAppliedCutoffLeft())))
@@ -1160,7 +1165,7 @@ void BreadbinEditor::timerCallback() {
           static_cast<float>(processor.getLastAppliedResRight())))
     resMeterR.repaint();
 
-  // Update filter response displays (setters have internal dirty checks)
+  // Filter response displays (setters have internal dirty checks)
   filterDisplay_L.setCutoff(processor.getBaseFilterCutoff(true));
   filterDisplay_L.setResonance(processor.getBaseFilterResonance(true));
   filterDisplay_L.setModes(leftLPButton.getToggleState(),
@@ -1178,20 +1183,19 @@ void BreadbinEditor::timerCallback() {
                            juce::dontSendNotification);
 
   // CPU load
-  {
-    float cpu = processor.getCpuLoad();
-    juce::String txt = "CPU: " + juce::String(static_cast<int>(cpu)) + "%";
-    if (cpu > 80.0f)
-      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::red);
-    else if (cpu > 50.0f)
-      cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
-    else
-      cpuLoadLabel.setColour(juce::Label::textColourId,
-                             juce::Colour(0xFF888888));
-    cpuLoadLabel.setText(txt, juce::dontSendNotification);
-  }
+  float cpu = processor.getCpuLoad();
+  juce::String txt = "CPU: " + juce::String(static_cast<int>(cpu)) + "%";
+  if (cpu > 80.0f)
+    cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::red);
+  else if (cpu > 50.0f)
+    cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
+  else
+    cpuLoadLabel.setColour(juce::Label::textColourId,
+                           juce::Colour(0xFF888888));
+  cpuLoadLabel.setText(txt, juce::dontSendNotification);
+}
 
-  // Voice count display + show/hide max notes selector
+void BreadbinEditor::updateVoiceCountDisplay() {
   auto vm = processor.getVoiceMode();
   bool showMaxNotes = (vm == BreadbinProcessor::VoiceMode::Polyphonic ||
                        vm == BreadbinProcessor::VoiceMode::PolyPara);
@@ -1228,15 +1232,13 @@ void BreadbinEditor::timerCallback() {
   }
   }
 
-  // Show para stacking controls only in Para/P+P modes
+  // Para mode controls visibility and voice button dimming
   bool paraActive = (vm == BreadbinProcessor::VoiceMode::Paraphonic ||
                      vm == BreadbinProcessor::VoiceMode::PolyPara);
   paraSpreadSlider.setVisible(paraActive);
   paraSpreadLabel.setVisible(paraActive);
   paraRetrigButton.setVisible(paraActive);
 
-  // Disable ring mod/sync toggles in para modes (cross-voice modulation
-  // causes intermodulation noise when voices play independent notes)
   ringModButton.setEnabled(!paraActive);
   syncButton.setEnabled(!paraActive);
   modOffsetSlider.setEnabled(!paraActive);
@@ -1257,7 +1259,6 @@ void BreadbinEditor::timerCallback() {
     for (int i = 0; i < 3; ++i)
       rightVoiceButtons[i].setAlpha(0.35f);
     leftVoiceButtons[0].setAlpha(1.0f);
-    // Show "SHARED" hint when editing non-primary voice
     if (selectedVoice > 0) {
       juce::String sidName = selectedVoice < 3 ? "L" : "R";
       voiceEditorLabel.setText(
@@ -1272,64 +1273,61 @@ void BreadbinEditor::timerCallback() {
     }
   }
 
-  // FX bypass visual feedback — dim controls when effect is disabled
-  {
-    float chorusAlpha = chorusEnableButton.getToggleState() ? 1.0f : 0.35f;
-    chorusRateSlider.setAlpha(chorusAlpha);
-    chorusDepthSlider.setAlpha(chorusAlpha);
-    chorusMixSlider.setAlpha(chorusAlpha);
-    chorusRateLabel.setAlpha(chorusAlpha);
-    chorusDepthLabel.setAlpha(chorusAlpha);
-    chorusMixLabel.setAlpha(chorusAlpha);
-
-    float delayAlpha = delayEnableButton.getToggleState() ? 1.0f : 0.35f;
-    delayTimeLSlider.setAlpha(delayAlpha);
-    delayTimeRSlider.setAlpha(delayAlpha);
-    delayFeedbackSlider.setAlpha(delayAlpha);
-    delayMixSlider.setAlpha(delayAlpha);
-    delayTimeLLabel.setAlpha(delayAlpha);
-    delayTimeRLabel.setAlpha(delayAlpha);
-    delayFBLabel.setAlpha(delayAlpha);
-    delayMixLabel.setAlpha(delayAlpha);
-
-    float reverbAlpha = reverbEnableButton.getToggleState() ? 1.0f : 0.35f;
-    reverbDecaySlider.setAlpha(reverbAlpha);
-    reverbDampingSlider.setAlpha(reverbAlpha);
-    reverbMixSlider.setAlpha(reverbAlpha);
-    reverbDecayLabel.setAlpha(reverbAlpha);
-    reverbDampingLabel.setAlpha(reverbAlpha);
-    reverbMixLabel.setAlpha(reverbAlpha);
-  }
-
-  // Mod matrix activity indicators — show active slot count on button
-  {
-    int activeSlots = 0;
-    for (int i = 0; i < 4; ++i) {
-      auto *enableParam = processor.apvts.getRawParameterValue(
-          "mod" + juce::String(i) + "_enable");
-      if (enableParam && enableParam->load() >= 0.5f) {
-        auto *srcParam = processor.apvts.getRawParameterValue(
-            "mod" + juce::String(i) + "_src");
-        if (srcParam && static_cast<int>(srcParam->load()) > 0)
-          ++activeSlots;
-      }
+  // Mod matrix activity indicators
+  int activeSlots = 0;
+  for (int i = 0; i < 4; ++i) {
+    auto *enableParam = processor.apvts.getRawParameterValue(
+        "mod" + juce::String(i) + "_enable");
+    if (enableParam && enableParam->load() >= 0.5f) {
+      auto *srcParam = processor.apvts.getRawParameterValue(
+          "mod" + juce::String(i) + "_src");
+      if (srcParam && static_cast<int>(srcParam->load()) > 0)
+        ++activeSlots;
     }
-    if (activeSlots > 0)
-      modMatrixButton.setButtonText(
-          "Modulation [" + juce::String(activeSlots) + "]");
-    else
-      modMatrixButton.setButtonText("Modulation");
   }
+  if (activeSlots > 0)
+    modMatrixButton.setButtonText(
+        "Modulation [" + juce::String(activeSlots) + "]");
+  else
+    modMatrixButton.setButtonText("Modulation");
+}
 
-  // SID Player register overlay
+void BreadbinEditor::updateFxBypassVisuals() {
+  float chorusAlpha = chorusEnableButton.getToggleState() ? 1.0f : 0.35f;
+  chorusRateSlider.setAlpha(chorusAlpha);
+  chorusDepthSlider.setAlpha(chorusAlpha);
+  chorusMixSlider.setAlpha(chorusAlpha);
+  chorusRateLabel.setAlpha(chorusAlpha);
+  chorusDepthLabel.setAlpha(chorusAlpha);
+  chorusMixLabel.setAlpha(chorusAlpha);
+
+  float delayAlpha = delayEnableButton.getToggleState() ? 1.0f : 0.35f;
+  delayTimeLSlider.setAlpha(delayAlpha);
+  delayTimeRSlider.setAlpha(delayAlpha);
+  delayFeedbackSlider.setAlpha(delayAlpha);
+  delayMixSlider.setAlpha(delayAlpha);
+  delayTimeLLabel.setAlpha(delayAlpha);
+  delayTimeRLabel.setAlpha(delayAlpha);
+  delayFBLabel.setAlpha(delayAlpha);
+  delayMixLabel.setAlpha(delayAlpha);
+
+  float reverbAlpha = reverbEnableButton.getToggleState() ? 1.0f : 0.35f;
+  reverbDecaySlider.setAlpha(reverbAlpha);
+  reverbDampingSlider.setAlpha(reverbAlpha);
+  reverbMixSlider.setAlpha(reverbAlpha);
+  reverbDecayLabel.setAlpha(reverbAlpha);
+  reverbDampingLabel.setAlpha(reverbAlpha);
+  reverbMixLabel.setAlpha(reverbAlpha);
+}
+
+void BreadbinEditor::updateSidPlayerOverlay() {
   if (processor.sidPlayerActive.load(std::memory_order_relaxed)) {
     auto snapshot = processor.getSidFilePlayer().getRegisterSnapshot();
     if (snapshot.valid) {
       const char *waveNames[] = {"---", "TRI", "SAW", "T+S", "PUL", "T+P",
                                  "S+P", "TSP", "NOI", "T+N", "S+N", "TSN",
                                  "P+N", "TPN", "SPN", "ALL"};
-      // Decode voice 0 registers for overlay on current voice controls
-      int v = selectedVoice % 3; // map to SID voice 0-2
+      int v = selectedVoice % 3;
       int base = v * 7;
       uint8_t ctrl = snapshot.regs[base + 4];
       int waveIdx = (ctrl >> 4) & 0x0F;

@@ -188,6 +188,121 @@ Lower priority improvements that can wait for a future release.
 
 ---
 
+## Phase 6: Code Refactoring
+
+Structural refactoring to reduce file sizes, eliminate duplication, and improve navigability. Pure refactors — no behavior changes.
+
+### 6A. Split processBlock into subsystems
+
+- **Issue**: `processBlock()` is 762 lines in a single function. Mixes parameter sync, MIDI handling, modulation, sample generation, SID file player mixing, FX chain, and safety processing.
+- **Action**: Extract into named helpers:
+  - `generateAudio(buffer, numSamples)` — poly + mono/para sample loops (~280 lines)
+  - `mixSidFilePlayer(buffer, numSamples)` — resampler + channel mixing (~43 lines)
+  - `processFXChain(buffer, numSamples)` — chorus, delay, reverb (~64 lines)
+  - `applySafetyChain(buffer, numSamples)` — limiter, noise gate, DC blocker (~66 lines)
+- **Files**: `PluginProcessor.h/cpp`
+- **Risk**: Low. Pure extraction, test suite catches regressions.
+- [x] Extract generateAudio()
+- [x] Extract mixSidFilePlayer()
+- [x] Extract processFXChain()
+- [x] Extract applySafetyChain()
+- [x] Verify all integration tests pass
+
+### 6B. Split handleMidiEvent into logical handlers
+
+- **Issue**: `handleMidiEvent()` is 287 lines with nested switch statements for note-on, note-off, all-notes-off, pitch bend, CC, and sustain pedal logic.
+- **Action**: Extract into:
+  - `handleNoteOn(note, channel)`
+  - `handleNoteOff(note, channel)`
+  - `handleAllNotesOff()`
+  - `handleSustainPedal(value)`
+- **Files**: `PluginProcessor.h/cpp`
+- **Risk**: Low. Pure extraction.
+- [x] Extract handleNoteOn()
+- [x] Extract handleNoteOff()
+- [x] Extract handleAllNotesOff()
+- [x] Extract handleSustainPedal()
+- [x] Verify all integration tests pass
+
+### 6C. Deduplicate mono/poly glide and filter modulation
+
+- **Issue**: Glide processing (lines 300-333) has nearly identical mono and poly paths. Filter modulation offset calculation (lines 402-407 vs 1436-1462) is computed twice with slight variation. Pan/gain mixing formula is duplicated across poly (571-575) and mono (671-674) paths.
+- **Action**: Extract shared helpers:
+  - `processGlide()` — unified mono/poly glide with voice mode branch
+  - `computeFilterModOffset()` — returns combined LFO + mod wheel + envelope offset
+  - `mixWithPanLaw()` — shared stereo output mixing
+- **Files**: `PluginProcessor.h/cpp`
+- **Risk**: Low. Must verify audio output is bit-identical.
+- [ ] Extract unified glide processing
+- [ ] Extract filter modulation offset calculation
+- [ ] Extract pan/gain mixing helper
+- [ ] Verify integration tests pass
+
+### 6D. Merge setupLeftSID/setupRightSID
+
+- **Issue**: `setupLeftSID()` and `setupRightSID()` are 153 lines each, ~80% identical. Both set up chip selector, 3 voice buttons, 3 voice enables, filter cutoff/resonance sliders + meters, filter mode buttons, pan slider, detune slider.
+- **Action**: Extract `setupSidPanel(bool isLeft)` that parameterizes control references.
+- **Files**: `PluginEditor.h/cpp`
+- **Risk**: Low. UI-only refactor.
+- [ ] Create setupSidPanel(bool isLeft) helper
+- [ ] Remove setupLeftSID/setupRightSID
+- [ ] Verify UI renders correctly
+
+### 6E. Split resized() into region helpers
+
+- **Issue**: `resized()` is 399 lines of sequential `.setBounds()` calls with hardcoded pixel values. FX rows (chorus/delay/reverb) follow identical layout patterns but are copy-pasted.
+- **Action**: Extract region helpers:
+  - `layoutTopRow(bounds)` — mode selectors, preset nav, master volume
+  - `layoutSidPanels(bounds)` — left/right SID controls
+  - `layoutVoiceEditor(bounds)` — waveform, ADSR, modulation toggles
+  - `layoutFXChain(bounds)` — chorus/delay/reverb (deduplicate row pattern)
+  - `layoutFilterEnvelope(bounds)` — filter env ADSR + amount
+  - `layoutPopupButtons(bounds)` — bottom popup button row
+- **Files**: `PluginEditor.h/cpp`
+- **Risk**: Low. Layout-only refactor.
+- [ ] Extract 6 layout region helpers
+- [ ] Deduplicate FX row layout pattern
+- [ ] Verify UI layout unchanged
+
+### 6F. Split setupControls() and reduce boilerplate
+
+- **Issue**: `setupControls()` is 721 lines — the largest function in the editor. Contains duplicated preset navigation lambdas (prev/next share `buildNavIds` logic), verbose popup menu construction, and repeated slider/label setup patterns (~50 occurrences across the file).
+- **Action**:
+  - Extract `buildPresetNavigationList()` to deduplicate prev/next lambdas
+  - Extract `setupLabeledSlider(label, slider, name, range, ...)` helper
+  - Split setupControls into thematic sections (presets, arp, FX, global)
+- **Files**: `PluginEditor.h/cpp`
+- **Risk**: Low. Pure refactor.
+- [ ] Extract buildPresetNavigationList()
+- [ ] Extract setupLabeledSlider() helper
+- [ ] Split setupControls() into 3-4 thematic helpers
+- [ ] Verify UI functions correctly
+
+### 6G. Split timerCallback into update functions
+
+- **Issue**: `timerCallback()` is 254 lines mixing meter updates, voice count display, para mode visibility, FX bypass visuals, mod matrix indicators, and SID player register overlay.
+- **Action**: Extract:
+  - `updateModulationMeters()`
+  - `updateVoiceCountDisplay()`
+  - `updateFxBypassVisuals()`
+  - `updateSidPlayerOverlay()`
+- **Files**: `PluginEditor.cpp`
+- **Risk**: Very low. Pure extraction.
+- [ ] Extract 4 timer update helpers
+- [ ] Verify all timer-driven visuals still work
+
+### 6H. Remove dead per-voice pan code
+
+- **Issue**: Per-voice pan was replaced by per-SID pan but remnants remain: `VoicePan` MIDI mapping (line 2881-2884, no-op with comment), state load comment (line 2056). No UI or preset writes to this path.
+- **Action**: Remove dead MIDI mapping case and leftover comments.
+- **Files**: `PluginProcessor.cpp`
+- **Risk**: Very low. Already confirmed unused.
+- [ ] Remove VoicePan MIDI mapping case
+- [ ] Remove leftover per-voice pan comments
+- [ ] Verify build + tests pass
+
+---
+
 ## Priority Summary
 
 | Phase | Items | Effort | Impact |
@@ -197,5 +312,6 @@ Lower priority improvements that can wait for a future release.
 | 3: Code Quality | 3 | Medium | Medium — reduces maintenance burden |
 | 4: UI Polish | 4 | Low-Medium | Medium — improves user experience |
 | 5: Nice-to-Have | 4 | Medium-High | Low — deferred post-release |
+| 6: Code Refactoring | 8 | Medium | Medium — reduces file sizes and duplication |
 
-**Recommended execution order**: Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5
+**Recommended execution order**: Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 6 -> Phase 5

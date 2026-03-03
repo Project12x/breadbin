@@ -154,7 +154,6 @@ public:
     VoiceDecay,
     VoiceSustain,
     VoiceRelease,
-    VoicePan,
     VoiceRingMod,
     VoiceSync,
     VoiceFilterEnable,
@@ -846,6 +845,10 @@ private:
   juce::dsp::Limiter<float> safetyLimiter;
 
   void handleMidiEvent(const juce::MidiMessage &msg);
+  void handleNoteOn(int note, int channel);
+  void handleNoteOff(int note, int channel);
+  void handleAllNotesOff();
+  void handleSustainPedal(int value);
   void triggerNote(int voiceIndex, int midiNote, int velocity);
   void releaseNote(int voiceIndex);
   void updateSIDFromQueue(bool isLeftSID); // Trigger all enabled voices on SID
@@ -856,6 +859,12 @@ private:
   void applyFilterModulation(); // Unified filter cutoff modulation (mod wheel +
                                 // LFO + filter env)
   void processFilterEnvelope(int numSamples); // Advance filter envelope
+
+  // processBlock subsystems (extracted for readability)
+  void generateAudio(juce::AudioBuffer<float> &buffer);
+  void mixSidFilePlayer(juce::AudioBuffer<float> &buffer);
+  void processFXChain(juce::AudioBuffer<float> &buffer);
+  void applySafetyChain(juce::AudioBuffer<float> &buffer);
 
   // Arpeggiator
   bool arpEnabled = false;

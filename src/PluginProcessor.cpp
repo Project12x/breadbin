@@ -467,6 +467,26 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
+  generateAudio(buffer);
+  mixSidFilePlayer(buffer);
+  processFXChain(buffer);
+  applySafetyChain(buffer);
+
+  // Measure CPU load: time spent / time available
+  const auto cpuTimerEnd = juce::Time::getHighResolutionTicks();
+  const double elapsed =
+      juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
+  const double budget = static_cast<double>(numSamples) / getSampleRate();
+  cpuLoadPercent.store(static_cast<float>(elapsed / budget * 100.0),
+                       std::memory_order_relaxed);
+}
+
+// ==========================================================================
+// processBlock subsystems (extracted for readability)
+// ==========================================================================
+
+void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
+  const int numSamples = buffer.getNumSamples();
   auto *leftChannel = buffer.getWritePointer(0);
   auto *rightChannel =
       buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -507,9 +527,7 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Voice count gain compensation: normalize output level regardless of
   // how many voices are enabled. 3 voices per SID is the reference level.
-  // With fewer enabled voices the SID output drops, so we boost to match.
-  // In Para mode, count only voices that are actually playing a note —
-  // otherwise 1 note uses 1 voice but gets the same gain as Mono's 3 voices.
+  // In Para mode, count only voices that are actually playing a note.
   int leftVoiceCount = 0, rightVoiceCount = 0;
   bool isPara = (voiceMode == VoiceMode::Paraphonic);
   for (int v = 0; v < 3; ++v)
@@ -518,19 +536,14 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   for (int v = 3; v < 6; ++v)
     if (voiceSettings[v].enabled && (!isPara || paraVoices[v].midiNote >= 0))
       ++rightVoiceCount;
-  // Compensation: 3/count (1 voice = 3x, 2 voices = 1.5x, 3 voices = 1x)
-  // If 0 voices enabled, use 1.0 (no signal anyway, or digi-only)
   float targetLeftVG = leftVoiceCount > 0 ? 3.0f / static_cast<float>(leftVoiceCount) : 1.0f;
   float targetRightVG = rightVoiceCount > 0 ? 3.0f / static_cast<float>(rightVoiceCount) : 1.0f;
-  // Note: voice gain smoothing is applied per-sample in the loops below
+
+  bool digiEnabled = digiEnablePtr->load() > 0.5f;
+  int digiBitDepth = static_cast<int>(digiBitDepthPtr->load()) == 1 ? 8 : 4;
 
   if (isPolyActive()) {
     // === POLY SAMPLE GENERATION ===
-    // Each active poly voice has its own L/R SID pair. Clock them all
-    // and sum with pan law, normalized by active voice count.
-
-    // Build active voice index list once per block (avoids scanning all
-    // MAX_POLY slots per sample — typically only 2-4 are active)
     int activePolyIdx[MAX_POLY];
     int activePolyCount = 0;
     int activeCount = 0;
@@ -543,13 +556,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           ++activeCount;
       }
     }
-    // 1/sqrt(N) normalization preserves perceived loudness across polyphony
     float targetPolyNorm = activeCount > 0
         ? 1.0f / std::sqrt(static_cast<float>(activeCount))
         : 1.0f;
 
     for (int i = 0; i < numSamples; ++i) {
-      // Per-sample gain smoothing to prevent pops
       smoothedPolyNorm += gainSmoothCoeff * (targetPolyNorm - smoothedPolyNorm);
       smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
       smoothedLeftVoiceGain += gainSmoothCoeff * (targetLeftVG - smoothedLeftVoiceGain);
@@ -560,8 +571,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
       for (int ai = 0; ai < activePolyCount; ++ai) {
         auto &pv = polyVoices[activePolyIdx[ai]];
-
-        // Per-voice fade envelope: ramp up on noteOn, ramp down on deactivation
         float fadeTarget = pv.fadingOut ? 0.0f : 1.0f;
         pv.fadeGain += gainSmoothCoeff * (fadeTarget - pv.fadeGain);
 
@@ -575,7 +584,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
               +  sR * rightGainR * smoothedRightVoiceGain) * fade;
       }
 
-      // Normalize and apply smoothed master volume
       outL *= smoothedPolyNorm * smoothedMasterVol;
       outR *= smoothedPolyNorm * smoothedMasterVol;
 
@@ -584,19 +592,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         rightChannel[i] = outR;
     }
 
-    // Release detection: decrement timers, begin fade-out before ADSR finishes
-    // so the software fade overlaps the critical DC transition at end of release
+    // Release detection: begin fade-out before ADSR finishes
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (pv.releasing && !pv.fadingOut) {
         pv.releaseSamplesRemaining -= numSamples;
-        // Start fade when 80% of ADSR release has elapsed (last 20%)
         int fadeThreshold = pv.releaseSamplesTotal / 5;
         if (pv.releaseSamplesRemaining <= fadeThreshold) {
           pv.fadingOut = true;
         }
       }
-      // Deactivate fully once fade-out completes
       if (pv.fadingOut && pv.fadeGain < 0.0001f) {
         pv.active = false;
         pv.releasing = false;
@@ -607,21 +612,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   } else {
-    // === MONO/PARAPHONIC SAMPLE GENERATION (existing path) ===
-
-    // Digi gain compensation: $D418 digi modulates the master volume register
-    // which scales ALL voice output. When no voices are active, the digi signal
-    // itself is very quiet. Apply a boost to bring digi to a usable level.
+    // === MONO/PARAPHONIC SAMPLE GENERATION ===
     float digiGain = (digiEnabled && digiSampler.isPlaying()) ? 3.0f : 1.0f;
 
-    // SID volume register always at max — master volume is applied as output gain,
-    // and the 20Hz DC blocker removes SID idle offset.
     sidLeft.setVolume(15);
     sidRight.setVolume(15);
 
-    // Mute SID voices during digi playback when no voices are enabled,
-    // giving clean digi-only output. When voices ARE enabled, digi runs
-    // additively — the $D418 volume modulates voice output (authentic C64).
     bool digiPlaying = digiEnabled && digiSampler.isPlaying();
     if (digiPlaying && leftVoiceCount == 0) {
       sidLeft.muteVoices();
@@ -635,12 +631,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
 
     for (int i = 0; i < numSamples; ++i) {
-      // Per-sample gain smoothing to prevent pops
       smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
       smoothedLeftVoiceGain += gainSmoothCoeff * (targetLeftVG - smoothedLeftVoiceGain);
       smoothedRightVoiceGain += gainSmoothCoeff * (targetRightVG - smoothedRightVoiceGain);
 
-      // Feed external audio to SID filters if enabled
       if (extInputEnabled && inputLeft != nullptr) {
         float extL = inputLeft[i] * extInputLevel;
         float extR = inputRight[i] * extInputLevel;
@@ -648,17 +642,14 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         sidRight.setExternalInput(extR);
       }
 
-      // Digi sample playback
       float digi8bitSample = 0.0f;
       if (digiEnabled && digiSampler.isPlaying()) {
         int digiVal = digiSampler.getNextSample();
         if (digiVal >= 0) {
           if (digiBitDepth == 4) {
-            // 4-bit: authentic $D418 volume register write
             sidLeft.writeVolumeRegister(static_cast<uint8_t>(digiVal));
             sidRight.writeVolumeRegister(static_cast<uint8_t>(digiVal));
           } else {
-            // 8-bit: direct mix (bypass $D418, higher quality)
             digi8bitSample = (static_cast<float>(digiVal) - 128.0f) / 128.0f * 0.15f;
           }
         }
@@ -667,19 +658,16 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       float sampleL = sidLeft.clock();
       float sampleR = sidRight.clock();
 
-      // Apply per-SID pan (equal-power pan law) with smoothed voice count compensation
       float outL = (sampleL * leftGainL * smoothedLeftVoiceGain
                   + sampleR * rightGainL * smoothedRightVoiceGain) * digiGain;
       float outR = (sampleL * leftGainR * smoothedLeftVoiceGain
                   + sampleR * rightGainR * smoothedRightVoiceGain) * digiGain;
 
-      // Mix 8-bit digi directly into output (bypasses SID volume DAC)
       if (digiBitDepth == 8 && digi8bitSample != 0.0f) {
         outL += digi8bitSample * digiGain;
         outR += digi8bitSample * digiGain;
       }
 
-      // Apply smoothed master volume as output gain (covers voices + digi)
       outL *= smoothedMasterVol;
       outR *= smoothedMasterVol;
 
@@ -688,31 +676,29 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         rightChannel[i] = outR;
     }
   }
+}
 
-  // === SID FILE PLAYER MIX (with resampling from 44100 to host rate) ===
+void BreadbinProcessor::mixSidFilePlayer(juce::AudioBuffer<float> &buffer) {
+  const int numSamples = buffer.getNumSamples();
+  auto *leftChannel = buffer.getWritePointer(0);
+  auto *rightChannel =
+      buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+
   if (sidFilePlayer->isPlaying()) {
-    // How many samples we need from the SID engine to produce numSamples at
-    // host rate
     int sourceSamples = static_cast<int>(numSamples * sidResampleRatio) + 4;
-    // Clamp to pre-allocated capacity to avoid heap alloc on RT thread
     if (static_cast<size_t>(sourceSamples) > sidResampleBufCapacity) {
       sourceSamples = static_cast<int>(sidResampleBufCapacity);
     }
-    // Read from ring buffer at engine rate
     sidFilePlayer->readSamples(sidResampleBufL.data(), sidResampleBufR.data(),
                                sourceSamples);
 
     if (std::abs(sidResampleRatio - 1.0) < 0.001) {
-      // No resampling needed (host rate == engine rate)
       for (int i = 0; i < numSamples; ++i) {
         leftChannel[i] += sidResampleBufL[static_cast<size_t>(i)];
         if (rightChannel)
           rightChannel[i] += sidResampleBufR[static_cast<size_t>(i)];
       }
     } else {
-      // Resample from ENGINE_SAMPLE_RATE to host rate using Lagrange
-      // interpolation Stack-allocate output buffers (typical block size <=
-      // 4096)
       float resampledL[4096];
       float resampledR[4096];
       int outSamples = std::min(numSamples, 4096);
@@ -732,8 +718,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   } else {
     sidPlayerActive.store(false, std::memory_order_relaxed);
   }
+}
 
-  // === FX CHAIN ===
+void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
+  const int numSamples = buffer.getNumSamples();
+
   // Chorus
   if (chorusEnablePtr->load() > 0.5f) {
     chorus.setRate(chorusRatePtr->load());
@@ -798,8 +787,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         right[i] = dryR * (1.0f - reverbMix) + wetR * reverbMix;
     }
   }
+}
 
-  // Apply safety chain (DC blocker, ultrasonic filter, limiter)
+void BreadbinProcessor::applySafetyChain(juce::AudioBuffer<float> &buffer) {
+  const int numSamples = buffer.getNumSamples();
+
+  // DC blocker, ultrasonic filter, limiter
   juce::dsp::AudioBlock<float> block(buffer);
   juce::dsp::ProcessContextReplacing<float> context(block);
   subsonicFilter.process(context);
@@ -810,7 +803,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   const float gateThreshold =
       noiseGateThresholdPtr->load(std::memory_order_relaxed);
   if (gateThreshold > 0.0001f) {
-    // Recalculate coefficients only when gate parameters change
     const float attackMs = gateAttackPtr->load(std::memory_order_relaxed);
     const float releaseMs = gateReleasePtr->load(std::memory_order_relaxed);
     const float holdMs = gateHoldPtr->load(std::memory_order_relaxed);
@@ -836,13 +828,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       for (int i = 0; i < numSamples; ++i) {
         const float inputLevel = std::abs(channelData[i]);
 
-        // Peak envelope follower
         if (inputLevel > gs.envelope)
           gs.envelope += gateCache.envAttackCoeff * (inputLevel - gs.envelope);
         else
           gs.envelope += gateCache.envReleaseCoeff * (inputLevel - gs.envelope);
 
-        // Gate state with hysteresis
         bool gateOpen;
         if (gs.envelope >= gateThreshold) {
           gateOpen = true;
@@ -854,7 +844,6 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           gateOpen = gs.envelope >= gateCache.closeThreshold;
         }
 
-        // Smooth gain transition
         const float targetGain = gateOpen ? 1.0f : 0.0f;
         if (targetGain > gs.gain)
           gs.gain += gateCache.gainAttackCoeff * (targetGain - gs.gain);
@@ -865,302 +854,299 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   }
-
-  // Measure CPU load: time spent / time available
-  const auto cpuTimerEnd = juce::Time::getHighResolutionTicks();
-  const double elapsed =
-      juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
-  const double budget = static_cast<double>(numSamples) / getSampleRate();
-  cpuLoadPercent.store(static_cast<float>(elapsed / budget * 100.0),
-                       std::memory_order_relaxed);
 }
 
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {
   if (msg.isNoteOn()) {
-    const int note = msg.getNoteNumber();
     lastVelocity = msg.getVelocity();
-    const int channel = msg.getChannel();
-
-    // Chord learn mode: capture notes without triggering
-    if (chordLearnActive) {
-      // Try to lock — if GUI holds it, skip this note (acceptable for learn)
-      std::unique_lock<std::mutex> lock(chordLearnMutex, std::try_to_lock);
-      if (lock.owns_lock() &&
-          chordLearnCount < static_cast<int>(chordLearnNotes.size())) {
-        bool found = false;
-        for (int ci = 0; ci < chordLearnCount; ++ci) {
-          if (chordLearnNotes[ci] == note) {
-            found = true;
-            break;
-          }
-        }
-        if (!found)
-          chordLearnNotes[chordLearnCount++] = note;
-      }
-    }
-
-    // Digi sampler: trigger on note-on (mono only; digi modulates $D418 volume)
-    if (voiceMode == VoiceMode::Mono && digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
-      digiSampler.noteOn(note, hostSampleRate);
-
-    // Chord memory takes priority and does not feed arp tracking.
-    if (chordMemory.enabled) {
-      if (dualMode == DualMode::Multitimbral) {
-        if (channel == 2)
-          triggerChord(false, note, lastVelocity);
-        else
-          triggerChord(true, note, lastVelocity);
-      } else {
-        triggerChordDualSID(note, lastVelocity);
-      }
-      return;
-    }
-
-    // Track for arpeggiator
-    {
-      bool alreadyHeld = false;
-      for (int ai = 0; ai < arpHeldCount; ++ai) {
-        if (arpHeldNotes[ai] == note) {
-          alreadyHeld = true;
-          break;
-        }
-      }
-      if (!alreadyHeld &&
-          arpHeldCount < static_cast<int>(arpHeldNotes.size())) {
-        arpHeldNotes[arpHeldCount++] = note;
-        rebuildArpSequence();
-      }
-    }
-
-    // If arp is enabled, don't do normal note handling
-    if (arpEnabled)
-      return;
-
-    // Route note-on through voice mode
-    switch (voiceMode) {
-    case VoiceMode::Mono:
-      if (dualMode == DualMode::Multitimbral) {
-        if (channel == 2) {
-          rightNoteQueue.addIfNotAlreadyThere(note);
-          updateSIDFromQueue(false);
-        } else {
-          leftNoteQueue.addIfNotAlreadyThere(note);
-          updateSIDFromQueue(true);
-        }
-      } else {
-        leftNoteQueue.addIfNotAlreadyThere(note);
-        rightNoteQueue.addIfNotAlreadyThere(note);
-        updateSIDFromQueue(true);
-        updateSIDFromQueue(false);
-      }
-      break;
-    case VoiceMode::Paraphonic:
-      if (dualMode == DualMode::Multitimbral) {
-        if (channel == 2)
-          paraNoteOnSID(false, note, lastVelocity);
-        else
-          paraNoteOnSID(true, note, lastVelocity);
-      } else {
-        paraNoteOn(note, lastVelocity);
-      }
-      break;
-    case VoiceMode::Polyphonic:
-      polyNoteOn(note, lastVelocity);
-      break;
-    case VoiceMode::PolyPara:
-      polyParaNoteOn(note, lastVelocity);
-      break;
-    }
+    handleNoteOn(msg.getNoteNumber(), msg.getChannel());
   } else if (msg.isNoteOff()) {
-    const int note = msg.getNoteNumber();
-
-    // Digi sampler note-off
-    if (digiEnablePtr->load() > 0.5f && digiSampler.isPlaying())
-      digiSampler.noteOff();
-
-    // Chord memory release (stays independent of arp state)
-    if (chordMemory.enabled) {
-      if (!sustainActive) {
-        if (dualMode == DualMode::Multitimbral) {
-          if (msg.getChannel() == 2)
-            releaseChord(false);
-          else
-            releaseChord(true);
-        } else {
-          releaseChord(true);
-          releaseChord(false);
-        }
-      }
-      return;
-    }
-
-    // Remove from arp tracking
-    for (int ai = 0; ai < arpHeldCount; ++ai) {
-      if (arpHeldNotes[ai] == note) {
-        arpHeldNotes[ai] = arpHeldNotes[--arpHeldCount];
-        rebuildArpSequence();
-        break;
-      }
-    }
-
-    // If arp is enabled, handle release when no notes held
-    if (arpEnabled) {
-      if (arpHeldCount == 0 && lastArpNote >= 0 && !sustainActive) {
-        switch (voiceMode) {
-        case VoiceMode::Mono:
-          for (int v = 0; v < 6; ++v) releaseNote(v);
-          break;
-        case VoiceMode::Paraphonic:
-          paraAllNotesOff();
-          break;
-        case VoiceMode::Polyphonic:
-          polyAllNotesOff();
-          break;
-        case VoiceMode::PolyPara:
-          polyParaAllNotesOff();
-          break;
-        }
-        lastArpNote = -1;
-      }
-      return;
-    }
-
-    // Route note-off through voice mode
-    if (sustainActive)
-      return;
-
-    switch (voiceMode) {
-    case VoiceMode::Mono:
-      leftNoteQueue.removeFirstMatchingValue(note);
-      rightNoteQueue.removeFirstMatchingValue(note);
-      updateSIDFromQueue(true);
-      updateSIDFromQueue(false);
-      break;
-    case VoiceMode::Paraphonic:
-      if (dualMode == DualMode::Multitimbral) {
-        if (msg.getChannel() == 2)
-          paraNoteOffSID(false, note);
-        else
-          paraNoteOffSID(true, note);
-      } else {
-        paraNoteOff(note);
-      }
-      break;
-    case VoiceMode::Polyphonic:
-      polyNoteOff(note);
-      break;
-    case VoiceMode::PolyPara:
-      polyParaNoteOff(note);
-      break;
-    }
+    handleNoteOff(msg.getNoteNumber(), msg.getChannel());
   } else if (msg.isAllNotesOff()) {
-    arpHeldCount = 0;
-    arpSeqCount = 0;
-    lastArpNote = -1;
-
-    switch (voiceMode) {
-    case VoiceMode::Mono:
-      leftNoteQueue.clear();
-      rightNoteQueue.clear();
-      for (int v = 0; v < 6; ++v)
-        releaseNote(v);
-      break;
-    case VoiceMode::Paraphonic:
-      paraAllNotesOff();
-      break;
-    case VoiceMode::Polyphonic:
-      polyAllNotesOff();
-      break;
-    case VoiceMode::PolyPara:
-      polyParaAllNotesOff();
-      break;
-    }
+    handleAllNotesOff();
   } else if (msg.isPitchWheel()) {
-    // Convert 14-bit value (0-16383, center=8192) to -1.0 to +1.0
     pitchBendValue = (msg.getPitchWheelValue() - 8192) / 8192.0f;
     updateAllVoiceFrequencies();
   } else if (msg.isController()) {
     int cc = msg.getControllerNumber();
     int value = msg.getControllerValue();
-
     handleCC(cc, value);
-
-    if (cc == 1) { // Mod wheel
+    if (cc == 1) {
       modWheelValue = value / 127.0f;
-      // Filter modulation applied per-block via applyFilterModulation()
-    } else if (cc == 64) { // Sustain pedal
-      bool pedalDown = (value >= 64);
-      if (sustainActive != pedalDown) {
-        sustainActive = pedalDown;
+    } else if (cc == 64) {
+      handleSustainPedal(value);
+    }
+  }
+}
 
-        if (!sustainActive && !arpEnabled) {
-          // Release notes that are no longer physically held
-          if (isPolyActive()) {
-            for (int i = 0; i < polyMaxNotes; ++i) {
-              auto &pv = polyVoices[i];
-              if (pv.active && !pv.releasing) {
-                bool held = false;
-                for (int ai = 0; ai < arpHeldCount; ++ai) {
-                  if (arpHeldNotes[ai] == pv.midiNote) {
-                    held = true;
-                    break;
-                  }
-                }
-                if (!held) {
-                  if (voiceMode == VoiceMode::PolyPara)
-                    polyParaNoteOff(pv.midiNote);
-                  else
-                    polyNoteOff(pv.midiNote);
-                }
-              }
-            }
-          } else if (voiceMode == VoiceMode::Paraphonic) {
-            for (int v = 0; v < 6; ++v) {
-              if (paraVoices[v].midiNote >= 0) {
-                bool held = false;
-                for (int ai = 0; ai < arpHeldCount; ++ai) {
-                  if (arpHeldNotes[ai] == paraVoices[v].midiNote) {
-                    held = true;
-                    break;
-                  }
-                }
-                if (!held)
-                  paraNoteOff(paraVoices[v].midiNote);
-              }
-            }
-          } else {
-            // Mono: clean up note queues
-            for (int i = leftNoteQueue.size(); --i >= 0;) {
-              int n = leftNoteQueue[i];
-              bool found = false;
-              for (int ai = 0; ai < arpHeldCount; ++ai) {
-                if (arpHeldNotes[ai] == n) {
-                  found = true;
-                  break;
-                }
-              }
-              if (!found)
-                leftNoteQueue.remove(i);
-            }
-            updateSIDFromQueue(true);
+void BreadbinProcessor::handleNoteOn(int note, int channel) {
+  // Chord learn mode: capture notes without triggering
+  if (chordLearnActive) {
+    std::unique_lock<std::mutex> lock(chordLearnMutex, std::try_to_lock);
+    if (lock.owns_lock() &&
+        chordLearnCount < static_cast<int>(chordLearnNotes.size())) {
+      bool found = false;
+      for (int ci = 0; ci < chordLearnCount; ++ci) {
+        if (chordLearnNotes[ci] == note) {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        chordLearnNotes[chordLearnCount++] = note;
+    }
+  }
 
-            for (int i = rightNoteQueue.size(); --i >= 0;) {
-              int n = rightNoteQueue[i];
-              bool found = false;
-              for (int ai = 0; ai < arpHeldCount; ++ai) {
-                if (arpHeldNotes[ai] == n) {
-                  found = true;
-                  break;
-                }
-              }
-              if (!found)
-                rightNoteQueue.remove(i);
-            }
-            updateSIDFromQueue(false);
+  // Digi sampler: trigger on note-on (mono only)
+  if (voiceMode == VoiceMode::Mono && digiEnablePtr->load() > 0.5f && digiSampler.isLoaded())
+    digiSampler.noteOn(note, hostSampleRate);
+
+  // Chord memory takes priority and does not feed arp tracking
+  if (chordMemory.enabled) {
+    if (dualMode == DualMode::Multitimbral) {
+      if (channel == 2)
+        triggerChord(false, note, lastVelocity);
+      else
+        triggerChord(true, note, lastVelocity);
+    } else {
+      triggerChordDualSID(note, lastVelocity);
+    }
+    return;
+  }
+
+  // Track for arpeggiator
+  {
+    bool alreadyHeld = false;
+    for (int ai = 0; ai < arpHeldCount; ++ai) {
+      if (arpHeldNotes[ai] == note) {
+        alreadyHeld = true;
+        break;
+      }
+    }
+    if (!alreadyHeld &&
+        arpHeldCount < static_cast<int>(arpHeldNotes.size())) {
+      arpHeldNotes[arpHeldCount++] = note;
+      rebuildArpSequence();
+    }
+  }
+
+  if (arpEnabled)
+    return;
+
+  // Route note-on through voice mode
+  switch (voiceMode) {
+  case VoiceMode::Mono:
+    if (dualMode == DualMode::Multitimbral) {
+      if (channel == 2) {
+        rightNoteQueue.addIfNotAlreadyThere(note);
+        updateSIDFromQueue(false);
+      } else {
+        leftNoteQueue.addIfNotAlreadyThere(note);
+        updateSIDFromQueue(true);
+      }
+    } else {
+      leftNoteQueue.addIfNotAlreadyThere(note);
+      rightNoteQueue.addIfNotAlreadyThere(note);
+      updateSIDFromQueue(true);
+      updateSIDFromQueue(false);
+    }
+    break;
+  case VoiceMode::Paraphonic:
+    if (dualMode == DualMode::Multitimbral) {
+      if (channel == 2)
+        paraNoteOnSID(false, note, lastVelocity);
+      else
+        paraNoteOnSID(true, note, lastVelocity);
+    } else {
+      paraNoteOn(note, lastVelocity);
+    }
+    break;
+  case VoiceMode::Polyphonic:
+    polyNoteOn(note, lastVelocity);
+    break;
+  case VoiceMode::PolyPara:
+    polyParaNoteOn(note, lastVelocity);
+    break;
+  }
+}
+
+void BreadbinProcessor::handleNoteOff(int note, int channel) {
+  if (digiEnablePtr->load() > 0.5f && digiSampler.isPlaying())
+    digiSampler.noteOff();
+
+  // Chord memory release
+  if (chordMemory.enabled) {
+    if (!sustainActive) {
+      if (dualMode == DualMode::Multitimbral) {
+        if (channel == 2)
+          releaseChord(false);
+        else
+          releaseChord(true);
+      } else {
+        releaseChord(true);
+        releaseChord(false);
+      }
+    }
+    return;
+  }
+
+  // Remove from arp tracking
+  for (int ai = 0; ai < arpHeldCount; ++ai) {
+    if (arpHeldNotes[ai] == note) {
+      arpHeldNotes[ai] = arpHeldNotes[--arpHeldCount];
+      rebuildArpSequence();
+      break;
+    }
+  }
+
+  // If arp is enabled, handle release when no notes held
+  if (arpEnabled) {
+    if (arpHeldCount == 0 && lastArpNote >= 0 && !sustainActive) {
+      switch (voiceMode) {
+      case VoiceMode::Mono:
+        for (int v = 0; v < 6; ++v) releaseNote(v);
+        break;
+      case VoiceMode::Paraphonic:
+        paraAllNotesOff();
+        break;
+      case VoiceMode::Polyphonic:
+        polyAllNotesOff();
+        break;
+      case VoiceMode::PolyPara:
+        polyParaAllNotesOff();
+        break;
+      }
+      lastArpNote = -1;
+    }
+    return;
+  }
+
+  if (sustainActive)
+    return;
+
+  // Route note-off through voice mode
+  switch (voiceMode) {
+  case VoiceMode::Mono:
+    leftNoteQueue.removeFirstMatchingValue(note);
+    rightNoteQueue.removeFirstMatchingValue(note);
+    updateSIDFromQueue(true);
+    updateSIDFromQueue(false);
+    break;
+  case VoiceMode::Paraphonic:
+    if (dualMode == DualMode::Multitimbral) {
+      if (channel == 2)
+        paraNoteOffSID(false, note);
+      else
+        paraNoteOffSID(true, note);
+    } else {
+      paraNoteOff(note);
+    }
+    break;
+  case VoiceMode::Polyphonic:
+    polyNoteOff(note);
+    break;
+  case VoiceMode::PolyPara:
+    polyParaNoteOff(note);
+    break;
+  }
+}
+
+void BreadbinProcessor::handleAllNotesOff() {
+  arpHeldCount = 0;
+  arpSeqCount = 0;
+  lastArpNote = -1;
+
+  switch (voiceMode) {
+  case VoiceMode::Mono:
+    leftNoteQueue.clear();
+    rightNoteQueue.clear();
+    for (int v = 0; v < 6; ++v)
+      releaseNote(v);
+    break;
+  case VoiceMode::Paraphonic:
+    paraAllNotesOff();
+    break;
+  case VoiceMode::Polyphonic:
+    polyAllNotesOff();
+    break;
+  case VoiceMode::PolyPara:
+    polyParaAllNotesOff();
+    break;
+  }
+}
+
+void BreadbinProcessor::handleSustainPedal(int value) {
+  bool pedalDown = (value >= 64);
+  if (sustainActive == pedalDown)
+    return;
+  sustainActive = pedalDown;
+
+  if (sustainActive || arpEnabled)
+    return;
+
+  // Release notes that are no longer physically held
+  if (isPolyActive()) {
+    for (int i = 0; i < polyMaxNotes; ++i) {
+      auto &pv = polyVoices[i];
+      if (pv.active && !pv.releasing) {
+        bool held = false;
+        for (int ai = 0; ai < arpHeldCount; ++ai) {
+          if (arpHeldNotes[ai] == pv.midiNote) {
+            held = true;
+            break;
           }
+        }
+        if (!held) {
+          if (voiceMode == VoiceMode::PolyPara)
+            polyParaNoteOff(pv.midiNote);
+          else
+            polyNoteOff(pv.midiNote);
         }
       }
     }
+  } else if (voiceMode == VoiceMode::Paraphonic) {
+    for (int v = 0; v < 6; ++v) {
+      if (paraVoices[v].midiNote >= 0) {
+        bool held = false;
+        for (int ai = 0; ai < arpHeldCount; ++ai) {
+          if (arpHeldNotes[ai] == paraVoices[v].midiNote) {
+            held = true;
+            break;
+          }
+        }
+        if (!held)
+          paraNoteOff(paraVoices[v].midiNote);
+      }
+    }
+  } else {
+    // Mono: clean up note queues
+    for (int i = leftNoteQueue.size(); --i >= 0;) {
+      int n = leftNoteQueue[i];
+      bool found = false;
+      for (int ai = 0; ai < arpHeldCount; ++ai) {
+        if (arpHeldNotes[ai] == n) {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        leftNoteQueue.remove(i);
+    }
+    updateSIDFromQueue(true);
+
+    for (int i = rightNoteQueue.size(); --i >= 0;) {
+      int n = rightNoteQueue[i];
+      bool found = false;
+      for (int ai = 0; ai < arpHeldCount; ++ai) {
+        if (arpHeldNotes[ai] == n) {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        rightNoteQueue.remove(i);
+    }
+    updateSIDFromQueue(false);
   }
 }
 
@@ -2031,7 +2017,6 @@ juce::ValueTree BreadbinProcessor::getVoiceState(int v) const {
   voiceState.setProperty("decay", vs.decay, nullptr);
   voiceState.setProperty("sustain", vs.sustain, nullptr);
   voiceState.setProperty("release", vs.release, nullptr);
-  // per-voice pan no longer saved (now per-SID: leftPan/rightPan)
   voiceState.setProperty("presetId", vs.presetId, nullptr);
   voiceState.setProperty("filterEnabled", vs.filterEnabled, nullptr);
   voiceState.setProperty("ringMod", vs.ringMod, nullptr);
@@ -2053,7 +2038,6 @@ void BreadbinProcessor::setVoiceState(int v,
   vs.decay = voiceState.getProperty("decay", 0);
   vs.sustain = voiceState.getProperty("sustain", 15);
   vs.release = voiceState.getProperty("release", 0);
-  // per-voice pan no longer loaded (now per-SID: leftPan/rightPan)
   vs.presetId = voiceState.getProperty("presetId", 1);
   vs.filterEnabled = voiceState.getProperty("filterEnabled", true);
   vs.ringMod = voiceState.getProperty("ringMod", false);
@@ -2878,10 +2862,6 @@ void BreadbinProcessor::applyMappedParameter(ControlParam param, int value) {
     voiceSettings[selectedVoice].release = static_cast<int>(normalized * 15.0f);
     applyVoiceSettings(selectedVoice);
     break;
-  case ControlParam::VoicePan:
-    // Per-voice pan is no longer used; per-SID pan (leftPan/rightPan APVTS)
-    // controls stereo positioning. MIDI mapping kept for compatibility.
-    break;
   case ControlParam::VoiceRingMod:
     voiceSettings[selectedVoice].ringMod = (value >= 64);
     applyVoiceSettings(selectedVoice);
@@ -3239,8 +3219,6 @@ juce::String BreadbinProcessor::getParamName(ControlParam param) {
     return "Voice Sustain";
   case ControlParam::VoiceRelease:
     return "Voice Release";
-  case ControlParam::VoicePan:
-    return "Voice Pan";
   case ControlParam::VoiceRingMod:
     return "Voice Ring Mod";
   case ControlParam::VoiceSync:
@@ -3638,7 +3616,6 @@ BreadbinProcessor::createParameterLayout() {
         15));
     layout.add(std::make_unique<juce::AudioParameterInt>(
         juce::ParameterID{prefix + "release", 1}, label + "Release", 0, 15, 0));
-    // per-voice pan removed (now per-SID: leftPan/rightPan)
     layout.add(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{prefix + "ringMod", 1}, label + "Ring Mod", false));
     layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -3773,7 +3750,6 @@ void BreadbinProcessor::initializeParameterPointers() {
     ptrs.decay = apvts.getRawParameterValue(prefix + "decay");
     ptrs.sustain = apvts.getRawParameterValue(prefix + "sustain");
     ptrs.release = apvts.getRawParameterValue(prefix + "release");
-    // per-voice pan removed (now per-SID: leftPan/rightPan)
     ptrs.ringMod = apvts.getRawParameterValue(prefix + "ringMod");
     ptrs.sync = apvts.getRawParameterValue(prefix + "sync");
     ptrs.modOffset = apvts.getRawParameterValue(prefix + "modOffset");

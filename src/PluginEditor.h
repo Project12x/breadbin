@@ -852,6 +852,12 @@ public:
   void resized() override;
   void timerCallback() override;
 
+  // timerCallback subsections
+  void updateModulationMeters();
+  void updateVoiceCountDisplay();
+  void updateFxBypassVisuals();
+  void updateSidPlayerOverlay();
+
 private:
   BreadbinProcessor &processor;
 
