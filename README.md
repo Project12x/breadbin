@@ -10,7 +10,6 @@ A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip e
 - **Dual SID Engine**: Two independent SID emulators with 6 voices total
 - **8 Chip Model Variants**: MOS 6581 (+ R2, R3, R4), MOS 8580 (+ R5, 8580D), CSG 9580
 - **Three Modes**: Stereo Split, Unison (detuned fatness), Multitimbral
-- **Time Machine**: Simulates capacitor aging from factory fresh to vintage drift
 - **PAL/NTSC Clock**: Authentic PAL (985,248 Hz) and NTSC (1,022,727 Hz) timing
 
 ### Modulation

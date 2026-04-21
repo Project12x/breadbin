@@ -2786,14 +2786,15 @@ void testPolyParaOverflowAllocatesNew() {
 // ============================================================================
 
 void testReverbSCCompute() {
-  ReverbSC rev;
-  rev.init(44100.0f);
+  gm::ReverbSC rev;
+  rev.prepare(44100.0f);
   rev.setFeedback(0.8f);
   rev.setLPFreq(10000.0f);
+  rev.setMix(1.0f); // Full wet for testing
 
   // Feed an impulse and collect output
   float outL = 0.0f, outR = 0.0f;
-  rev.compute(1.0f, 1.0f, outL, outR);
+  rev.processSample(1.0f, 1.0f, outL, outR);
 
   // After impulse, output should be non-zero (reverb tail starts)
   assert(outL != 0.0f && "ReverbSC should produce non-zero output after impulse");
@@ -2802,33 +2803,32 @@ void testReverbSCCompute() {
   // Process more silence and verify tail continues
   float tailL = 0.0f, tailR = 0.0f;
   for (int i = 0; i < 4410; ++i) // 100ms of silence
-    rev.compute(0.0f, 0.0f, tailL, tailR);
+    rev.processSample(0.0f, 0.0f, tailL, tailR);
 
   assert((std::fabs(tailL) > 1e-8f || std::fabs(tailR) > 1e-8f) &&
          "ReverbSC tail should persist after 100ms with 0.8 feedback");
 
-  rev.destroy();
   std::printf("  PASS: ReverbSC produces output from impulse\n");
 }
 
 void testReverbSCDecayRange() {
   // Short decay (low feedback) should die out faster than long decay
   auto measureEnergy = [](float feedback) {
-    ReverbSC rev;
-    rev.init(44100.0f);
+    gm::ReverbSC rev;
+    rev.prepare(44100.0f);
     rev.setFeedback(feedback);
     rev.setLPFreq(10000.0f);
+    rev.setMix(1.0f); // Full wet for testing
 
     float outL, outR;
-    rev.compute(1.0f, 1.0f, outL, outR); // impulse
+    rev.processSample(1.0f, 1.0f, outL, outR); // impulse
 
     // Measure RMS energy over 0.5 seconds of silence
     double energy = 0.0;
     for (int i = 0; i < 22050; ++i) {
-      rev.compute(0.0f, 0.0f, outL, outR);
+      rev.processSample(0.0f, 0.0f, outL, outR);
       energy += static_cast<double>(outL) * outL + static_cast<double>(outR) * outR;
     }
-    rev.destroy();
     return energy;
   };
 

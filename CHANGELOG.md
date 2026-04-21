@@ -245,7 +245,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Unison**: Both SIDs summed to stereo with detune
   - **Multitimbral**: Voice 1 left, Voice 2 right, Voice 3 center
 - Per-channel SID chip selection (6581/8580)
-- Time Machine aging simulation (1982-NOW)
 - Virtual MIDI keyboard for standalone testing
 - Waveform selector (Triangle, Sawtooth, Pulse, Noise)
 - ADSR envelope controls

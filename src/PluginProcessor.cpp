@@ -103,13 +103,13 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   delayLineL.reset();
   delayLineR.reset();
 
-  reverb.init(static_cast<float>(sampleRate));
+  reverb.prepare(static_cast<float>(sampleRate));
 
   // Gain smoothing coefficient: ~5ms time constant
   gainSmoothCoeff = 1.0f - std::exp(-1.0f / (0.005f * static_cast<float>(sampleRate)));
 }
 
-void BreadbinProcessor::releaseResources() { reverb.destroy(); }
+void BreadbinProcessor::releaseResources() {}
 
 void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                      juce::MidiBuffer &midiMessages) {
@@ -752,19 +752,19 @@ void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
   if (reverbEnablePtr->load() > 0.5f) {
     reverb.setFeedback(reverbDecayPtr->load());
     reverb.setLPFreq(reverbDampingPtr->load());
-    float reverbMix = reverbMixPtr->load();
+    reverb.setMix(reverbMixPtr->load());
 
     auto *left = buffer.getWritePointer(0);
     auto *right =
         buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
     for (int i = 0; i < numSamples; ++i) {
-      float dryL = left[i];
-      float dryR = right ? right[i] : dryL;
-      float wetL, wetR;
-      reverb.compute(dryL, dryR, wetL, wetR);
-      left[i] = dryL * (1.0f - reverbMix) + wetL * reverbMix;
+      float inL = left[i];
+      float inR = right ? right[i] : inL;
+      float outL, outR;
+      reverb.processSample(inL, inR, outL, outR);
+      left[i] = outL;
       if (right)
-        right[i] = dryR * (1.0f - reverbMix) + wetR * reverbMix;
+        right[i] = outR;
     }
   }
 }

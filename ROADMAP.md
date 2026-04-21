@@ -133,7 +133,7 @@
 
 ### Effects Chain
 
-- [ ] Reverb (algorithmic — the biggest gap in the current FX chain)
+- [x] Reverb (algorithmic — the biggest gap in the current FX chain)
 - [ ] Bitcrusher / decimator (thematic fit for chiptune aesthetic)
 - [ ] Phaser / flanger
 - [ ] Simple EQ (tilt or high/low shelf)

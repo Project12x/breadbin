@@ -16,36 +16,36 @@ Fixes that cause incorrect behavior or silent failures today.
 - **Action**: Remove entirely: APVTS param `"aging"`, `agingFactor` field, `setAgingFactor()` in SIDEngine + Processor, `agingCutoffOffset` in SIDEngine, all UI components (slider, labels, attachment), MIDI learn enum entry, Time Machine references in ROADMAP/STATE.
 - **Files**: `SIDEngine.h/cpp`, `PluginProcessor.h/cpp`, `PluginEditor.h/cpp`, `ROADMAP.md`, `STATE.md`
 - **Risk**: Low. Deprecates a minor feature. Existing presets with `aging` value will silently ignore it on load.
-- [ ] Remove SIDEngine aging members and `setAgingFactor()`
-- [ ] Remove aging from `updateFilterRegisters()` offset
-- [ ] Remove Processor `agingFactor`, `agingPtr`, `setAgingFactor()`, ControlParam::Aging
-- [ ] Remove Editor UI: `agingSlider`, `agingLabel`, `agingStartLabel`, `agingEndLabel`, `agingAttach`
-- [ ] Remove from `resized()` layout and `timerCallback()` sync
-- [ ] Remove APVTS parameter `"aging"` from `createParameterLayout()`
-- [ ] Remove from preset reset lambda (if present)
-- [ ] Update integration test (line 287: `check("aging")`)
-- [ ] Update ROADMAP.md Phase 3 (remove "Time Machine aging slider")
-- [ ] Update STATE.md (remove "Time Machine aging simulation")
-- [ ] Build + test
+- [x] Remove SIDEngine aging members and `setAgingFactor()`
+- [x] Remove aging from `updateFilterRegisters()` offset
+- [x] Remove Processor `agingFactor`, `agingPtr`, `setAgingFactor()`, ControlParam::Aging
+- [x] Remove Editor UI: `agingSlider`, `agingLabel`, `agingStartLabel`, `agingEndLabel`, `agingAttach`
+- [x] Remove from `resized()` layout and `timerCallback()` sync
+- [x] Remove APVTS parameter `"aging"` from `createParameterLayout()`
+- [x] Remove from preset reset lambda (if present)
+- [x] Update integration test (line 287: `check("aging")`)
+- [x] Update ROADMAP.md Phase 3 (remove "Time Machine aging slider")
+- [x] Update STATE.md (remove "Time Machine aging simulation")
+- [x] Build + test
 
 ### 1B. Fix snapshotSidPlayerToAPVTS broken parameter IDs
 - **Issue**: Lines 3950-3960 write to `"leftCutoff"`, `"leftResonance"`, `"leftLP"`, `"leftBP"`, `"leftHP"` — these APVTS parameter IDs do not exist. The `setParam` helper silently no-ops because `apvts.getParameter()` returns nullptr. Filter state is stored as non-APVTS member variables (`baseFilterCutoffLeft`, `baseFilterResLeft`).
 - **Action**: Replace `setParam()` calls with direct writes to the non-APVTS fields via existing setters (`setBaseFilterCutoff()`, `setBaseFilterResonance()`). For filter mode bits (LP/BP/HP), call `sidLeft.setFilterMode()` / `sidRight.setFilterMode()` directly, mirroring both SID engines.
 - **Files**: `PluginProcessor.cpp` (lines 3948-3960)
 - **Risk**: Low. Currently a no-op; fix makes snapshot actually work.
-- [ ] Replace leftCutoff/rightCutoff with `setBaseFilterCutoff(true/false, cutoff)`
-- [ ] Replace leftResonance with `setBaseFilterResonance(true/false, res)`
-- [ ] Replace filter mode with direct `sidLeft/sidRight.setFilterMode(lp, bp, hp)`
-- [ ] Mirror to both SID engines (left and right get same snapshot values)
-- [ ] Test: load a .SID, snapshot, verify filter controls update
+- [x] Replace leftCutoff/rightCutoff with `setBaseFilterCutoff(true/false, cutoff)`
+- [x] Replace leftResonance with `setBaseFilterResonance(true/false, res)`
+- [x] Replace filter mode with direct `sidLeft/sidRight.setFilterMode(lp, bp, hp)`
+- [x] Mirror to both SID engines (left and right get same snapshot values)
+- [x] Test: load a .SID, snapshot, verify filter controls update
 
 ### 1C. polyNoteCounter uint32_t wrap safety
 - **Issue**: `polyNoteCounter` increments every note-on and is used for voice-stealing age comparison. After ~4 billion notes it wraps to 0, causing youngest voice to appear oldest and get stolen first.
 - **Action**: Add a `normalizeNoteCounters()` call when counter exceeds a threshold (e.g., UINT32_MAX / 2). This renumbers all active voices relative to the oldest, resetting the counter.
 - **Files**: `PluginProcessor.h/cpp`
 - **Risk**: Very low. Theoretical issue at extreme usage, but trivial to prevent.
-- [ ] Add counter normalization logic
-- [ ] Test: verify voice stealing order is preserved after normalization
+- [x] Add counter normalization logic
+- [x] Test: verify voice stealing order is preserved after normalization
 
 ---
 
@@ -58,8 +58,8 @@ Fixes that affect audio output quality or DAW integration.
 - **Action**: Return a conservative fixed value (e.g., 10.0 seconds) or compute dynamically from reverb decay + delay time + max release.
 - **Files**: `PluginProcessor.h` or `PluginProcessor.cpp`
 - **Risk**: None. Only affects DAW tail rendering behavior (improvement).
-- [ ] Implement getTailLengthSeconds() with reasonable value
-- [ ] Test: verify in Reaper that reverb tail is preserved on render
+- [x] Implement getTailLengthSeconds() with reasonable value
+- [x] Test: verify in Reaper that reverb tail is preserved on render
 
 ### 2B. Wavetable rate aliasing at block boundaries
 - **Issue**: Wavetable step changes happen once per processBlock (~86Hz at 44.1kHz/512 samples). When wavetable rate exceeds ~86Hz (max is 200Hz), multiple steps are skipped per block, causing aliased stepping artifacts.
@@ -89,29 +89,29 @@ Structural improvements that reduce bug surface area and make future work easier
   - `processWavetable()` — step advancement + waveform application
 - **Files**: `PluginProcessor.h/cpp`
 - **Risk**: Low. Pure refactor, no behavior change. Test suite catches regressions.
-- [ ] Extract LFO processing (deduplicate LFO1/LFO2)
-- [ ] Extract filter envelope processing
-- [ ] Extract mod matrix processing
-- [ ] Extract wavetable processing
-- [ ] Verify all 382 integration tests still pass
+- [x] Extract LFO processing (deduplicate LFO1/LFO2)
+- [x] Extract filter envelope processing
+- [x] Extract mod matrix processing
+- [x] Extract wavetable processing
+- [x] Verify all 382 integration tests still pass
 
 ### 3B. Voice settings dirty flag for applyVoiceSettings
 - **Issue**: `applyVoiceSettings()` syncs all 6 voice parameters to both SID engines every processBlock, even when nothing changed. This includes waveform, PW, ADSR, ring mod, sync, filter routing, and mod offset for all voices.
 - **Action**: Add a `voiceSettingsDirty` flag, set it when any voice parameter changes, and only call `applyVoiceSettings()` when dirty.
 - **Files**: `PluginProcessor.h/cpp`
 - **Risk**: Low. Must ensure all parameter change paths set the dirty flag.
-- [ ] Add dirty flag
-- [ ] Set flag in all voice parameter change paths
-- [ ] Guard applyVoiceSettings with dirty check
-- [ ] Test: verify voice settings still apply correctly
+- [x] Add dirty flag
+- [x] Set flag in all voice parameter change paths
+- [x] Guard applyVoiceSettings with dirty check
+- [x] Test: verify voice settings still apply correctly
 
 ### 3C. Filter envelope code deduplication (mono vs poly paths)
 - **Issue**: The filter envelope ADSR logic is computed once for the mono path and then repeated with slight variation in the poly voice loop. Both paths compute attack/decay/sustain/release rates and advance the envelope state.
 - **Action**: Extract filter envelope tick into a reusable struct/function that both paths call.
 - **Files**: `PluginProcessor.cpp`
 - **Risk**: Low. Pure refactor.
-- [ ] Extract filter envelope into shared function
-- [ ] Verify mono and poly paths produce identical results
+- [x] Extract filter envelope into shared function
+- [x] Verify mono and poly paths produce identical results
 
 ---
 

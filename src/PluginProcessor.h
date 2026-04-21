@@ -815,7 +815,7 @@ private:
       delayLineL{88200};
   juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear>
       delayLineR{88200};
-  ReverbSC reverb;
+  gm::ReverbSC reverb;
 
   // FX APVTS pointers
   std::atomic<float> *chorusEnablePtr = nullptr;
