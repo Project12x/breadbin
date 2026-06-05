@@ -6,6 +6,9 @@
 #include "../src/SIDEngine.h"
 #include "../src/dsp/ReverbSC.h"
 #include <ghostmoon/ui/Theme.h>
+#include <ghostmoon/ui/Controls.h>
+#include <ghostmoon/ui/Chrome.h>
+#include <ghostmoon/ui/Scope.h>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -2844,6 +2847,20 @@ void testReverbSCDecayRange() {
 }
 
 // ============================================================================
+// ============================================================================
+// gm::ui compile-check (never called — forces all renderers to compile vs JUCE)
+// ============================================================================
+
+[[maybe_unused]] static void gmui_compile_check(juce::Graphics& g) {
+  using namespace gm::ui;
+  juce::Rectangle<float> r{0,0,10,10};
+  juce::Path p; juce::Font f{12.0f};
+  drawKnob(g, r, 0.5f, theme::cyan); drawHSlider(g, r, 0.5f, theme::cyan, true); drawVSlider(g, r, 0.5f, theme::orange);
+  drawPanel(g, r, theme::cyan, true); drawGlowText(g, "x", f, r, theme::cyan, juce::Justification::centred);
+  drawComboBackground(g, r); drawToggleDot(g, r, theme::grn, true); drawButtonBackground(g, r, false);
+  drawScopeBackground(g, r); drawScopeTrace(g, p, theme::cyan);
+}
+
 // Main
 // ============================================================================
 
@@ -2972,6 +2989,11 @@ int main() {
   // ==================== REVERB TESTS ====================
   testReverbSCCompute();
   testReverbSCDecayRange();
+
+  // ==================== gm::ui OVERLAY SANITY CHECK ====================
+  std::printf("--- gm::ui Scanline Overlay ---\n");
+  { auto img = gm::ui::makeScanlineOverlay(120, 58, 1.48f);
+    ASSERT_TRUE(img.isValid() && img.getWidth()==120 && img.getHeight()==58, "scope.overlaySize"); }
 
   // ==================== THEME TOKEN TESTS ====================
   std::printf("--- Theme Token Sanity ---\n");
