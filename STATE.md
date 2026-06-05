@@ -55,7 +55,11 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   synthwave renderers (glowing knobs, CRT scopes, glass panels, glow headers, cached backdrop).
   `gm::ui::ScaledEditor` promoted from local `src/ScaledEditor.h`; `gm::ReverbSC` replaces
   deleted local `src/dsp/ReverbSC.h`. Tag: `checkpoint/phase-a-foundation`.
-- **Pending — Phase B**: OptionD re-layout (consolidated top bar, SID towers, FX rows) + per-section accent colors.
+- **C64 "Neon Synthwave" Reskin Phase B — DONE**: OptionD re-layout — two mirror-symmetric SID
+  towers with in-tower CRT filter graphs, filter envelope relocated into the voice editor, FX as
+  Chorus/Delay/Reverb rows, 2-tier dock. Per-section accent colors (SID I cyan, SID II orange,
+  voice editor magenta, ADSR/Filter Env/aux/CPU greenyellow) via the `accentOf` property.
+  Tag: `checkpoint/phase-b-layout`.
 - **Pending — Phase C**: 5 popups restyled + NEON/C64 scheme switch.
 - **Pending — Phase D**: PETSCII toggle + motion / animated mod rings.
 
