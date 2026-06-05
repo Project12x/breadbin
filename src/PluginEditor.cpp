@@ -903,7 +903,7 @@ void DigiSamplerPanel::updateInfoLabels() {
 // ========== END DIGI SAMPLER PANEL ==========
 
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
-    : juce::AudioProcessorEditor(&p), processor(p),
+    : bb::ScaledEditor(p, 1000, 800), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
 
   backgroundImage = juce::ImageFileFormat::loadFrom(
@@ -966,8 +966,6 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   }
   processor.markEditorOpened();
   selectVoice(processor.getSelectedVoice());
-  setSize(1000, 800);
-  setResizeLimits(900, 750, 1200, 1000);
   addAndMakeVisible(midiLearnOverlay);
   midiLearnOverlay.setAlwaysOnTop(true);
 
@@ -1105,6 +1103,47 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
 
   // Snapshot initial preset state for dirty detection
   processor.snapshotPresetState();
+
+  // UI scale selector — persisted per-machine via PropertiesFile
+  juce::PropertiesFile::Options propOpts;
+  propOpts.applicationName = "Breadbin";
+  propOpts.filenameSuffix = "settings";
+  propOpts.folderName = "Breadbin";
+  propOpts.osxLibrarySubFolder = "Application Support";
+  appProperties.setStorageParameters(propOpts);
+
+  scaleSelector.addItem("75%", 1);
+  scaleSelector.addItem("100%", 2);
+  scaleSelector.addItem("125%", 3);
+  scaleSelector.addItem("150%", 4);
+  scaleSelector.setTooltip("UI scale (rescales the entire window for low-res displays)");
+
+  auto *settings = appProperties.getUserSettings();
+  const float savedScale =
+      settings != nullptr
+          ? (float)settings->getDoubleValue("uiScale", 1.0)
+          : 1.0f;
+  const auto idForScale = [](float s) {
+    if (s < 0.875f) return 1;
+    if (s < 1.125f) return 2;
+    if (s < 1.375f) return 3;
+    return 4;
+  };
+  scaleSelector.setSelectedId(idForScale(savedScale), juce::dontSendNotification);
+
+  scaleSelector.onChange = [this]() {
+    const float scales[] = {0.75f, 1.0f, 1.25f, 1.5f};
+    const int idx = scaleSelector.getSelectedId() - 1;
+    if (idx < 0 || idx >= 4) return;
+    setScale(scales[idx]);
+    if (auto *s = appProperties.getUserSettings()) {
+      s->setValue("uiScale", (double)scales[idx]);
+      s->saveIfNeeded();
+    }
+  };
+  addAndMakeVisible(scaleSelector);
+
+  setScale(savedScale);
 }
 
 BreadbinEditor::~BreadbinEditor() {
@@ -3927,7 +3966,7 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   drawHeaderGlow(rightSIDLabel, juce::Colours::orange);
 }
 
-void BreadbinEditor::resized() {
+void BreadbinEditor::resizedContent() {
   midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
 
@@ -3974,6 +4013,9 @@ void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
   masterVolSlider.setBounds(topRow.removeFromLeft(160));
   noiseGateLabel.setBounds(topRow.removeFromLeft(35));
   noiseGateSlider.setBounds(topRow.removeFromLeft(120));
+
+  scaleSelector.setBounds(topRow.removeFromRight(60).withHeight(22).translated(0, 3));
+  topRow.removeFromRight(pad * 2);
 
   extInputLevelSlider.setBounds(topRow.removeFromRight(80));
   extInputLabel.setBounds(topRow.removeFromRight(35));

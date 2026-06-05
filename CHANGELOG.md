@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Paraphonic Voice Editor Hints**: In Para mode the voice tabs are annotated/greyed to show
   that filter and ADSR are shared from voice 0.
 - **FX Bypass Dimming**: Disabled chorus/delay/reverb sections dim for clear visual feedback.
+- **UI Scale Selector**: DPI-aware window scaling — a 75/100/125/150% selector in the top row,
+  persisted per machine. The editor keeps a fixed 1000×800 logical layout and scales the whole
+  window via an affine transform (`ScaledEditor` base), so existing layout code is untouched.
 
 ### Changed
 

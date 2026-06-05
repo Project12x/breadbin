@@ -1,8 +1,10 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "ScaledEditor.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
@@ -841,7 +843,7 @@ private:
   juce::Font monoFont;
 };
 
-class BreadbinEditor : public juce::AudioProcessorEditor,
+class BreadbinEditor : public bb::ScaledEditor,
                        private juce::MidiKeyboardState::Listener,
                        private juce::Timer {
 public:
@@ -849,7 +851,7 @@ public:
   ~BreadbinEditor() override;
 
   void paint(juce::Graphics &) override;
-  void resized() override;
+  void resizedContent() override;
   void timerCallback() override;
 
   // timerCallback subsections
@@ -886,6 +888,8 @@ private:
   MappableComboBox dualModeSelector{processor,
                                     BreadbinProcessor::ControlParam::DualMode};
   juce::Label modeLabel;
+  juce::ComboBox scaleSelector;        // UI scale (persisted per-machine)
+  juce::ApplicationProperties appProperties;
   juce::ComboBox globalPresetSelector; // Factory + user presets
   juce::Label cpuLoadLabel;
   juce::TextButton presetPrevButton, presetNextButton;

@@ -50,8 +50,9 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - State persistence (XML via APVTS) + full parameter automation
 - ASIO standalone support
 
-### In Progress (branch `polish/2026-03-03`)
-- DPI-aware UI scaling: `ScaledEditor` base applies `AffineTransform::scale()` so the window rescales while logical layout stays at 1000×800. Scale selector (75/100/125/150%) persisted per-machine via `ApplicationProperties`. Uncommitted; not yet host-verified.
+### In Progress (branch `polish/ui-2026-06-05`)
+- DPI-aware UI scaling: `ScaledEditor` base applies `AffineTransform::scale()` so the window rescales while logical layout stays at 1000×800. Scale selector (75/100/125/150%) persisted per-machine via `ApplicationProperties`. Committed; visual in-host scaling check still pending.
+- Next: "Breadbin C64 Theme" visual redesign.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
