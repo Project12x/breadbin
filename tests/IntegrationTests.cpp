@@ -4,11 +4,11 @@
 
 #include "../src/PluginProcessor.h"
 #include "../src/SIDEngine.h"
-#include "../src/dsp/ReverbSC.h"
-#include <ghostmoon/ui/Theme.h>
-#include <ghostmoon/ui/Controls.h>
-#include <ghostmoon/ui/Chrome.h>
-#include <ghostmoon/ui/Scope.h>
+#include <ghostmoon/ReverbSC.h>
+#include <ghostmoon/ui/synthwave/Theme.h>
+#include <ghostmoon/ui/synthwave/Controls.h>
+#include <ghostmoon/ui/synthwave/Chrome.h>
+#include <ghostmoon/ui/synthwave/Scope.h>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

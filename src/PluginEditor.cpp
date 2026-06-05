@@ -1,10 +1,10 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 #include <functional>
-#include <ghostmoon/ui/Controls.h>
-#include <ghostmoon/ui/Chrome.h>
-#include <ghostmoon/ui/Theme.h>
-#include <ghostmoon/ui/Scope.h>
+#include <ghostmoon/ui/synthwave/Controls.h>
+#include <ghostmoon/ui/synthwave/Chrome.h>
+#include <ghostmoon/ui/synthwave/Theme.h>
+#include <ghostmoon/ui/synthwave/Scope.h>
 
 // ========== CUSTOM LOOKANDFEEL ==========
 
@@ -718,7 +718,7 @@ void DigiSamplerPanel::updateInfoLabels() {
 // ========== END DIGI SAMPLER PANEL ==========
 
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
-    : bb::ScaledEditor(p, 1000, 800), processor(p),
+    : gm::ui::ScaledEditor(p, 1000, 800), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
 
   backgroundImage = juce::ImageFileFormat::loadFrom(

@@ -3,7 +3,7 @@
 #include "DigiSampler.h"
 #include "SIDEngine.h"
 #include "SidFilePlayer.h"
-#include "dsp/ReverbSC.h"
+#include <ghostmoon/ReverbSC.h>
 #include <algorithm>
 #include <array>
 #include <juce_audio_devices/juce_audio_devices.h>
