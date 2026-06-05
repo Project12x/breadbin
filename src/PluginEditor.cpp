@@ -1044,8 +1044,7 @@ void BreadbinEditor::updateModulationMeters() {
   else if (cpu > 50.0f)
     cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colours::orange);
   else
-    cpuLoadLabel.setColour(juce::Label::textColourId,
-                           juce::Colour(0xFF888888));
+    cpuLoadLabel.setColour(juce::Label::textColourId, gm::ui::theme::grn);
   cpuLoadLabel.setText(txt, juce::dontSendNotification);
 }
 
@@ -2729,7 +2728,7 @@ void BreadbinEditor::setupGlobalControls() {
   // CPU load display
   cpuLoadLabel.setText("CPU: 0%", juce::dontSendNotification);
   cpuLoadLabel.setFont(monoFont.withHeight(10.0f));
-  cpuLoadLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF888888));
+  cpuLoadLabel.setColour(juce::Label::textColourId, gm::ui::theme::grn);
   cpuLoadLabel.setJustificationType(juce::Justification::centredRight);
   cpuLoadLabel.setTooltip("DSP CPU usage (% of audio buffer time budget)");
   addAndMakeVisible(cpuLoadLabel);
@@ -2945,6 +2944,8 @@ void BreadbinEditor::setupGlobalControls() {
       chordParam->setValueNotifyingHost(0.0f);
   };
   addAndMakeVisible(arpEnableButton);
+  arpEnableButton.getProperties().set("accent",
+                                      (int)gm::ui::theme::grn.getARGB());
 
   arpPatternSelector.addItem("Up", 1);
   arpPatternSelector.addItem("Down", 2);
@@ -3189,16 +3190,27 @@ void BreadbinEditor::setupFXControls() {
   filterEnvAmountSlider.setSliderStyle(
       juce::Slider::RotaryHorizontalVerticalDrag);
   filterEnvAmountSlider.setColour(juce::Slider::trackColourId,
-                                  juce::Colours::green);
+                                  gm::ui::theme::grn);
   filterEnvAmountSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40,
                                         12);
   filterEnvAmountSlider.setColour(juce::Slider::textBoxTextColourId,
-                                  juce::Colours::green);
+                                  gm::ui::theme::grn);
   filterEnvAmountSlider.setColour(juce::Slider::textBoxOutlineColourId,
                                   juce::Colours::transparentBlack);
   filterEnvAmountSlider.setTooltip("Filter Env Amount: Bipolar (-1 to +1). "
                                    "Positive opens filter on attack.");
   addAndMakeVisible(filterEnvAmountSlider);
+
+  // Per-section accent (Phase B2): Filter Envelope group = greenyellow.
+  {
+    const int grnA = (int)gm::ui::theme::grn.getARGB();
+    filterEnvEnableButton.getProperties().set("accent", grnA);
+    filterEnvAttackSlider.getProperties().set("accent", grnA);
+    filterEnvDecaySlider.getProperties().set("accent", grnA);
+    filterEnvSustainSlider.getProperties().set("accent", grnA);
+    filterEnvReleaseSlider.getProperties().set("accent", grnA);
+    filterEnvAmountSlider.getProperties().set("accent", grnA);
+  }
 }
 
 void BreadbinEditor::setupPopupButtons() {
@@ -3298,6 +3310,15 @@ void BreadbinEditor::setupPopupButtons() {
   digiEnableAttach =
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "digiEnable", digiEnableToggle);
+
+  // Per-section accent (Phase B2): aux enable toggles = greenyellow.
+  {
+    const int grnA = (int)gm::ui::theme::grn.getARGB();
+    lfo1EnableToggle.getProperties().set("accent", grnA);
+    lfo2EnableToggle.getProperties().set("accent", grnA);
+    wtEnableToggle.getProperties().set("accent", grnA);
+    digiEnableToggle.getProperties().set("accent", grnA);
+  }
 
   // SID Player register overlay labels (hidden by default)
   auto setupOverlay = [this](juce::Label &lbl) {
@@ -3508,6 +3529,26 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   panSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 35, 18);
   panSlider.setTooltip(sidName + " SID Pan: -1 (left) to +1 (right)");
   addAndMakeVisible(panSlider);
+
+  // Per-section accent (Phase B2): SID I = cyan, SID II = orange.
+  const int accentARGB =
+      (int)(isLeft ? gm::ui::theme::cyan : gm::ui::theme::orange).getARGB();
+  auto setAccent = [accentARGB](juce::Component &c) {
+    c.getProperties().set("accent", accentARGB);
+  };
+  setAccent(chipSelector);
+  setAccent(cutoffSlider);
+  setAccent(resSlider);
+  setAccent(lpBtn);
+  setAccent(bpBtn);
+  setAccent(hpBtn);
+  setAccent(filterEnBtn);
+  setAccent(detuneSlider);
+  setAccent(panSlider);
+  for (int i = 0; i < 3; ++i) {
+    setAccent(voiceButtons[i]);
+    setAccent(voiceEnables[i]);
+  }
 }
 
 void BreadbinEditor::setupVoiceEditor() {
@@ -3622,6 +3663,23 @@ void BreadbinEditor::setupVoiceEditor() {
       ringModButton.setToggleState(false, juce::dontSendNotification);
     }
   };
+
+  // Per-section accent (Phase B2): voice editor = magenta; ADSR + Ring/Sync/Flt = greenyellow.
+  const int vMag = (int)gm::ui::theme::mag.getARGB();
+  const int vGrn = (int)gm::ui::theme::grn.getARGB();
+  auto setAcc = [](juce::Component &c, int argb) {
+    c.getProperties().set("accent", argb);
+  };
+  setAcc(waveformSelector, vMag);
+  setAcc(pulseWidthSlider, vMag);
+  setAcc(modOffsetSlider, vMag);
+  setAcc(attackSlider, vGrn);
+  setAcc(decaySlider, vGrn);
+  setAcc(sustainSlider, vGrn);
+  setAcc(releaseSlider, vGrn);
+  setAcc(ringModButton, vGrn);
+  setAcc(syncButton, vGrn);
+  setAcc(voiceFilterButton, vGrn);
 }
 
 void BreadbinEditor::selectVoice(int voice) {
