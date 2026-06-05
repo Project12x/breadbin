@@ -889,7 +889,7 @@ public:
   void layoutTopRow(juce::Rectangle<int> &bounds);
   void layoutSidPanels(juce::Rectangle<int> &bounds);
   void layoutVoiceEditor(juce::Rectangle<int> &bounds);
-  void layoutBottomControls(juce::Rectangle<int> &bounds);
+  void layoutBottomControls(juce::Rectangle<int> fxArea, juce::Rectangle<int> dockArea);
 
 private:
   BreadbinProcessor &processor;
@@ -1276,10 +1276,12 @@ private:
   // Cached background composite (bg + vignette, built once in resizedContent)
   juce::Image bgCache;
   // Panel bounds stored in resizedContent() for use in paint()
+  juce::Rectangle<int> topBarPanelBounds;
   juce::Rectangle<int> leftSidPanelBounds;
   juce::Rectangle<int> rightSidPanelBounds;
   juce::Rectangle<int> voiceEditorPanelBounds;
   juce::Rectangle<int> fxPanelBounds;
+  juce::Rectangle<int> dockPanelBounds;
   juce::TooltipWindow tooltipWindow{this, 500}; // 500ms delay before showing
 
   void setupControls();

@@ -3781,10 +3781,12 @@ void BreadbinEditor::paint(juce::Graphics &g) {
                fb.getRight() - radius * 0.5f, fb.getY() + 1.0f, 1.0f);
   };
 
+  drawGlassPanel(topBarPanelBounds);
   drawGlassPanel(leftSidPanelBounds);
   drawGlassPanel(rightSidPanelBounds);
   drawGlassPanel(voiceEditorPanelBounds);
   drawGlassPanel(fxPanelBounds);
+  drawGlassPanel(dockPanelBounds);
 
   // Glow text headers for SID and voice editor sections
   // drawGlowText draws bloom passes then accent; the Label child renders sharp text on top.
@@ -3811,32 +3813,59 @@ void BreadbinEditor::paint(juce::Graphics &g) {
 }
 
 void BreadbinEditor::resizedContent() {
+  // OptionD 6-region layout — positioning only, no behavior changes.
+  // Content area: ~984 wide × 727 tall (1000x743 minus 8px padding each side).
+  // Region heights (sum = 687): topBar=46, towers=240, voiceEd=175, fx=104, dock=24, keyboard=98.
+  // 5 gaps × 8px = 40px. Total = 727px. ✓
+  static constexpr int kGap      = 8;  // vertical gap between regions
+  static constexpr int kTopBarH  = 46;
+  static constexpr int kTowersH  = 240;
+  static constexpr int kVoiceH   = 175;
+  static constexpr int kFxH      = 104;
+  static constexpr int kDockH    = 24;
+  static constexpr int kKbH      = 98;
+
   midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
 
-  layoutTopRow(bounds);
+  // --- Region 1: Top bar ---
+  topBarPanelBounds = bounds.removeFromTop(kTopBarH);
+  layoutTopRow(topBarPanelBounds); // passes a copy so it doesn't consume bounds
+  bounds.removeFromTop(kGap);
 
-  // Capture SID panel bounds before layout consumes them
+  // --- Region 2: SID towers ---
+  auto towersRow = bounds.removeFromTop(kTowersH);
   {
-    const int pad = 4;
-    auto sidRow = bounds.withHeight(200); // same as layoutSidPanels's removeFromTop(200)
-    const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
-    leftSidPanelBounds  = sidRow.withWidth(sidWidth);
-    rightSidPanelBounds = sidRow.withX(sidRow.getRight() - sidWidth).withWidth(sidWidth);
+    const int pad = 6;
+    const int sidWidth = (towersRow.getWidth() - pad) / 2;
+    leftSidPanelBounds  = towersRow.withWidth(sidWidth);
+    rightSidPanelBounds = towersRow.withX(towersRow.getRight() - sidWidth).withWidth(sidWidth);
   }
-  layoutSidPanels(bounds);
+  layoutSidPanels(towersRow);
+  bounds.removeFromTop(kGap);
 
-  // Capture voice editor panel bounds
-  voiceEditorPanelBounds = bounds.withHeight(174);
-  layoutVoiceEditor(bounds);
+  // --- Region 3: Voice editor ---
+  voiceEditorPanelBounds = bounds.removeFromTop(kVoiceH);
+  layoutVoiceEditor(voiceEditorPanelBounds);
+  bounds.removeFromTop(kGap);
 
-  bounds.removeFromTop(4);
-  keyboard.setBounds(bounds.removeFromBottom(60));
-  bounds.removeFromBottom(4);
+  // --- Region 4: FX chain ---
+  fxPanelBounds = bounds.removeFromTop(kFxH);
+  bounds.removeFromTop(kGap);
 
-  // Capture FX panel bounds (everything remaining after keyboard / bottom rows)
-  fxPanelBounds = bounds;
-  layoutBottomControls(bounds);
+  // --- Region 5: Dock ---
+  dockPanelBounds = bounds.removeFromTop(kDockH);
+  bounds.removeFromTop(kGap);
+
+  // --- Region 6: Keyboard ---
+  keyboard.setBounds(bounds.removeFromTop(kKbH));
+
+  // Now lay out FX and dock controls using their stored rects
+  {
+    auto fxArea   = fxPanelBounds;
+    auto dockArea = dockPanelBounds;
+    layoutBottomControls(fxArea, dockArea);
+  }
 
   // Build background cache (background_clean.png + vignette)
   if (getWidth() > 0 && getHeight() > 0) {
@@ -3872,202 +3901,302 @@ void BreadbinEditor::resizedContent() {
 }
 
 void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
-  const int rowH = 28;
-  const int pad = 4;
+  // OptionD top bar: logo | divider | Engine seg | Voicing seg + fold-ins | spacer |
+  //   Master slider+val | divider | preset stepper | CPU label | scaleSelector
+  const int pad = 6;
+  auto row = bounds.reduced(6, 1); // inner margin inside the glass panel
 
-  auto topRow = bounds.removeFromTop(rowH);
-  modeLabel.setBounds(topRow.removeFromLeft(45));
-  dualModeSelector.setBounds(topRow.removeFromLeft(105));
-  topRow.removeFromLeft(pad);
-  voiceModeSelector.setBounds(topRow.removeFromLeft(65).withHeight(22).translated(0, 3));
-  polyMaxNotesSelector.setBounds(topRow.removeFromLeft(42).withHeight(22).translated(0, 3));
-  polyVoiceCountLabel.setBounds(topRow.removeFromLeft(30));
-  paraSpreadLabel.setBounds(topRow.removeFromLeft(40));
-  paraSpreadSlider.setBounds(topRow.removeFromLeft(60).withHeight(22).translated(0, 3));
-  paraRetrigButton.setBounds(topRow.removeFromLeft(55).withHeight(22).translated(0, 3));
-  topRow.removeFromLeft(pad);
+  // Right side: scale selector + CPU
+  scaleSelector.setBounds(row.removeFromRight(60).withHeight(22).withY(row.getCentreY() - 11));
+  row.removeFromRight(pad);
+  cpuLoadLabel.setBounds(row.removeFromRight(52).withHeight(16).withY(row.getCentreY() - 8));
+  row.removeFromRight(pad);
 
-  globalPresetLabel.setBounds(topRow.removeFromLeft(40));
-  presetPrevButton.setBounds(topRow.removeFromLeft(20).reduced(0, 2));
-  globalPresetSelector.setBounds(topRow.removeFromLeft(100));
-  presetDirtyLabel.setBounds(topRow.removeFromLeft(14));
-  presetNextButton.setBounds(topRow.removeFromLeft(20).reduced(0, 2));
-  cpuLoadLabel.setBounds(topRow.removeFromRight(60));
-  topRow.removeFromLeft(pad);
-  savePatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
-  topRow.removeFromLeft(pad);
-  loadPatchButton.setBounds(topRow.removeFromLeft(28).reduced(0, 2));
-  topRow.removeFromLeft(pad * 2);
+  // Left: logo area (drawn by paint(), reserve space)
+  auto logoBounds = row.removeFromLeft(92);
+  titleLabel.setBounds(logoBounds); // titleLabel occupies logo area
+  row.removeFromLeft(pad);
 
-  masterVolLabel.setBounds(topRow.removeFromLeft(45));
-  masterVolSlider.setBounds(topRow.removeFromLeft(160));
-  noiseGateLabel.setBounds(topRow.removeFromLeft(35));
-  noiseGateSlider.setBounds(topRow.removeFromLeft(120));
+  // Vertical divider (just a spacer — drawn in paint if needed)
+  row.removeFromLeft(1);
+  row.removeFromLeft(pad);
 
-  scaleSelector.setBounds(topRow.removeFromRight(60).withHeight(22).translated(0, 3));
-  topRow.removeFromRight(pad * 2);
+  // Engine segmented (dualModeSelector)
+  modeLabel.setBounds(row.removeFromLeft(44));
+  dualModeSelector.setBounds(row.removeFromLeft(110).withHeight(22).withY(row.getCentreY() - 11));
+  row.removeFromLeft(pad);
 
-  extInputLevelSlider.setBounds(topRow.removeFromRight(80));
-  extInputLabel.setBounds(topRow.removeFromRight(35));
-  topRow.removeFromRight(pad);
-  extInputEnableButton.setBounds(topRow.removeFromRight(55));
+  // Voicing segmented (voiceModeSelector) + poly count + spread + retrig
+  voiceModeSelector.setBounds(row.removeFromLeft(80).withHeight(22).withY(row.getCentreY() - 11));
+  polyMaxNotesSelector.setBounds(row.removeFromLeft(42).withHeight(22).withY(row.getCentreY() - 11));
+  polyVoiceCountLabel.setBounds(row.removeFromLeft(28).withHeight(16).withY(row.getCentreY() - 8));
+  paraSpreadLabel.setBounds(row.removeFromLeft(36).withHeight(16).withY(row.getCentreY() - 8));
+  paraSpreadSlider.setBounds(row.removeFromLeft(64).withHeight(22).withY(row.getCentreY() - 11));
+  paraRetrigButton.setBounds(row.removeFromLeft(50).withHeight(20).withY(row.getCentreY() - 10));
+  row.removeFromLeft(pad);
 
-  bounds.removeFromTop(pad * 2);
+  // Spacer (flex:1 in JSX) — skip to master slider
+  // Place master vol in centre-right area
+  const int masterW = 130;
+  masterVolLabel.setBounds(row.removeFromLeft(46).withHeight(16).withY(row.getCentreY() - 8));
+  masterVolSlider.setBounds(row.removeFromLeft(masterW).withHeight(22).withY(row.getCentreY() - 11));
+  noiseGateLabel.setBounds(row.removeFromLeft(34).withHeight(16).withY(row.getCentreY() - 8));
+  noiseGateSlider.setBounds(row.removeFromLeft(100).withHeight(22).withY(row.getCentreY() - 11));
+  row.removeFromLeft(pad);
+
+  // Divider (spacer)
+  row.removeFromLeft(1);
+  row.removeFromLeft(pad);
+
+  // Preset stepper: prev | selector | dirty | next | save | load
+  globalPresetLabel.setBounds(row.removeFromLeft(40).withHeight(16).withY(row.getCentreY() - 8));
+  presetPrevButton.setBounds(row.removeFromLeft(20).reduced(0, 3));
+  globalPresetSelector.setBounds(row.removeFromLeft(110).withHeight(22).withY(row.getCentreY() - 11));
+  presetDirtyLabel.setBounds(row.removeFromLeft(14).withHeight(16).withY(row.getCentreY() - 8));
+  presetNextButton.setBounds(row.removeFromLeft(20).reduced(0, 3));
+  row.removeFromLeft(pad);
+  savePatchButton.setBounds(row.removeFromLeft(28).reduced(0, 3));
+  row.removeFromLeft(pad / 2);
+  loadPatchButton.setBounds(row.removeFromLeft(28).reduced(0, 3));
+  row.removeFromLeft(pad);
+
+  // Ext input (tucked before right edge)
+  extInputEnableButton.setBounds(row.removeFromLeft(50).withHeight(20).withY(row.getCentreY() - 10));
+  row.removeFromLeft(pad / 2);
+  extInputLabel.setBounds(row.removeFromLeft(30).withHeight(16).withY(row.getCentreY() - 8));
+  extInputLevelSlider.setBounds(row.removeFromLeft(70).withHeight(22).withY(row.getCentreY() - 11));
 }
 
 void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
+  // OptionD SID towers: two equal columns with a 6px gap.
+  // Each column top→bottom: header (SID label + chip combo), voice-enable row,
+  //   FilterDisplay (~74px), Cutoff row, Reso row, bottom row (LP/BP/HP + Flt + Pan + Detune).
   const int pad = 4;
-  auto sidRow = bounds.removeFromTop(200);
-  const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
+  const int gap = 6;
+  const int sidWidth = (bounds.getWidth() - gap) / 2;
 
   // ----- LEFT SID -----
-  auto leftPanel = sidRow.removeFromLeft(sidWidth);
-  leftSIDLabel.setBounds(leftPanel.removeFromTop(20));
-  auto leftChipRow = leftPanel.removeFromTop(24);
-  leftChipSelector.setBounds(leftChipRow.removeFromLeft(120));
+  auto leftPanel = bounds.removeFromLeft(sidWidth).reduced(8, 6);
 
-  auto leftVoicesRow = leftPanel.removeFromTop(28);
+  // Header row: SID label + chip selector
+  auto leftHeader = leftPanel.removeFromTop(20);
+  leftSIDLabel.setBounds(leftHeader.removeFromLeft(80));
+  leftChipSelector.setBounds(leftHeader.withHeight(20).withY(leftHeader.getY()));
+
+  leftPanel.removeFromTop(pad);
+
+  // Voice enable + button row (3 voice pairs)
+  auto leftVoicesRow = leftPanel.removeFromTop(24);
   for (int i = 0; i < 3; ++i) {
-    leftVoiceEnables[i].setBounds(leftVoicesRow.removeFromLeft(20));
-    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(44));
-    leftVoicesRow.removeFromLeft(pad);
+    leftVoiceEnables[i].setBounds(leftVoicesRow.removeFromLeft(20).reduced(0, 2));
+    leftVoiceButtons[i].setBounds(leftVoicesRow.removeFromLeft(52).reduced(0, 1));
+    if (i < 2) leftVoicesRow.removeFromLeft(pad);
   }
 
   leftPanel.removeFromTop(pad);
-  auto leftFilterRow = leftPanel.removeFromTop(60);
-  leftCutoffLabel.setBounds(leftFilterRow.removeFromLeft(40));
-  leftCutoffSlider.setBounds(leftFilterRow.removeFromLeft(55));
-  cutoffMeterL.setBounds(leftFilterRow.removeFromLeft(6));
-  leftFilterRow.removeFromLeft(4);
-  leftResonanceLabel.setBounds(leftFilterRow.removeFromLeft(32));
-  leftResonanceSlider.setBounds(leftFilterRow.removeFromLeft(55));
-  resMeterL.setBounds(leftFilterRow.removeFromLeft(6));
-  filterDisplay_L.setBounds(leftFilterRow.removeFromLeft(120));
 
-  auto leftModesRow = leftPanel.removeFromTop(22);
-  leftFilterEnableButton.setBounds(leftModesRow.removeFromLeft(45));
-  leftLPButton.setBounds(leftModesRow.removeFromLeft(45));
-  leftBPButton.setBounds(leftModesRow.removeFromLeft(45));
-  leftHPButton.setBounds(leftModesRow.removeFromLeft(45));
+  // FilterDisplay — full column width × 74px
+  filterDisplay_L.setBounds(leftPanel.removeFromTop(74));
 
-  auto leftDetuneRow = leftPanel.removeFromTop(20);
-  leftDetuneLabel.setBounds(leftDetuneRow.removeFromLeft(45));
-  leftDetuneSlider.setBounds(leftDetuneRow.removeFromLeft(150));
+  leftPanel.removeFromTop(pad);
 
-  auto leftPanRow = leftPanel.removeFromTop(20);
-  leftPanLabel.setBounds(leftPanRow.removeFromLeft(45));
-  leftPanSlider.setBounds(leftPanRow.removeFromLeft(150));
+  // Cutoff row: label + slider + meter + value
+  auto leftCutoffRow = leftPanel.removeFromTop(22);
+  leftCutoffLabel.setBounds(leftCutoffRow.removeFromLeft(46).withHeight(16).withY(leftCutoffRow.getCentreY() - 8));
+  cutoffMeterL.setBounds(leftCutoffRow.removeFromRight(6).reduced(0, 3));
+  leftCutoffSlider.setBounds(leftCutoffRow.withHeight(20).withY(leftCutoffRow.getCentreY() - 10));
 
-  sidRow.removeFromLeft(pad * 2);
+  leftPanel.removeFromTop(pad / 2);
+
+  // Reso row: label + slider + meter
+  auto leftResoRow = leftPanel.removeFromTop(22);
+  leftResonanceLabel.setBounds(leftResoRow.removeFromLeft(46).withHeight(16).withY(leftResoRow.getCentreY() - 8));
+  resMeterL.setBounds(leftResoRow.removeFromRight(6).reduced(0, 3));
+  leftResonanceSlider.setBounds(leftResoRow.withHeight(20).withY(leftResoRow.getCentreY() - 10));
+
+  leftPanel.removeFromTop(pad);
+
+  // Bottom row: LP/BP/HP + Flt toggle | spacer | Pan slider + Detune slider
+  auto leftBottomRow = leftPanel.removeFromTop(22);
+  leftLPButton.setBounds(leftBottomRow.removeFromLeft(36).reduced(0, 1));
+  leftBPButton.setBounds(leftBottomRow.removeFromLeft(36).reduced(0, 1));
+  leftHPButton.setBounds(leftBottomRow.removeFromLeft(36).reduced(0, 1));
+  leftFilterEnableButton.setBounds(leftBottomRow.removeFromLeft(38).reduced(0, 1));
+  leftBottomRow.removeFromLeft(pad);
+  leftPanLabel.setBounds(leftBottomRow.removeFromLeft(28).withHeight(14).withY(leftBottomRow.getCentreY() - 7));
+  leftPanSlider.setBounds(leftBottomRow.removeFromLeft(60).withHeight(20).withY(leftBottomRow.getCentreY() - 10));
+  leftBottomRow.removeFromLeft(pad);
+  leftDetuneLabel.setBounds(leftBottomRow.removeFromLeft(36).withHeight(14).withY(leftBottomRow.getCentreY() - 7));
+  leftDetuneSlider.setBounds(leftBottomRow.withHeight(20).withY(leftBottomRow.getCentreY() - 10));
+
+  bounds.removeFromLeft(gap);
 
   // ----- RIGHT SID -----
-  auto rightPanel = sidRow.removeFromRight(sidWidth);
-  rightSIDLabel.setBounds(rightPanel.removeFromTop(20));
-  auto rightChipRow = rightPanel.removeFromTop(24);
-  rightChipSelector.setBounds(rightChipRow.removeFromRight(120));
+  auto rightPanel = bounds.removeFromLeft(sidWidth).reduced(8, 6);
 
-  auto rightVoicesRow = rightPanel.removeFromTop(28);
-  for (int i = 2; i >= 0; --i) {
-    rightVoicesRow.removeFromRight(pad);
-    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromRight(44));
-    rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromRight(20));
+  // Header row: SID label + chip selector (mirrored)
+  auto rightHeader = rightPanel.removeFromTop(20);
+  rightSIDLabel.setBounds(rightHeader.removeFromLeft(80));
+  rightChipSelector.setBounds(rightHeader.withHeight(20).withY(rightHeader.getY()));
+
+  rightPanel.removeFromTop(pad);
+
+  // Voice enable + button row (voices 4-6, mirrored layout)
+  auto rightVoicesRow = rightPanel.removeFromTop(24);
+  for (int i = 0; i < 3; ++i) {
+    rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromLeft(20).reduced(0, 2));
+    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromLeft(52).reduced(0, 1));
+    if (i < 2) rightVoicesRow.removeFromLeft(pad);
   }
 
   rightPanel.removeFromTop(pad);
-  auto rightFilterRow = rightPanel.removeFromTop(60);
-  resMeterR.setBounds(rightFilterRow.removeFromRight(6));
-  rightResonanceSlider.setBounds(rightFilterRow.removeFromRight(55));
-  rightResonanceLabel.setBounds(rightFilterRow.removeFromRight(32));
-  rightFilterRow.removeFromRight(4);
-  cutoffMeterR.setBounds(rightFilterRow.removeFromRight(6));
-  rightCutoffSlider.setBounds(rightFilterRow.removeFromRight(55));
-  rightCutoffLabel.setBounds(rightFilterRow.removeFromRight(40));
-  filterDisplay_R.setBounds(rightFilterRow.removeFromRight(120));
 
-  auto rightModesRow = rightPanel.removeFromTop(22);
-  rightHPButton.setBounds(rightModesRow.removeFromRight(45));
-  rightBPButton.setBounds(rightModesRow.removeFromRight(45));
-  rightLPButton.setBounds(rightModesRow.removeFromRight(45));
-  rightFilterEnableButton.setBounds(rightModesRow.removeFromRight(45));
+  // FilterDisplay — full column width × 74px
+  filterDisplay_R.setBounds(rightPanel.removeFromTop(74));
 
-  auto rightDetuneRow = rightPanel.removeFromTop(20);
-  rightDetuneSlider.setBounds(rightDetuneRow.removeFromRight(150));
-  rightDetuneLabel.setBounds(rightDetuneRow.removeFromRight(45));
+  rightPanel.removeFromTop(pad);
 
-  auto rightPanRow = rightPanel.removeFromTop(20);
-  rightPanSlider.setBounds(rightPanRow.removeFromRight(150));
-  rightPanLabel.setBounds(rightPanRow.removeFromRight(45));
+  // Cutoff row
+  auto rightCutoffRow = rightPanel.removeFromTop(22);
+  rightCutoffLabel.setBounds(rightCutoffRow.removeFromLeft(46).withHeight(16).withY(rightCutoffRow.getCentreY() - 8));
+  cutoffMeterR.setBounds(rightCutoffRow.removeFromRight(6).reduced(0, 3));
+  rightCutoffSlider.setBounds(rightCutoffRow.withHeight(20).withY(rightCutoffRow.getCentreY() - 10));
 
-  bounds.removeFromTop(pad * 2);
+  rightPanel.removeFromTop(pad / 2);
+
+  // Reso row
+  auto rightResoRow = rightPanel.removeFromTop(22);
+  rightResonanceLabel.setBounds(rightResoRow.removeFromLeft(46).withHeight(16).withY(rightResoRow.getCentreY() - 8));
+  resMeterR.setBounds(rightResoRow.removeFromRight(6).reduced(0, 3));
+  rightResonanceSlider.setBounds(rightResoRow.withHeight(20).withY(rightResoRow.getCentreY() - 10));
+
+  rightPanel.removeFromTop(pad);
+
+  // Bottom row: LP/BP/HP + Flt toggle | Pan | Detune
+  auto rightBottomRow = rightPanel.removeFromTop(22);
+  rightLPButton.setBounds(rightBottomRow.removeFromLeft(36).reduced(0, 1));
+  rightBPButton.setBounds(rightBottomRow.removeFromLeft(36).reduced(0, 1));
+  rightHPButton.setBounds(rightBottomRow.removeFromLeft(36).reduced(0, 1));
+  rightFilterEnableButton.setBounds(rightBottomRow.removeFromLeft(38).reduced(0, 1));
+  rightBottomRow.removeFromLeft(pad);
+  rightPanLabel.setBounds(rightBottomRow.removeFromLeft(28).withHeight(14).withY(rightBottomRow.getCentreY() - 7));
+  rightPanSlider.setBounds(rightBottomRow.removeFromLeft(60).withHeight(20).withY(rightBottomRow.getCentreY() - 10));
+  rightBottomRow.removeFromLeft(pad);
+  rightDetuneLabel.setBounds(rightBottomRow.removeFromLeft(36).withHeight(14).withY(rightBottomRow.getCentreY() - 7));
+  rightDetuneSlider.setBounds(rightBottomRow.withHeight(20).withY(rightBottomRow.getCentreY() - 10));
 }
 
 void BreadbinEditor::layoutVoiceEditor(juce::Rectangle<int> &bounds) {
+  // OptionD Voice Editor: receives voiceEditorPanelBounds directly.
+  // Header: Voice Editor label + voice selector combo + wave selector + Ring/Sync/Flt toggles + voice preset save/load.
+  // Body: 3 columns separated by thin dividers:
+  //   [Pulse-Width, Glide, Mod-offset sliders] | [Amp ADSR] | [Filter Envelope: toggle + ADSR + Amount]
   const int pad = 4;
-  auto editorArea = bounds.removeFromTop(174);
-  voiceEditorLabel.setBounds(editorArea.removeFromTop(18));
+  const int colGap = 12;
 
-  // Row 1: Voice Select, Save/Load, Waveform
-  auto row1 = editorArea.removeFromTop(26);
+  auto area = bounds.reduced(8, 6);
 
-  presetLabel.setBounds(row1.removeFromLeft(40));
-  presetSelector.setBounds(
-      row1.removeFromLeft(110).withHeight(22).translated(0, 2));
-  row1.removeFromLeft(pad);
-  saveVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 1));
-  row1.removeFromLeft(pad);
-  loadVoiceButton.setBounds(row1.removeFromLeft(24).reduced(0, 1));
-  row1.removeFromLeft(pad * 3);
+  // --- Header row ---
+  auto header = area.removeFromTop(22);
+  voiceEditorLabel.setBounds(header.removeFromLeft(100));
+  header.removeFromLeft(pad);
+  presetSelector.setBounds(header.removeFromLeft(120).withHeight(20).withY(header.getCentreY() - 10));
+  header.removeFromLeft(pad);
+  saveVoiceButton.setBounds(header.removeFromLeft(24).reduced(0, 1));
+  header.removeFromLeft(pad / 2);
+  loadVoiceButton.setBounds(header.removeFromLeft(24).reduced(0, 1));
+  header.removeFromLeft(pad * 2);
+  waveformLabel.setBounds(header.removeFromLeft(36).withHeight(14).withY(header.getCentreY() - 7));
+  waveformSelector.setBounds(header.removeFromLeft(110).withHeight(20).withY(header.getCentreY() - 10));
+  header.removeFromLeft(pad * 3);
+  ringModButton.setBounds(header.removeFromLeft(48).reduced(0, 1));
+  header.removeFromLeft(pad / 2);
+  syncButton.setBounds(header.removeFromLeft(48).reduced(0, 1));
+  header.removeFromLeft(pad / 2);
+  voiceFilterButton.setBounds(header.removeFromLeft(40).reduced(0, 1));
+  header.removeFromLeft(pad);
+  presetLabel.setBounds(header.removeFromLeft(28).withHeight(14).withY(header.getCentreY() - 7));
 
-  waveformLabel.setBounds(row1.removeFromLeft(42));
-  waveformSelector.setBounds(
-      row1.removeFromLeft(100).withHeight(22).translated(0, 2));
+  area.removeFromTop(pad);
 
-  // Row 2: Pulse Width + ADSR sliders
-  editorArea.removeFromTop(pad);
-  auto row1b = editorArea.removeFromTop(68);
+  // --- Body: 3 columns ---
+  // Divide remaining area into 3 columns
+  const int bodyH = area.getHeight();
+  const int totalColW = area.getWidth() - colGap * 2;
+  // Col1 ~flex:1.4, col2 and col3 each ~flex:1
+  const int col1W = (totalColW * 42) / 100; // ~42%
+  const int col23W = (totalColW * 29) / 100; // ~29% each (remainder)
 
-  pwLabel.setBounds(row1b.removeFromLeft(30));
-  pulseWidthSlider.setBounds(row1b.removeFromLeft(160).reduced(0, 2));
-  pwMeter.setBounds(row1b.removeFromLeft(6));
-  row1b.removeFromLeft(pad * 2);
-  pitchMeter.setBounds(row1b.removeFromLeft(6));
-  row1b.removeFromLeft(pad * 3);
+  auto col1 = area.removeFromLeft(col1W);
+  area.removeFromLeft(colGap);
+  auto col2 = area.removeFromLeft(col23W);
+  area.removeFromLeft(colGap);
+  auto col3 = area; // remainder
 
-  const int adsrW = 44;
-  const int adsrH = 52;
-  auto adsrArea = row1b.removeFromLeft(adsrW * 4);
-  int adsrY = adsrArea.getY();
-  attackLabel.setBounds(adsrArea.getX(), adsrY, adsrW, 14);
-  attackSlider.setBounds(adsrArea.getX(), adsrY + 14, adsrW, adsrH);
-  decayLabel.setBounds(adsrArea.getX() + adsrW, adsrY, adsrW, 14);
-  decaySlider.setBounds(adsrArea.getX() + adsrW, adsrY + 14, adsrW, adsrH);
-  sustainLabel.setBounds(adsrArea.getX() + adsrW * 2, adsrY, adsrW, 14);
-  sustainSlider.setBounds(adsrArea.getX() + adsrW * 2, adsrY + 14, adsrW,
-                          adsrH);
-  releaseLabel.setBounds(adsrArea.getX() + adsrW * 3, adsrY, adsrW, 14);
-  releaseSlider.setBounds(adsrArea.getX() + adsrW * 3, adsrY + 14, adsrW,
-                          adsrH);
+  // --- Col1: Pulse Width, Glide, Mod-offset sliders ---
+  const int sliderRowH = 22;
+  const int labelW = 54;
 
-  // Row 3: Ring Mod, Sync, Filter toggles
-  editorArea.removeFromTop(pad);
-  auto modRow = editorArea.removeFromTop(22);
-  ringModButton.setBounds(modRow.removeFromLeft(55));
-  modRow.removeFromLeft(pad);
-  syncButton.setBounds(modRow.removeFromLeft(55));
-  modRow.removeFromLeft(pad);
-  voiceFilterButton.setBounds(modRow.removeFromLeft(45));
-  modRow.removeFromLeft(pad);
-  modOffsetLabel.setBounds(modRow.removeFromLeft(30));
-  modOffsetSlider.setBounds(modRow.removeFromLeft(110));
+  auto pwRow = col1.removeFromTop(sliderRowH);
+  pwLabel.setBounds(pwRow.removeFromLeft(labelW).withHeight(14).withY(pwRow.getCentreY() - 7));
+  pwMeter.setBounds(pwRow.removeFromRight(6).reduced(0, 4));
+  pitchMeter.setBounds(pwRow.removeFromRight(6).reduced(0, 4));
+  pulseWidthSlider.setBounds(pwRow.withHeight(20).withY(pwRow.getCentreY() - 10));
+  col1.removeFromTop(pad);
 
-  // Row 4: Glide
-  editorArea.removeFromTop(pad);
-  auto row2 = editorArea.removeFromTop(28);
-  glideTimeLabel.setBounds(row2.removeFromLeft(40));
-  glideTimeSlider.setBounds(row2.removeFromLeft(180));
+  auto glideRow = col1.removeFromTop(sliderRowH);
+  glideTimeLabel.setBounds(glideRow.removeFromLeft(labelW).withHeight(14).withY(glideRow.getCentreY() - 7));
+  glideTimeSlider.setBounds(glideRow.withHeight(20).withY(glideRow.getCentreY() - 10));
+  col1.removeFromTop(pad);
+
+  auto modRow = col1.removeFromTop(sliderRowH);
+  modOffsetLabel.setBounds(modRow.removeFromLeft(labelW).withHeight(14).withY(modRow.getCentreY() - 7));
+  modOffsetSlider.setBounds(modRow.withHeight(20).withY(modRow.getCentreY() - 10));
+
+  // --- Col2: Amp ADSR (label + 4 vertical sliders) ---
+  const int adsrLabelH = 14;
+  const int adsrH = col2.getHeight() - adsrLabelH - pad;
+  const int adsrW = col2.getWidth() / 4;
+  int ax = col2.getX();
+  int ay = col2.getY();
+
+  attackLabel.setBounds(ax,             ay, adsrW, adsrLabelH);
+  attackSlider.setBounds(ax,            ay + adsrLabelH + pad, adsrW, adsrH);
+  decayLabel.setBounds(ax + adsrW,      ay, adsrW, adsrLabelH);
+  decaySlider.setBounds(ax + adsrW,     ay + adsrLabelH + pad, adsrW, adsrH);
+  sustainLabel.setBounds(ax + adsrW*2,  ay, adsrW, adsrLabelH);
+  sustainSlider.setBounds(ax + adsrW*2, ay + adsrLabelH + pad, adsrW, adsrH);
+  releaseLabel.setBounds(ax + adsrW*3,  ay, adsrW, adsrLabelH);
+  releaseSlider.setBounds(ax + adsrW*3, ay + adsrLabelH + pad, adsrW, adsrH);
+
+  // --- Col3: Filter Envelope (toggle + ADSR + Amount knob) ---
+  // Toggle
+  filterEnvEnableButton.setBounds(col3.removeFromTop(20));
+  col3.removeFromTop(pad);
+
+  // 4 ADSR sliders + amount knob side by side
+  const int feH = col3.getHeight();
+  const int feAdsrW = col3.getWidth() / 5; // 4 sliders + amount
+  int fx = col3.getX();
+  int fy = col3.getY();
+
+  filterEnvAttackLabel.setBounds(fx,              fy, feAdsrW, adsrLabelH);
+  filterEnvAttackSlider.setBounds(fx,             fy + adsrLabelH, feAdsrW, feH - adsrLabelH);
+  filterEnvDecayLabel.setBounds(fx + feAdsrW,     fy, feAdsrW, adsrLabelH);
+  filterEnvDecaySlider.setBounds(fx + feAdsrW,    fy + adsrLabelH, feAdsrW, feH - adsrLabelH);
+  filterEnvSustainLabel.setBounds(fx + feAdsrW*2, fy, feAdsrW, adsrLabelH);
+  filterEnvSustainSlider.setBounds(fx + feAdsrW*2,fy + adsrLabelH, feAdsrW, feH - adsrLabelH);
+  filterEnvReleaseLabel.setBounds(fx + feAdsrW*3, fy, feAdsrW, adsrLabelH);
+  filterEnvReleaseSlider.setBounds(fx + feAdsrW*3,fy + adsrLabelH, feAdsrW, feH - adsrLabelH);
+  filterEnvAmountLabel.setBounds(fx + feAdsrW*4,  fy, feAdsrW, adsrLabelH);
+  filterEnvAmountSlider.setBounds(fx + feAdsrW*4, fy + adsrLabelH, feAdsrW, feH - adsrLabelH);
 }
 
-void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> &bounds) {
+void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> fxArea,
+                                          juce::Rectangle<int> dockArea) {
+  // OptionD region 4 (FX chain) + region 5 (Dock).
+  // Filter envelope controls are now in layoutVoiceEditor (col3).
+  // SID overlay labels are positioned relative to their target controls.
   const int pad = 4;
 
   // SID Player register overlay positions (overlapping bottom of each control)
@@ -4084,175 +4213,110 @@ void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> &bounds) {
   overlayAt(sidOverlayCutoff, leftCutoffSlider);
   overlayAt(sidOverlayRes, leftResonanceSlider);
 
-  const int globalRowW = 500;
-  const int globalRowH = 30;
+  // ---- FX Chain panel ----
+  // 3 rows: Chorus, Delay, Reverb — each a full-width horizontal strip
+  auto fx = fxArea.reduced(8, 4);
+  const int fxRowH = (fx.getHeight() - pad * 2) / 3;
 
-  // 1. Bottom Row: Clock (Right-justified)
-  auto bottomRow = bounds.removeFromBottom(globalRowH);
-  auto bottomStack = bottomRow.removeFromRight(globalRowW);
-  clockModeSelector.setBounds(bottomStack.removeFromRight(65));
-  clockModeLabel.setBounds(bottomStack.removeFromRight(40));
-  bottomStack.removeFromRight(pad * 2);
-  bounds.removeFromBottom(8);
+  auto layoutFxRow = [&](juce::Rectangle<int> row,
+                          juce::ToggleButton &enableBtn,
+                          juce::Label &l1, juce::Slider &s1,
+                          juce::Label &l2, juce::Slider &s2,
+                          juce::Label &l3, juce::Slider &s3,
+                          juce::Label *l4 = nullptr, juce::Slider *s4 = nullptr) {
+    const int cH = row.getHeight();
+    enableBtn.setBounds(row.removeFromLeft(68).withHeight(20).withY(row.getCentreY() - 10));
+    row.removeFromLeft(pad);
+    auto placeSlider = [&](juce::Label &lbl, juce::Slider &sl, int lw, int sw) {
+      lbl.setBounds(row.removeFromLeft(lw).withHeight(13).withY(row.getCentreY() - 7));
+      sl.setBounds(row.removeFromLeft(sw).withHeight(std::min(cH, 20)).withY(row.getCentreY() - 10));
+      row.removeFromLeft(pad);
+    };
+    const int flexW = (row.getWidth() - (l4 ? 4 : 3) * (pad + 30)) / (l4 ? 4 : 3);
+    placeSlider(l1, s1, 36, flexW);
+    placeSlider(l2, s2, 36, flexW);
+    placeSlider(l3, s3, 32, flexW);
+    if (l4 && s4)
+      placeSlider(*l4, *s4, 28, flexW);
+  };
 
-  // 2. Arpeggiator (Right-justified)
-  auto middleRow = bounds.removeFromBottom(globalRowH);
-  auto arpStack = middleRow.removeFromRight(420);
+  auto chorusRow = fx.removeFromTop(fxRowH);
+  layoutFxRow(chorusRow, chorusEnableButton,
+              chorusRateLabel, chorusRateSlider,
+              chorusDepthLabel, chorusDepthSlider,
+              chorusMixLabel, chorusMixSlider);
+  fx.removeFromTop(pad);
 
-  arpEnableButton.setBounds(
-      arpStack.removeFromLeft(50).withSize(50, 20).translated(0, 5));
-  arpStack.removeFromLeft(15);
+  auto delayRow = fx.removeFromTop(fxRowH);
+  layoutFxRow(delayRow, delayEnableButton,
+              delayTimeLLabel, delayTimeLSlider,
+              delayTimeRLabel, delayTimeRSlider,
+              delayFBLabel, delayFeedbackSlider,
+              &delayMixLabel, &delayMixSlider);
+  fx.removeFromTop(pad);
 
+  auto reverbRow = fx;
+  layoutFxRow(reverbRow, reverbEnableButton,
+              reverbDecayLabel, reverbDecaySlider,
+              reverbDampingLabel, reverbDampingSlider,
+              reverbMixLabel, reverbMixSlider);
+
+  // ---- Dock row ----
+  auto dock = dockArea.reduced(0, 2);
+  const int dH = dock.getHeight();
+  auto centreV = [&](juce::Rectangle<int> r, int h) {
+    return r.withHeight(h).withY(r.getCentreY() - h / 2);
+  };
+
+  // Left: Arp controls
+  arpEnableButton.setBounds(centreV(dock.removeFromLeft(46), 20));
+  dock.removeFromLeft(pad);
   arpPatternLabel.setText("Arp", juce::dontSendNotification);
-  arpPatternLabel.setBounds(
-      arpStack.removeFromLeft(30).withSize(30, 20).translated(0, 5));
-  arpPatternSelector.setBounds(
-      arpStack.removeFromLeft(90).withSize(90, 20).translated(0, 5));
-  arpStack.removeFromLeft(pad);
-
-  arpRateLabel.setBounds(
-      arpStack.removeFromLeft(35).withSize(35, 20).translated(0, 5));
-  arpRateSlider.setBounds(
-      arpStack.removeFromLeft(100).withSize(100, 20).translated(0, 5));
-  arpStack.removeFromLeft(pad);
-
+  arpPatternLabel.setBounds(dock.removeFromLeft(28).withHeight(13).withY(dock.getCentreY() - 7));
+  arpPatternSelector.setBounds(centreV(dock.removeFromLeft(92), 20));
+  dock.removeFromLeft(pad);
+  arpRateLabel.setBounds(dock.removeFromLeft(34).withHeight(13).withY(dock.getCentreY() - 7));
+  arpRateSlider.setBounds(centreV(dock.removeFromLeft(90), 20));
+  dock.removeFromLeft(pad);
   arpOctaveLabel.setText("Oct", juce::dontSendNotification);
-  arpOctaveLabel.setBounds(
-      arpStack.removeFromLeft(30).withSize(30, 20).translated(0, 5));
-  arpOctaveSelector.setBounds(
-      arpStack.removeFromLeft(60).withSize(60, 20).translated(0, 5));
+  arpOctaveLabel.setBounds(dock.removeFromLeft(26).withHeight(13).withY(dock.getCentreY() - 7));
+  arpOctaveSelector.setBounds(centreV(dock.removeFromLeft(58), 20));
+  dock.removeFromLeft(pad * 2);
 
-  bounds.removeFromBottom(10);
+  // Right: Clock selector
+  clockModeSelector.setBounds(centreV(dock.removeFromRight(65), 20));
+  clockModeLabel.setBounds(dock.removeFromRight(36).withHeight(13).withY(dock.getCentreY() - 7));
+  dock.removeFromRight(pad);
 
-  // 3. FX: Chorus + Delay + Reverb
-  auto fxArea = bounds.removeFromBottom(87);
-  auto chorusRow = fxArea.removeFromTop(29);
-  auto delayRow = fxArea.removeFromTop(29);
-  auto reverbRow = fxArea;
+  // Remaining centre: popup buttons + enable toggles
+  // Enable toggles sit above buttons — here we only have a single 24px row,
+  // so stack toggles as a 12px mini strip on top and buttons below.
+  const int btnH = 14;
+  const int togH = 10;
 
-  auto chorusStack = chorusRow.removeFromRight(500);
-  chorusEnableButton.setBounds(
-      chorusStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
-  chorusStack.removeFromLeft(4);
-  chorusRateLabel.setBounds(chorusStack.removeFromLeft(32).withHeight(14));
-  chorusRateSlider.setBounds(
-      chorusStack.removeFromLeft(138).withHeight(22).translated(0, 3));
-  chorusStack.removeFromLeft(4);
-  chorusDepthLabel.setBounds(chorusStack.removeFromLeft(38).withHeight(14));
-  chorusDepthSlider.setBounds(
-      chorusStack.removeFromLeft(121).withHeight(22).translated(0, 3));
-  chorusStack.removeFromLeft(4);
-  chorusMixLabel.setBounds(chorusStack.removeFromLeft(28).withHeight(14));
-  chorusMixSlider.setBounds(
-      chorusStack.removeFromLeft(66).withHeight(22).translated(0, 3));
+  // Pop buttons (right-justified in remaining space)
+  auto digiBtnBounds  = dock.removeFromRight(56);
+  dock.removeFromRight(pad);
+  auto sidBtnBounds   = dock.removeFromRight(75);
+  dock.removeFromRight(pad);
+  auto chordBtnBounds = dock.removeFromRight(62);
+  dock.removeFromRight(pad);
+  auto wtBtnBounds    = dock.removeFromRight(80);
+  dock.removeFromRight(pad);
+  auto modBtnBounds   = dock.removeFromRight(86);
 
-  auto delayStack = delayRow.removeFromRight(500);
-  delayEnableButton.setBounds(
-      delayStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
-  delayStack.removeFromLeft(4);
-  delayTimeLLabel.setBounds(delayStack.removeFromLeft(32).withHeight(14));
-  delayTimeLSlider.setBounds(
-      delayStack.removeFromLeft(92).withHeight(22).translated(0, 3));
-  delayStack.removeFromLeft(4);
-  delayTimeRLabel.setBounds(delayStack.removeFromLeft(32).withHeight(14));
-  delayTimeRSlider.setBounds(
-      delayStack.removeFromLeft(92).withHeight(22).translated(0, 3));
-  delayStack.removeFromLeft(4);
-  delayFBLabel.setBounds(delayStack.removeFromLeft(22).withHeight(14));
-  delayFeedbackSlider.setBounds(
-      delayStack.removeFromLeft(55).withHeight(22).translated(0, 3));
-  delayStack.removeFromLeft(4);
-  delayMixLabel.setBounds(delayStack.removeFromLeft(28).withHeight(14));
-  delayMixSlider.setBounds(
-      delayStack.removeFromLeft(66).withHeight(22).translated(0, 3));
+  digiButton.setBounds(centreV(digiBtnBounds, btnH));
+  sidPlayerButton.setBounds(centreV(sidBtnBounds, btnH));
+  chordMemoryButton.setBounds(centreV(chordBtnBounds, btnH));
+  wavetableButton.setBounds(centreV(wtBtnBounds, btnH));
+  modMatrixButton.setBounds(centreV(modBtnBounds, btnH));
 
-  auto reverbStack = reverbRow.removeFromRight(500);
-  reverbEnableButton.setBounds(
-      reverbStack.removeFromLeft(65).withSize(65, 22).translated(0, 3));
-  reverbStack.removeFromLeft(4);
-  reverbDecayLabel.setBounds(reverbStack.removeFromLeft(38).withHeight(14));
-  reverbDecaySlider.setBounds(
-      reverbStack.removeFromLeft(100).withHeight(22).translated(0, 3));
-  reverbStack.removeFromLeft(4);
-  reverbDampingLabel.setBounds(reverbStack.removeFromLeft(38).withHeight(14));
-  reverbDampingSlider.setBounds(
-      reverbStack.removeFromLeft(120).withHeight(22).translated(0, 3));
-  reverbStack.removeFromLeft(4);
-  reverbMixLabel.setBounds(reverbStack.removeFromLeft(28).withHeight(14));
-  reverbMixSlider.setBounds(
-      reverbStack.removeFromLeft(66).withHeight(22).translated(0, 3));
-
-  bounds.removeFromBottom(4);
-
-  // 4. Filter Envelope
-  auto filterEnvRow = bounds.removeFromBottom(72);
-  auto filterEnvStack = filterEnvRow.removeFromRight(370);
-
-  filterEnvEnableButton.setBounds(
-      filterEnvStack.removeFromLeft(75).withSize(75, 20).translated(0, 12));
-  filterEnvStack.removeFromLeft(8);
-
-  const int feW = 48;
-  auto feAArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvAttackLabel.setBounds(feAArea.getX(), filterEnvRow.getY() + 2, feW,
-                                 14);
-  filterEnvAttackSlider.setBounds(feAArea.getX(), filterEnvRow.getY() + 16, feW,
-                                  54);
-
-  filterEnvStack.removeFromLeft(2);
-  auto feDArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvDecayLabel.setBounds(feDArea.getX(), filterEnvRow.getY() + 2, feW,
-                                14);
-  filterEnvDecaySlider.setBounds(feDArea.getX(), filterEnvRow.getY() + 16, feW,
-                                 54);
-
-  filterEnvStack.removeFromLeft(2);
-  auto feSArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvSustainLabel.setBounds(feSArea.getX(), filterEnvRow.getY() + 2, feW,
-                                  14);
-  filterEnvSustainSlider.setBounds(feSArea.getX(), filterEnvRow.getY() + 16,
-                                   feW, 54);
-
-  filterEnvStack.removeFromLeft(2);
-  auto feRArea = filterEnvStack.removeFromLeft(feW);
-  filterEnvReleaseLabel.setBounds(feRArea.getX(), filterEnvRow.getY() + 2, feW,
-                                  14);
-  filterEnvReleaseSlider.setBounds(feRArea.getX(), filterEnvRow.getY() + 16,
-                                   feW, 54);
-
-  filterEnvStack.removeFromLeft(8);
-  auto feAmtArea = filterEnvStack.removeFromLeft(70);
-  filterEnvAmountLabel.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 2, 70,
-                                 14);
-  filterEnvAmountSlider.setBounds(feAmtArea.getX(), filterEnvRow.getY() + 16,
-                                  70, 54);
-
-  bounds.removeFromBottom(4);
-
-  // 5. Popup buttons row
-  auto wtRow = bounds.removeFromBottom(25);
-  sidPlayerButton.setBounds(
-      wtRow.removeFromRight(85).withSize(85, 20).translated(0, 2));
-  wtRow.removeFromRight(4);
-  chordMemoryButton.setBounds(
-      wtRow.removeFromRight(70).withSize(70, 20).translated(0, 2));
-  wtRow.removeFromRight(4);
-  auto modBtnBounds = wtRow.removeFromRight(90);
-  modMatrixButton.setBounds(modBtnBounds.withSize(90, 20).translated(0, 2));
-  wtRow.removeFromRight(4);
-  auto wtBtnBounds = wtRow.removeFromRight(85);
-  wavetableButton.setBounds(wtBtnBounds.withSize(85, 20).translated(0, 2));
-  wtRow.removeFromRight(4);
-  auto digiBtnBounds = wtRow.removeFromRight(55);
-  digiButton.setBounds(digiBtnBounds.withSize(55, 20).translated(0, 2));
-
-  // 5b. Enable toggles row (above popup buttons)
-  auto toggleRow = bounds.removeFromBottom(18);
-  wtEnableToggle.setBounds(wtBtnBounds.getX(), toggleRow.getY(), 52, 18);
-  lfo1EnableToggle.setBounds(modBtnBounds.getX(), toggleRow.getY(), 55, 18);
-  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, toggleRow.getY(), 55,
-                             18);
-  digiEnableToggle.setBounds(digiBtnBounds.getX(), toggleRow.getY(), 52, 18);
+  // Enable toggles placed just above each button (within same row height)
+  auto togY = dockArea.getY() + 2;
+  wtEnableToggle.setBounds(wtBtnBounds.getX(),    togY, 52, togH);
+  lfo1EnableToggle.setBounds(modBtnBounds.getX(), togY, 55, togH);
+  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, togY, 55, togH);
+  digiEnableToggle.setBounds(digiBtnBounds.getX(), togY, 52, togH);
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
