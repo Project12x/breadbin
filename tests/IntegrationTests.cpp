@@ -5,6 +5,7 @@
 #include "../src/PluginProcessor.h"
 #include "../src/SIDEngine.h"
 #include "../src/dsp/ReverbSC.h"
+#include <ghostmoon/ui/Theme.h>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -2971,6 +2972,12 @@ int main() {
   // ==================== REVERB TESTS ====================
   testReverbSCCompute();
   testReverbSCDecayRange();
+
+  // ==================== THEME TOKEN TESTS ====================
+  std::printf("--- Theme Token Sanity ---\n");
+  ASSERT_TRUE(gm::ui::theme::cyan.getARGB()   == 0xFF33EDED, "theme.cyan");
+  ASSERT_TRUE(gm::ui::theme::orange.getARGB() == 0xFFFFAE3B, "theme.orange");
+  ASSERT_TRUE(gm::ui::theme::cblue.getARGB()  == 0xFF8B80E8, "theme.cblue");
 
   std::printf("\n=== Results: %d passed, %d failed ===\n", testsPassed,
               testsFailed);
