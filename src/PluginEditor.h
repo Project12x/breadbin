@@ -1271,8 +1271,15 @@ private:
 
   MidiLearnOverlay midiLearnOverlay{processor};
 
-  // Background image
+  // Background image (legacy — kept for fallback, bgCache replaces per-paint use)
   juce::Image backgroundImage;
+  // Cached background composite (bg + vignette, built once in resizedContent)
+  juce::Image bgCache;
+  // Panel bounds stored in resizedContent() for use in paint()
+  juce::Rectangle<int> leftSidPanelBounds;
+  juce::Rectangle<int> rightSidPanelBounds;
+  juce::Rectangle<int> voiceEditorPanelBounds;
+  juce::Rectangle<int> fxPanelBounds;
   juce::TooltipWindow tooltipWindow{this, 500}; // 500ms delay before showing
 
   void setupControls();

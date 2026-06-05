@@ -3752,33 +3752,62 @@ void BreadbinEditor::updateFiltersFromUI() {
 }
 
 void BreadbinEditor::paint(juce::Graphics &g) {
-  if (backgroundImage.isValid()) {
-    g.drawImage(backgroundImage, getLocalBounds().toFloat(),
-                juce::RectanglePlacement::stretchToFit);
-    juce::ColourGradient vignette(
-        juce::Colours::black.withAlpha(0.45f),
-        getWidth() * 0.5f, getHeight() * 0.4f,
-        juce::Colours::black.withAlpha(0.80f),
-        0.0f, 0.0f, true);
-    g.setGradientFill(vignette);
-    g.fillRect(getLocalBounds());
+  // Cached background (bg_clean.png + radial vignette, built once in resizedContent)
+  if (bgCache.isValid()) {
+    g.drawImageAt(bgCache, 0, 0);
   } else {
-    g.fillAll(juce::Colour(30, 30, 35));
+    g.fillAll(gm::ui::theme::bg0);
   }
 
-  // Subtle glow underlines under SID panel headers
-  auto drawHeaderGlow = [&](juce::Label &label, juce::Colour colour) {
-    auto b = label.getBounds().toFloat();
-    float glowY = b.getBottom();
-    g.setColour(colour.withAlpha(0.05f));
-    g.fillRect(b.getX(), glowY + 2.0f, b.getWidth(), 6.0f);
-    g.setColour(colour.withAlpha(0.3f));
-    g.fillRect(b.getX() + 10.0f, glowY, b.getWidth() - 20.0f, 2.0f);
-    g.setColour(colour.withAlpha(0.1f));
-    g.fillRect(b.getX() + 5.0f, glowY + 1.0f, b.getWidth() - 10.0f, 3.0f);
+  // Glass panel backgrounds: semi-transparent dark gradient over the real backdrop.
+  // The fill is translucent so the background image reads through.
+  auto drawGlassPanel = [&](juce::Rectangle<int> bounds) {
+    if (bounds.isEmpty()) return;
+    const float radius = 8.0f;
+    auto fb = bounds.toFloat();
+    // Glass fill: ~rgba(20,22,34,.44) top -> ~rgba(7,8,14,.60) bottom
+    juce::ColourGradient glassFill = juce::ColourGradient::vertical(
+        juce::Colour(0x70141622),   // rgba(20,22,34,.44)
+        juce::Colour(0x9907080E),   // rgba(7,8,14,.60)
+        fb);
+    g.setGradientFill(glassFill);
+    g.fillRoundedRectangle(fb, radius);
+    // Accent-tinted 1px border
+    g.setColour(gm::ui::theme::line);
+    g.drawRoundedRectangle(fb, radius, 1.0f);
+    // Inner top sheen
+    g.setColour(juce::Colour(0x0AFFFFFF));
+    g.drawLine(fb.getX() + radius * 0.5f, fb.getY() + 1.0f,
+               fb.getRight() - radius * 0.5f, fb.getY() + 1.0f, 1.0f);
   };
-  drawHeaderGlow(leftSIDLabel, juce::Colours::cyan);
-  drawHeaderGlow(rightSIDLabel, juce::Colours::orange);
+
+  drawGlassPanel(leftSidPanelBounds);
+  drawGlassPanel(rightSidPanelBounds);
+  drawGlassPanel(voiceEditorPanelBounds);
+  drawGlassPanel(fxPanelBounds);
+
+  // Glow text headers for SID and voice editor sections
+  // drawGlowText draws bloom passes then accent; the Label child renders sharp text on top.
+  if (!leftSIDLabel.getBounds().isEmpty())
+    gm::ui::drawGlowText(g, leftSIDLabel.getText(),
+                         retroFont.withHeight(10.0f),
+                         leftSIDLabel.getBounds().toFloat(),
+                         gm::ui::theme::cyan,
+                         juce::Justification::centred);
+
+  if (!rightSIDLabel.getBounds().isEmpty())
+    gm::ui::drawGlowText(g, rightSIDLabel.getText(),
+                         retroFont.withHeight(10.0f),
+                         rightSIDLabel.getBounds().toFloat(),
+                         gm::ui::theme::orange,
+                         juce::Justification::centred);
+
+  if (!voiceEditorLabel.getBounds().isEmpty())
+    gm::ui::drawGlowText(g, voiceEditorLabel.getText(),
+                         retroFont.withHeight(8.0f),
+                         voiceEditorLabel.getBounds().toFloat(),
+                         gm::ui::theme::cyan,
+                         juce::Justification::centredLeft);
 }
 
 void BreadbinEditor::resizedContent() {
@@ -3786,14 +3815,60 @@ void BreadbinEditor::resizedContent() {
   auto bounds = getLocalBounds().reduced(8);
 
   layoutTopRow(bounds);
+
+  // Capture SID panel bounds before layout consumes them
+  {
+    const int pad = 4;
+    auto sidRow = bounds.withHeight(200); // same as layoutSidPanels's removeFromTop(200)
+    const int sidWidth = (sidRow.getWidth() - pad * 2) / 2;
+    leftSidPanelBounds  = sidRow.withWidth(sidWidth);
+    rightSidPanelBounds = sidRow.withX(sidRow.getRight() - sidWidth).withWidth(sidWidth);
+  }
   layoutSidPanels(bounds);
+
+  // Capture voice editor panel bounds
+  voiceEditorPanelBounds = bounds.withHeight(174);
   layoutVoiceEditor(bounds);
 
   bounds.removeFromTop(4);
   keyboard.setBounds(bounds.removeFromBottom(60));
   bounds.removeFromBottom(4);
 
+  // Capture FX panel bounds (everything remaining after keyboard / bottom rows)
+  fxPanelBounds = bounds;
   layoutBottomControls(bounds);
+
+  // Build background cache (background_clean.png + vignette)
+  if (getWidth() > 0 && getHeight() > 0) {
+    const int w = getWidth();
+    const int h = getHeight();
+    auto srcBg = juce::ImageCache::getFromMemory(
+        BinaryData::background_clean_png, BinaryData::background_clean_pngSize);
+
+    bgCache = juce::Image(juce::Image::ARGB, w, h, true);
+    juce::Graphics gc(bgCache);
+
+    if (srcBg.isValid()) {
+      // Scale-to-cover: fill the cache rect, preserving aspect ratio
+      gc.drawImage(srcBg, 0, 0, w, h,
+                   0, 0, srcBg.getWidth(), srcBg.getHeight());
+    } else {
+      gc.setColour(gm::ui::theme::bg0);
+      gc.fillAll();
+    }
+
+    // Light radial vignette: centre rgba(6,6,12,.14) -> edge rgba(4,4,9,.52) at ~85%
+    juce::ColourGradient vignette(
+        juce::Colour(0x2406060C),   // centre: rgba(6,6,12,.14)
+        static_cast<float>(w) * 0.5f,
+        static_cast<float>(h) * 0.4f,
+        juce::Colour(0x85040409),   // edge: rgba(4,4,9,.52)
+        0.0f, 0.0f,
+        true);                        // radial
+    vignette.addColour(0.85, juce::Colour(0x85040409));
+    gc.setGradientFill(vignette);
+    gc.fillRect(0, 0, w, h);
+  }
 }
 
 void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
