@@ -3981,8 +3981,8 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
 
   // Header row: SID label + chip selector
   auto leftHeader = leftPanel.removeFromTop(20);
-  leftSIDLabel.setBounds(leftHeader.removeFromLeft(80));
-  leftChipSelector.setBounds(leftHeader.withHeight(20).withY(leftHeader.getY()));
+  leftSIDLabel.setBounds(leftHeader.removeFromLeft(120));
+  leftChipSelector.setBounds(leftHeader.removeFromLeft(150));
 
   leftPanel.removeFromTop(pad);
 
@@ -3999,8 +3999,8 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
   {
     auto fdRow = leftPanel.removeFromTop(74);
-    // Justify toward the outer (left) edge; trim the inner side so the centre backdrop shows
-    filterDisplay_L.setBounds(fdRow.withTrimmedLeft(4).withTrimmedRight(fdRow.getWidth() * 22 / 100));
+    // Slim: match the cutoff/res controls' width (214) below, left-aligned (reveals the centre)
+    filterDisplay_L.setBounds(fdRow.withWidth(214));
   }
 
   leftPanel.removeFromTop(pad);
@@ -4040,8 +4040,8 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
 
   // Header row: SID label + chip selector (mirrored)
   auto rightHeader = rightPanel.removeFromTop(20);
-  rightSIDLabel.setBounds(rightHeader.removeFromLeft(80));
-  rightChipSelector.setBounds(rightHeader.withHeight(20).withY(rightHeader.getY()));
+  rightSIDLabel.setBounds(rightHeader.removeFromLeft(120));
+  rightChipSelector.setBounds(rightHeader.removeFromLeft(150));
 
   rightPanel.removeFromTop(pad);
 
@@ -4058,23 +4058,24 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
   {
     auto fdRow = rightPanel.removeFromTop(74);
-    // Justify toward the outer (right) edge; trim the inner side so the centre backdrop shows
-    filterDisplay_R.setBounds(fdRow.withTrimmedRight(4).withTrimmedLeft(fdRow.getWidth() * 22 / 100));
+    // Slim: match the cutoff/res controls' width (214) below, right-aligned (reveals the centre)
+    filterDisplay_R.setBounds(fdRow.removeFromRight(214));
   }
 
   rightPanel.removeFromTop(pad);
 
-  // Cutoff + Res: two usable rotary knobs side by side
+  // Cutoff + Res: two usable rotary knobs side by side, right-justified (mirrors left tower)
   {
     auto filterRow = rightPanel.removeFromTop(52);
+    auto group = filterRow.removeFromRight(214);
     const int knob = 50;
-    rightCutoffLabel.setBounds(filterRow.removeFromLeft(46).withHeight(16).withY(filterRow.getCentreY() - 8));
-    rightCutoffSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
-    cutoffMeterR.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
-    filterRow.removeFromLeft(pad * 4);
-    rightResonanceLabel.setBounds(filterRow.removeFromLeft(40).withHeight(16).withY(filterRow.getCentreY() - 8));
-    rightResonanceSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
-    resMeterR.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
+    rightCutoffLabel.setBounds(group.removeFromLeft(46).withHeight(16).withY(group.getCentreY() - 8));
+    rightCutoffSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
+    cutoffMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
+    group.removeFromLeft(pad * 4);
+    rightResonanceLabel.setBounds(group.removeFromLeft(40).withHeight(16).withY(group.getCentreY() - 8));
+    rightResonanceSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
+    resMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
   }
 
   rightPanel.removeFromTop(pad);
