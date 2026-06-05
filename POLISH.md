@@ -69,6 +69,10 @@ Fixes that affect audio output quality or DAW integration.
 - [ ] Profile current WT overhead
 - [ ] Implement sub-block WT stepping (or per-sample if overhead is negligible)
 - [ ] Test: verify smooth stepping at 200Hz WT rate
+- **Resolution (2026-03-03, `331cf04`)**: Took the simpler fix — step advancement changed from
+  `if` to `while`, so rates above the block rate advance multiple steps per block instead of
+  dropping them. Full sub-block/per-sample stepping was deferred; block-granular stepping is
+  acceptable at supported rates.
 
 ### 2C. ~~Sustain pedal release uses arp held-note tracking~~ VERIFIED OK
 
@@ -165,6 +169,11 @@ Lower priority improvements that can wait for a future release.
 - **Effort**: High. Requires converting all hardcoded pixel positions to proportional layout.
 - [ ] Convert resized() to proportional/relative layout
 - [ ] Test at multiple DPI settings (100%, 125%, 150%, 200%)
+- **In progress (transform-based approach)**: Instead of reflowing every hardcoded pixel position,
+  a `ScaledEditor` base applies `AffineTransform::scale()` to the whole editor (logical bounds stay
+  1000×800, so `resizedContent()` is unchanged). A scale selector (75/100/125/150%) is persisted
+  per machine via `ApplicationProperties`. Delivers DPI scaling without a proportional-layout
+  rewrite; free/arbitrary resize stays out of scope. Uncommitted — not yet host-verified.
 
 ### 5B. Visual voice allocation display
 - **Issue**: No way to see which SID voices are active in real-time per mode.

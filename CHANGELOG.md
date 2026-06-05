@@ -17,7 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Preset Voice Mode Assignments**: 32 factory presets upgraded from mono — 12 to Para (pads,
   organs, strings), 15 to Poly (leads, keys, brass, plucks), 5 to Poly+Para (chord stabs,
   modern arps, showcase). 41 presets remain Mono (C64 era-accurate, glide, unison, SID arps).
-- **4 New Presets**: Showcase presets for LFO tempo sync and polyphony features. Total: 73.
+- **8 Showcase Presets**: Kitchen Sink, Sync Sculptor, Ring Cathedral, Matrix Express,
+  WT Kaleidoscope, Chord Cathedral, Dual Worlds, and Glide Machine — each exercising a different
+  feature cluster. Total global presets: 77.
+- **Mod Matrix Activity Indicators**: LED-style dots near the Modulation button on the main
+  panel light up for each enabled mod slot.
+- **Paraphonic Voice Editor Hints**: In Para mode the voice tabs are annotated/greyed to show
+  that filter and ADSR are shared from voice 0.
+- **FX Bypass Dimming**: Disabled chorus/delay/reverb sections dim for clear visual feedback.
 
 ### Changed
 
@@ -25,6 +32,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Engine support retained for potential future use.
 - **Old Preset Migration**: Saved presets with `polyEnable` parameter auto-migrate to equivalent
   `voiceMode` value on load.
+- **DAW Tail Length**: `getTailLengthSeconds()` returns 10.0s (was 0.0) so DAWs render
+  reverb/delay/SID release tails on bounce/freeze instead of cutting them off.
+- **Internal Refactors**: `processBlock`, `handleMidiEvent`, and `timerCallback` split into named
+  helpers; deduplicated LFO/filter-envelope/glide/pan code and the left/right SID panel setup;
+  added conditional UI repaints (only on metered-value change) and a voice-settings dirty check to
+  skip redundant per-block syncs. No behavior change.
+
+### Fixed
+
+- **SID Player Snapshot**: `snapshotSidPlayerToAPVTS()` was writing to nonexistent APVTS parameter
+  IDs (`leftCutoff`, etc.) and silently no-opping. Now writes filter cutoff/resonance/mode directly
+  to both SID engines, so snapshotting a loaded `.SID` tune updates the filter controls.
+- **Wavetable High-Rate Stepping**: Step advancement changed from `if` to `while` so wavetable
+  rates above the block rate (~86 Hz) advance multiple steps per block instead of dropping them.
+- **Voice-Steal Counter Wrap**: `polyNoteCounter` normalizes before `uint32_t` overflow, preventing
+  the youngest voice from being mis-aged and stolen first after extreme note counts.
+
+### Removed
+
+- **Aging Factor ("Time Machine")**: Removed the per-block aging-cutoff offset — minimal sonic
+  impact for real per-block CPU cost across all SID engines. Presets with a stale `aging` value
+  ignore it on load.
+
+### Dependencies
+
+- **ReverbSC**: Replaced the proprietary ghostmoon ReverbSC link with a bundled local MIT-licensed
+  copy (`src/dsp/ReverbSC.h`), removing the proprietary dependency.
 
 ## [0.9.6] - 2026-02-23
 

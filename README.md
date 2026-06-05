@@ -9,7 +9,8 @@ A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip e
 ### Sound Engine
 - **Dual SID Engine**: Two independent SID emulators with 6 voices total
 - **8 Chip Model Variants**: MOS 6581 (+ R2, R3, R4), MOS 8580 (+ R5, 8580D), CSG 9580
-- **Three Modes**: Stereo Split, Unison (detuned fatness), Multitimbral
+- **Dual-SID Routing**: Stereo Split and Unison (detuned fatness)
+- **4-Mode Voice System**: Mono, Paraphonic, Polyphonic, and Poly+Para (up to 24 notes)
 - **PAL/NTSC Clock**: Authentic PAL (985,248 Hz) and NTSC (1,022,727 Hz) timing
 
 ### Modulation
@@ -19,6 +20,11 @@ A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip e
 - **PWM Sweep**: Dedicated pulse width modulation oscillator
 - **Ring Mod + Hard Sync**: Per-voice inter-oscillator modulation
 - **14-bit Pitch Bend + Mod Wheel**
+
+### Effects
+- **Chorus**: JUCE DSP chorus
+- **Stereo Delay**: Independent left/right delay times with feedback
+- **Reverb**: Algorithmic reverb (ReverbSC)
 
 ### Performance
 - **Arpeggiator**: Multiple patterns, octave expansion, tempo sync
@@ -34,7 +40,7 @@ A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip e
 
 ### Extras
 - **SID File Player**: Load .SID/.PSID files from the HVSC (50,000+ C64 tunes)
-- **69 Factory Presets**: Categorized global presets + 37 voice presets
+- **77 Factory Presets**: Categorized global presets + 37 voice presets
 - **MIDI Learn**: Right-click any control for CC mapping
 - **User Presets**: Save/load custom presets
 

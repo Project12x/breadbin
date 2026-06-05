@@ -115,7 +115,7 @@
 
 - [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
 - [ ] macOS build (AU + VST3 format)
-- [x] Factory preset pack (73 global presets, 37 voice presets, categorized submenus)
+- [x] Factory preset pack (77 global presets, 37 voice presets, categorized submenus)
 - [ ] Hard sync audibility study (per-voice pitch offset / cross-SID sync for C64-accurate behavior)
 - [ ] Ring mod audibility study (voice frequency relationships for proper inharmonic sidebands)
 - [ ] User documentation / manual
@@ -156,7 +156,7 @@
 
 ## Phase 9: UI/UX Modernization
 
-- [ ] Resizable GUI (expected in modern plugins, important for commercial viability)
+- [~] Resizable GUI — *in progress*: transform-based DPI scaling (`ScaledEditor`, 75–150% selector persisted per machine). Free/proportional resize still pending.
 - [ ] Visual voice allocation display (show active SID voices in real-time per mode)
 - [ ] A/B comparison (toggle between two parameter states)
 - [ ] Oscilloscope / waveform display
@@ -188,6 +188,11 @@
 
 | Date | Feature | Resolution | Commit |
 |------|---------|------------|--------|
+| 2026-06-05 | UI scaling (in progress) | `ScaledEditor` transform-based DPI scaling + 75–150% selector persisted per machine; docs synced to current state | pending |
+| 2026-04-21 | ReverbSC MIT swap | Replaced proprietary ghostmoon ReverbSC link with bundled local MIT copy, removed proprietary dependency | `23f76f3` |
+| 2026-03-03 | UI polish pass | Conditional repaints, paraphonic voice hints, FX bypass dimming, mod matrix activity indicators | `8b5e1f0` |
+| 2026-03-03 | Polish refactors (Phases 3–6) | Extracted processBlock/handleMidiEvent/timerCallback helpers; deduped LFO/filter-env/glide/pan; merged SID panels; voice-settings dirty check | `30679c8`..`85580f7` |
+| 2026-03-03 | Polish fixes (Phases 1–2) | Removed aging factor; fixed SID-player snapshot param IDs; polyNoteCounter wrap safety; tail length 10s; wavetable high-rate stepping | `52231d9`..`331cf04` |
 | 2026-02-17 | Preset expansion | 69 global presets (velocity, chord, ring mod), 37 voice presets (categorized submenus), headless sound fix | `83a830b` |
 | 2026-02-17 | Composition UI polish pass | Hardened chord/arp exclusivity; chord dual-SID note allocation; added mod-slot enable + destination totals; added wavetable step ops (shift/randomize/clear) | pending |
 | 2026-02-11 | Per-SID pan UI + dead code removal | Added leftPan/rightPan sliders to SID panels, removed all per-voice pan dead code (APVTS param, VoiceSettings, VoiceParamPtrs, serialization, preset lambdas) | `65113ae` |

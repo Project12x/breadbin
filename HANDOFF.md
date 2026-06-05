@@ -26,6 +26,10 @@ Voice 0-2 -> sidLeft  -> leftNoteQueue
 Voice 3-5 -> sidRight -> rightNoteQueue
 ```
 
+(This fixed 6-voice mapping applies in **Mono** and **Paraphonic** modes. In **Polyphonic** /
+**Poly+Para** modes each held note is instead allocated its own L/R `SIDEngine` pair from a pool —
+see the `VoiceMode` enum and `polyVoices` in `PluginProcessor.h`.)
+
 ### Dual SID Modes
 - **Stereo Split**: Left SID -> Left channel, Right SID -> Right channel
 - **Unison**: Both SIDs summed to stereo with detune
