@@ -4,6 +4,7 @@
 #include <ghostmoon/ui/Controls.h>
 #include <ghostmoon/ui/Chrome.h>
 #include <ghostmoon/ui/Theme.h>
+#include <ghostmoon/ui/Scope.h>
 
 // ========== CUSTOM LOOKANDFEEL ==========
 

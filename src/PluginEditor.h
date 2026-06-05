@@ -7,6 +7,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <ghostmoon/ui/Scope.h>
 
 class MappableSlider; // Forward declaration
 
@@ -382,12 +383,16 @@ public:
     phase = p;
     repaint();
   }
+  void resized() override {
+    if (getWidth() > 0 && getHeight() > 0)
+      scanlineCache = gm::ui::makeScanlineOverlay(getWidth(), getHeight());
+  }
+
   void paint(juce::Graphics &g) override {
     auto b = getLocalBounds().toFloat();
-    g.setColour(juce::Colour(20, 20, 25));
-    g.fillRoundedRectangle(b, 3.0f);
-    g.setColour(juce::Colour(50, 50, 60));
-    g.drawRoundedRectangle(b.reduced(0.5f), 3.0f, 0.5f);
+
+    // CRT scope background
+    gm::ui::drawScopeBackground(g, b);
 
     const float padX = 4.0f;
     float w   = b.getWidth() - padX * 2.0f;
@@ -396,7 +401,8 @@ public:
     float x0  = b.getX() + padX;
     auto yFor = [&](float n) { return cy - n * amp; };
 
-    g.setColour(juce::Colour(55, 55, 68));
+    // Zero-line (subtle grid)
+    g.setColour(gm::ui::theme::line);
     g.drawHorizontalLine(static_cast<int>(cy), x0, x0 + w);
 
     // Waveform scrolls left as LFO phase advances — shows live motion
@@ -432,14 +438,18 @@ public:
       if (i == 0) path.startNewSubPath(x, y);
       else        path.lineTo(x, y);
     }
-    g.setColour(juce::Colours::cyan.withAlpha(0.25f));
-    g.strokePath(path, juce::PathStrokeType(2.5f));
-    g.setColour(juce::Colours::cyan);
-    g.strokePath(path, juce::PathStrokeType(1.0f));
+
+    // Phosphor trace
+    gm::ui::drawScopeTrace(g, path, gm::ui::theme::cyan);
+
+    // Scanline overlay (built once in resized())
+    if (scanlineCache.isValid())
+      g.drawImageAt(scanlineCache, 0, 0);
   }
 private:
   int waveType = 1;
   float phase = 0.0f;
+  juce::Image scanlineCache;
 };
 
 // Modulation popup panel (LFO1/LFO2, Pitch Bend Range, Mod Matrix)
@@ -736,17 +746,22 @@ public:
     }
   }
 
+  void resized() override {
+    if (getWidth() > 0 && getHeight() > 0)
+      scanlineCache = gm::ui::makeScanlineOverlay(getWidth(), getHeight());
+  }
+
   void paint(juce::Graphics &g) override {
     auto b = getLocalBounds().toFloat();
-    g.setColour(juce::Colour(18, 18, 22));
-    g.fillRoundedRectangle(b, 3.0f);
-    g.setColour(juce::Colour(50, 50, 62));
-    g.drawRoundedRectangle(b.reduced(0.5f), 3.0f, 0.5f);
+
+    // CRT scope background
+    gm::ui::drawScopeBackground(g, b);
 
     if (!lpOn && !bpOn && !hpOn) {
-      g.setColour(juce::Colours::grey.withAlpha(0.4f));
+      g.setColour(gm::ui::theme::txt3);
       g.setFont(displayFont.withHeight(9.0f));
       g.drawText("filter off", b, juce::Justification::centred);
+      if (scanlineCache.isValid()) g.drawImageAt(scanlineCache, 0, 0);
       return;
     }
 
@@ -762,7 +777,7 @@ public:
 
     // 0 dB reference line  (maps to norm = 30/42 in [-30..+12] range)
     float y0db = b.getY() + py + ph * (1.0f - 30.0f / 42.0f);
-    g.setColour(juce::Colour(55, 55, 68));
+    g.setColour(gm::ui::theme::line);
     g.drawHorizontalLine(static_cast<int>(y0db), b.getX() + px,
                          b.getX() + px + pw);
 
@@ -788,26 +803,21 @@ public:
       if (i == 0) curve.startNewSubPath(cx, cy);
       else        curve.lineTo(cx, cy);
     }
-    g.setColour(juce::Colours::cyan.withAlpha(0.18f));
-    g.strokePath(curve, juce::PathStrokeType(3.0f));
-    g.setColour(juce::Colours::cyan.withAlpha(0.85f));
-    g.strokePath(curve, juce::PathStrokeType(1.2f));
+
+    // Phosphor trace
+    gm::ui::drawScopeTrace(g, curve, gm::ui::theme::cyan);
 
     // Cutoff frequency vertical marker
     float cxMark = b.getX() + px + pw * std::log(fcHz / kMinHz) / logRange;
     if (cxMark > b.getX() + px && cxMark < b.getX() + px + pw) {
-      g.setColour(juce::Colours::cyan.withAlpha(0.35f));
+      g.setColour(gm::ui::theme::cyan.withAlpha(0.35f));
       g.drawVerticalLine(static_cast<int>(cxMark), b.getY() + py,
                          b.getY() + py + ph);
     }
-    g.setColour(juce::Colours::grey.withAlpha(0.4f));
-    g.setFont(displayFont.withHeight(7.5f));
-    g.drawText("drag", b.reduced(3).removeFromBottom(9.0f),
-               juce::Justification::centredRight);
 
     // Frequency axis labels
     g.setFont(monoFont.withHeight(8.0f));
-    g.setColour(juce::Colour(130, 130, 145).withAlpha(0.4f));
+    g.setColour(gm::ui::theme::txt3.withAlpha(0.6f));
     for (auto [freq, label] : std::initializer_list<std::pair<float, const char*>>{
             {100.f, "100"}, {1000.f, "1k"}, {10000.f, "10k"}}) {
       float normX = std::log(freq / kMinHz) / logRange;
@@ -815,6 +825,15 @@ public:
       g.drawText(label, labelX - 10, static_cast<int>(b.getBottom()) - 10,
                  20, 10, juce::Justification::centred);
     }
+
+    g.setColour(gm::ui::theme::txt3);
+    g.setFont(displayFont.withHeight(7.5f));
+    g.drawText("drag", b.reduced(3).removeFromBottom(9.0f),
+               juce::Justification::centredRight);
+
+    // Scanline overlay (built once in resized())
+    if (scanlineCache.isValid())
+      g.drawImageAt(scanlineCache, 0, 0);
   }
 
   void mouseDown(const juce::MouseEvent &e) override {
@@ -846,6 +865,7 @@ private:
   int  dragStartRes     = 0;
   juce::Font displayFont;
   juce::Font monoFont;
+  juce::Image scanlineCache;
 };
 
 class BreadbinEditor : public bb::ScaledEditor,
