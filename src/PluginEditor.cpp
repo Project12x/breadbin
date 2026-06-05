@@ -3823,8 +3823,8 @@ void BreadbinEditor::resizedContent() {
   static constexpr int kTowersH  = 240;
   static constexpr int kVoiceH   = 175;
   static constexpr int kFxH      = 104;
-  static constexpr int kDockH    = 34;
-  static constexpr int kKbH      = 88;
+  static constexpr int kDockH    = 48;
+  static constexpr int kKbH      = 74;
 
   midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
@@ -3999,25 +3999,24 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
   {
     auto fdRow = leftPanel.removeFromTop(74);
-    int inset = fdRow.getWidth() * 15 / 200; // 7.5% each side → 85% total
-    filterDisplay_L.setBounds(fdRow.reduced(inset, 0));
+    // Justify toward the outer (left) edge; trim the inner side so the centre backdrop shows
+    filterDisplay_L.setBounds(fdRow.withTrimmedLeft(4).withTrimmedRight(fdRow.getWidth() * 22 / 100));
   }
 
   leftPanel.removeFromTop(pad);
 
-  // Cutoff row: label + slider + meter + value
-  auto leftCutoffRow = leftPanel.removeFromTop(22);
-  leftCutoffLabel.setBounds(leftCutoffRow.removeFromLeft(46).withHeight(16).withY(leftCutoffRow.getCentreY() - 8));
-  cutoffMeterL.setBounds(leftCutoffRow.removeFromRight(6).reduced(0, 3));
-  leftCutoffSlider.setBounds(leftCutoffRow.withHeight(20).withY(leftCutoffRow.getCentreY() - 10));
-
-  leftPanel.removeFromTop(pad / 2);
-
-  // Reso row: label + slider + meter
-  auto leftResoRow = leftPanel.removeFromTop(22);
-  leftResonanceLabel.setBounds(leftResoRow.removeFromLeft(46).withHeight(16).withY(leftResoRow.getCentreY() - 8));
-  resMeterL.setBounds(leftResoRow.removeFromRight(6).reduced(0, 3));
-  leftResonanceSlider.setBounds(leftResoRow.withHeight(20).withY(leftResoRow.getCentreY() - 10));
+  // Cutoff + Res: two usable rotary knobs side by side (label + knob + meter)
+  {
+    auto filterRow = leftPanel.removeFromTop(52);
+    const int knob = 50;
+    leftCutoffLabel.setBounds(filterRow.removeFromLeft(46).withHeight(16).withY(filterRow.getCentreY() - 8));
+    leftCutoffSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    cutoffMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
+    filterRow.removeFromLeft(pad * 4);
+    leftResonanceLabel.setBounds(filterRow.removeFromLeft(40).withHeight(16).withY(filterRow.getCentreY() - 8));
+    leftResonanceSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    resMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
+  }
 
   leftPanel.removeFromTop(pad);
 
@@ -4059,25 +4058,24 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
   {
     auto fdRow = rightPanel.removeFromTop(74);
-    int inset = fdRow.getWidth() * 15 / 200; // 7.5% each side → 85% total
-    filterDisplay_R.setBounds(fdRow.reduced(inset, 0));
+    // Justify toward the outer (right) edge; trim the inner side so the centre backdrop shows
+    filterDisplay_R.setBounds(fdRow.withTrimmedRight(4).withTrimmedLeft(fdRow.getWidth() * 22 / 100));
   }
 
   rightPanel.removeFromTop(pad);
 
-  // Cutoff row
-  auto rightCutoffRow = rightPanel.removeFromTop(22);
-  rightCutoffLabel.setBounds(rightCutoffRow.removeFromLeft(46).withHeight(16).withY(rightCutoffRow.getCentreY() - 8));
-  cutoffMeterR.setBounds(rightCutoffRow.removeFromRight(6).reduced(0, 3));
-  rightCutoffSlider.setBounds(rightCutoffRow.withHeight(20).withY(rightCutoffRow.getCentreY() - 10));
-
-  rightPanel.removeFromTop(pad / 2);
-
-  // Reso row
-  auto rightResoRow = rightPanel.removeFromTop(22);
-  rightResonanceLabel.setBounds(rightResoRow.removeFromLeft(46).withHeight(16).withY(rightResoRow.getCentreY() - 8));
-  resMeterR.setBounds(rightResoRow.removeFromRight(6).reduced(0, 3));
-  rightResonanceSlider.setBounds(rightResoRow.withHeight(20).withY(rightResoRow.getCentreY() - 10));
+  // Cutoff + Res: two usable rotary knobs side by side
+  {
+    auto filterRow = rightPanel.removeFromTop(52);
+    const int knob = 50;
+    rightCutoffLabel.setBounds(filterRow.removeFromLeft(46).withHeight(16).withY(filterRow.getCentreY() - 8));
+    rightCutoffSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    cutoffMeterR.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
+    filterRow.removeFromLeft(pad * 4);
+    rightResonanceLabel.setBounds(filterRow.removeFromLeft(40).withHeight(16).withY(filterRow.getCentreY() - 8));
+    rightResonanceSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    resMeterR.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
+  }
 
   rightPanel.removeFromTop(pad);
 
@@ -4270,62 +4268,54 @@ void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> fxArea,
               reverbDampingLabel, reverbDampingSlider,
               reverbMixLabel, reverbMixSlider);
 
-  // ---- Dock row ----
-  auto dock = dockArea.reduced(0, 2);
-  const int dH = dock.getHeight();
-  auto centreV = [&](juce::Rectangle<int> r, int h) {
+  // ---- Dock (2 tiers: enable toggles on top, arp/buttons/clock below) ----
+  auto dock = dockArea.reduced(4, 2);
+  auto togRow  = dock.removeFromTop(15);
+  dock.removeFromTop(2);
+  auto mainRow = dock; // ~25px
+  auto centreV = [](juce::Rectangle<int> r, int h) {
     return r.withHeight(h).withY(r.getCentreY() - h / 2);
   };
 
-  // Left: Arp controls
-  arpEnableButton.setBounds(centreV(dock.removeFromLeft(46), 20));
-  dock.removeFromLeft(pad);
+  // -- Bottom tier: Arp (left) | popup buttons (centre) | Clock (right) --
+  arpEnableButton.setBounds(centreV(mainRow.removeFromLeft(46), 20));
+  mainRow.removeFromLeft(pad);
   arpPatternLabel.setText("Arp", juce::dontSendNotification);
-  arpPatternLabel.setBounds(dock.removeFromLeft(28).withHeight(13).withY(dock.getCentreY() - 7));
-  arpPatternSelector.setBounds(centreV(dock.removeFromLeft(92), 20));
-  dock.removeFromLeft(pad);
-  arpRateLabel.setBounds(dock.removeFromLeft(34).withHeight(13).withY(dock.getCentreY() - 7));
-  arpRateSlider.setBounds(centreV(dock.removeFromLeft(90), 20));
-  dock.removeFromLeft(pad);
+  arpPatternLabel.setBounds(mainRow.removeFromLeft(28).withHeight(13).withY(mainRow.getCentreY() - 7));
+  arpPatternSelector.setBounds(centreV(mainRow.removeFromLeft(86), 20));
+  mainRow.removeFromLeft(pad);
+  arpRateLabel.setBounds(mainRow.removeFromLeft(30).withHeight(13).withY(mainRow.getCentreY() - 7));
+  arpRateSlider.setBounds(centreV(mainRow.removeFromLeft(84), 20));
+  mainRow.removeFromLeft(pad);
   arpOctaveLabel.setText("Oct", juce::dontSendNotification);
-  arpOctaveLabel.setBounds(dock.removeFromLeft(26).withHeight(13).withY(dock.getCentreY() - 7));
-  arpOctaveSelector.setBounds(centreV(dock.removeFromLeft(58), 20));
-  dock.removeFromLeft(pad * 2);
+  arpOctaveLabel.setBounds(mainRow.removeFromLeft(26).withHeight(13).withY(mainRow.getCentreY() - 7));
+  arpOctaveSelector.setBounds(centreV(mainRow.removeFromLeft(56), 20));
 
-  // Right: Clock selector
-  clockModeSelector.setBounds(centreV(dock.removeFromRight(65), 20));
-  clockModeLabel.setBounds(dock.removeFromRight(36).withHeight(13).withY(dock.getCentreY() - 7));
-  dock.removeFromRight(pad);
+  clockModeSelector.setBounds(centreV(mainRow.removeFromRight(65), 20));
+  clockModeLabel.setBounds(mainRow.removeFromRight(36).withHeight(13).withY(mainRow.getCentreY() - 7));
+  mainRow.removeFromRight(pad);
 
-  // Remaining centre: popup buttons + enable toggles
-  // Enable toggles sit above buttons — here we only have a single 24px row,
-  // so stack toggles as a 12px mini strip on top and buttons below.
-  const int btnH = 14;
-  const int togH = 10;
-
-  // Pop buttons (right-justified in remaining space)
-  auto digiBtnBounds  = dock.removeFromRight(56);
-  dock.removeFromRight(pad);
-  auto sidBtnBounds   = dock.removeFromRight(75);
-  dock.removeFromRight(pad);
-  auto chordBtnBounds = dock.removeFromRight(62);
-  dock.removeFromRight(pad);
-  auto wtBtnBounds    = dock.removeFromRight(80);
-  dock.removeFromRight(pad);
-  auto modBtnBounds   = dock.removeFromRight(86);
-
+  const int btnH = 20;
+  auto digiBtnBounds  = mainRow.removeFromRight(56); mainRow.removeFromRight(pad);
+  auto sidBtnBounds   = mainRow.removeFromRight(75); mainRow.removeFromRight(pad);
+  auto chordBtnBounds = mainRow.removeFromRight(62); mainRow.removeFromRight(pad);
+  auto wtBtnBounds    = mainRow.removeFromRight(80); mainRow.removeFromRight(pad);
+  auto modBtnBounds   = mainRow.removeFromRight(86);
   digiButton.setBounds(centreV(digiBtnBounds, btnH));
   sidPlayerButton.setBounds(centreV(sidBtnBounds, btnH));
   chordMemoryButton.setBounds(centreV(chordBtnBounds, btnH));
   wavetableButton.setBounds(centreV(wtBtnBounds, btnH));
   modMatrixButton.setBounds(centreV(modBtnBounds, btnH));
 
-  // Enable toggles placed just above each button (within same row height)
-  auto togY = dockArea.getY() + 2;
-  wtEnableToggle.setBounds(wtBtnBounds.getX(),    togY, 52, togH);
-  lfo1EnableToggle.setBounds(modBtnBounds.getX(), togY, 55, togH);
-  lfo2EnableToggle.setBounds(modBtnBounds.getX() + 50, togY, 55, togH);
-  digiEnableToggle.setBounds(digiBtnBounds.getX(), togY, 52, togH);
+  // -- Top tier: enable toggles, evenly spaced across the right portion --
+  {
+    auto t = togRow.removeFromRight(juce::jmin(380, togRow.getWidth()));
+    const int tw = t.getWidth() / 4;
+    lfo1EnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
+    lfo2EnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
+    wtEnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
+    digiEnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
+  }
 }
 
 void BreadbinEditor::applyPreset(int presetId) {
