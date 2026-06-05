@@ -1,6 +1,6 @@
 # Breadbin Design System — Option D: Neon Synthwave
 
-Tokens for Breadbin's "Option D — Neon Synthwave" UI; reusable renderers live in GhostmoonGPL (`gm::ui::`).
+Tokens for Breadbin's "Option D — Neon Synthwave" UI; reusable renderers live in ghostmoon-oss (`gm::ui::`, target `ghostmoon_oss::ui_synthwave`).
 
 ## Palette
 

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
+  `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
+  sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
+  filter and LFO, glow-header chrome, and a cached `background_clean.png` + light vignette
+  backdrop. Applied to the existing layout (no controls moved). Remaining: Phase B = OptionD
+  re-layout + per-section accent colors; Phase C = popups + NEON/C64 scheme switch;
+  Phase D = PETSCII toggle + motion. All accents are cyan pending Phase B.
+- **UI Scale Selector**: DPI-aware window scaling — a 75/100/125/150% selector in the top row,
+  persisted per machine. The editor keeps a fixed 1000×800 logical layout and scales the whole
+  window via an affine transform (`gm::ui::ScaledEditor` base), so existing layout code is untouched.
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
   Polyphonic (per-note SID pair allocation, up to 8 notes), and Poly+Para (paraphonic within
   each poly voice, up to 24 notes). Replaces the old polyEnable toggle with a voiceMode selector.
@@ -25,12 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Paraphonic Voice Editor Hints**: In Para mode the voice tabs are annotated/greyed to show
   that filter and ADSR are shared from voice 0.
 - **FX Bypass Dimming**: Disabled chorus/delay/reverb sections dim for clear visual feedback.
-- **UI Scale Selector**: DPI-aware window scaling — a 75/100/125/150% selector in the top row,
-  persisted per machine. The editor keeps a fixed 1000×800 logical layout and scales the whole
-  window via an affine transform (`ScaledEditor` base), so existing layout code is untouched.
 
 ### Changed
 
+- **ghostmoon-oss restructure**: The reusable UI/DSP shared library was restructured into a
+  mixed-license library exposing three CMake targets under namespace `gm::` / include root
+  `ghostmoon/`:
+  - `ghostmoon_oss::dsp` (`<ghostmoon/ReverbSC.h>` family) — LGPL-2.1-or-later
+  - `ghostmoon_oss::core` (`<ghostmoon/ui/Geometry.h>`, `<ghostmoon/ui/ScaledEditor.h>`) — MIT
+  - `ghostmoon_oss::ui_synthwave` (`<ghostmoon/ui/synthwave/{Controls,Chrome,Scope,Theme}.h>`) — MIT
+  Per-file SPDX headers; `LICENSES/MIT.txt` + `LGPL-2.1.txt` present. Breadbin consumes all
+  three via `GHOSTMOON_OSS_DIR`.
+- **ScaledEditor promoted to `gm::ui::ScaledEditor`**: Local `src/ScaledEditor.h` deleted;
+  now consumed from `ghostmoon_oss::core`.
+- **ReverbSC source corrected**: Local `src/dsp/ReverbSC.h` (mislabeled MIT) deleted; reverb
+  now uses `gm::ReverbSC` from `ghostmoon_oss::dsp` (correctly LGPL-2.1-or-later).
 - **Dual Mode Selector**: Multitimbral option hidden from UI (redundant with per-voice settings).
   Engine support retained for potential future use.
 - **Old Preset Migration**: Saved presets with `polyEnable` parameter auto-migrate to equivalent
@@ -57,11 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Aging Factor ("Time Machine")**: Removed the per-block aging-cutoff offset — minimal sonic
   impact for real per-block CPU cost across all SID engines. Presets with a stale `aging` value
   ignore it on load.
-
-### Dependencies
-
-- **ReverbSC**: Replaced the proprietary ghostmoon ReverbSC link with a bundled local MIT-licensed
-  copy (`src/dsp/ReverbSC.h`), removing the proprietary dependency.
 
 ## [0.9.6] - 2026-02-23
 

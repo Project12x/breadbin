@@ -40,7 +40,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - WAV loading; 4-bit ($D418 volume register) and 8-bit direct-mix modes; pitch tracking + loop
 
 #### Built-in FX
-- Chorus, Stereo Delay (independent L/R times), Reverb (ReverbSC, local MIT copy)
+- Chorus, Stereo Delay (independent L/R times), Reverb (`gm::ReverbSC` from `ghostmoon-oss`, LGPL-2.1)
 
 #### Extras
 - SID File Player (.SID/.PSID via full libsidplayfp engine, background thread + ring buffer, live register overlay, snapshot registers to APVTS)
@@ -51,8 +51,13 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - ASIO standalone support
 
 ### In Progress (branch `polish/ui-2026-06-05`)
-- DPI-aware UI scaling: `ScaledEditor` base applies `AffineTransform::scale()` so the window rescales while logical layout stays at 1000×800. Scale selector (75/100/125/150%) persisted per-machine via `ApplicationProperties`. Committed; visual in-host scaling check still pending.
-- Next: "Breadbin C64 Theme" visual redesign.
+- **C64 "Neon Synthwave" Reskin Phase A — DONE**: `BreadbinLookAndFeel` rebuilt on `gm::ui`
+  synthwave renderers (glowing knobs, CRT scopes, glass panels, glow headers, cached backdrop).
+  `gm::ui::ScaledEditor` promoted from local `src/ScaledEditor.h`; `gm::ReverbSC` replaces
+  deleted local `src/dsp/ReverbSC.h`. Tag: `checkpoint/phase-a-foundation`.
+- **Pending — Phase B**: OptionD re-layout (consolidated top bar, SID towers, FX rows) + per-section accent colors.
+- **Pending — Phase C**: 5 popups restyled + NEON/C64 scheme switch.
+- **Pending — Phase D**: PETSCII toggle + motion / animated mod rings.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -72,7 +77,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations (17 killed) | 5.6% survival |
-| BreadbinIntegrationTests | 405 | Pass |
+| BreadbinIntegrationTests | 409 | Pass |
 
 Run: `ctest --test-dir build -C Release`
 
@@ -82,18 +87,17 @@ Run: `ctest --test-dir build -C Release`
 breadbin/
 ├── src/
 │   ├── PluginProcessor.cpp/h    # Audio processing, dual SID, voice modes, modulation, FX, safety
-│   ├── PluginEditor.cpp/h       # UI editor, LookAndFeel, popup panels (~8k lines)
-│   ├── ScaledEditor.h           # DPI-aware editor base (AffineTransform scale)
+│   ├── PluginEditor.cpp/h       # UI editor, BreadbinLookAndFeel (uses gm::ui renderers), popups (~8k lines)
 │   ├── SIDEngine.cpp/h          # reSIDfp wrapper, 8 chip model profiles
 │   ├── SidFilePlayer.cpp/h      # .SID file playback (full libsidplayfp engine)
 │   ├── DigiSampler.h            # WAV digi sample (4-bit / 8-bit storage)
-│   ├── dsp/ReverbSC.h           # Reverb (Soundpipe port, MIT)
 │   └── residfp/                 # Local config headers for reSIDfp build
+│   (ScaledEditor.h → gm::ui::ScaledEditor in ghostmoon-oss; dsp/ReverbSC.h → gm::ReverbSC)
 ├── tests/
 │   ├── LFOTests.cpp             # LFO waveform math (standalone)
 │   ├── MutationTests.cpp        # Mutation coverage (standalone)
 │   └── IntegrationTests.cpp     # Full signal-path integration/regression (JUCE-linked)
-├── assets/                      # background.jpg, fonts (Lato, JetBrains Mono, etc.)
+├── assets/                      # background_clean.png, logo.png, fonts (Lato, JetBrains Mono, etc.)
 ├── releases/                    # preserved build artifacts (per build-preservation policy)
-└── build/                       # CMake output; JUCE 8 + libsidplayfp fetched via CPM
+└── build/                       # CMake output; JUCE 8 + libsidplayfp + ghostmoon-oss fetched via CPM/GHOSTMOON_OSS_DIR
 ```

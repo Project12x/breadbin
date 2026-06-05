@@ -38,23 +38,27 @@ Each phase is its own review + commit. Phases B–D get their own brainstorm/pla
 
 ## Phase A design
 
-### A0. Component home — GhostmoonGPL (shared LGPL UI library)
-Reusable synthwave primitives live in the user's **GhostmoonGPL** library
-(LGPL-2.1-or-later; `…/Antigravity/ghostmoongpl`), not in Breadbin's `src/`. This
-**supersedes the `src/` locations noted below** for the *reusable* pieces:
-- **→ GhostmoonGPL** (`ui/include/ghostmoon/ui/`, namespace `gm::ui::`, header-only;
-  new `ghostmoongpl_ui` INTERFACE target that assumes the consumer provides JUCE):
-  theme token constants (`gm::ui::theme`), the 270° knob / linear-slider / CRT-scope /
-  glass-panel renderers, and glow helpers.
+### A0. Component home — ghostmoon-oss (shared mixed-license UI/DSP library) — DONE
+
+Reusable synthwave primitives live in the **ghostmoon-oss** shared library, not in
+Breadbin's `src/`. The library exposes three CMake targets under namespace `gm::` /
+include root `ghostmoon/`:
+
+- **`ghostmoon_oss::dsp`** (`<ghostmoon/ReverbSC.h>` family) — LGPL-2.1-or-later
+- **`ghostmoon_oss::core`** (`<ghostmoon/ui/Geometry.h>`, `<ghostmoon/ui/ScaledEditor.h>`) — MIT
+- **`ghostmoon_oss::ui_synthwave`** (`<ghostmoon/ui/synthwave/{Controls,Chrome,Scope,Theme}.h>`) — MIT
+
+Per-file SPDX headers; `LICENSES/MIT.txt` + `LGPL-2.1.txt` present. Breadbin consumes
+all three via the `GHOSTMOON_OSS_DIR` CMake cache variable.
+
 - **→ Breadbin `src/`**: `BreadbinLookAndFeel` (wires the `gm::ui::` primitives to
   Breadbin's controls, accent assignments, and layout) and the project `DESIGN.md`.
-- **Consumption**: default `add_subdirectory` via a `GHOSTMOONGPL_DIR` cache var
-  (switchable to CPM/FetchContent if the repo gains a remote); finalized when Phase A
-  wires it up.
-- **Related cleanup (bonus)**: GhostmoonGPL's README documents that `ReverbSC` is
-  **LGPL, not MIT** — so Breadbin's `src/dsp/ReverbSC.h` ("MIT copy") is mislabeled.
-  Once consumption is wired, switch the reverb to `gm::ReverbSC` from GhostmoonGPL and
-  delete the local copy (GPLv3 + LGPL = clean).
+
+**Cleanup (DONE):**
+- **ScaledEditor promoted**: local `src/ScaledEditor.h` deleted; now `gm::ui::ScaledEditor`
+  from `ghostmoon_oss::core`.
+- **ReverbSC corrected**: local `src/dsp/ReverbSC.h` (mislabeled MIT) deleted; Breadbin now
+  uses `gm::ReverbSC` from `ghostmoon_oss::dsp` (correctly LGPL-2.1-or-later; GPLv3 + LGPL = clean).
 
 ### A1. Theme tokens — single source of truth
 New `src/BreadbinTheme.h` (`bb::theme` namespace):
@@ -99,7 +103,7 @@ Phase A restyles the **existing layout in place — no controls move.** New Opti
 
 ## Testing & verification
 - `cmake --build build --config Release --target Breadbin_All` green.
-- Existing suites unaffected (UI-only change): expect **LFO 484 / integration 405 / mutation 17-of-18**.
+- Existing suites unaffected (UI-only change): **LFO 484 / integration 409 / mutation 17-of-18** — verified.
 - **Manual visual verification** (UI bugs cannot be auto-verified): launch standalone; confirm rendering, colors, fonts, and glows match tokens, and paint stays smooth. **User confirms before Phase A is marked done.**
 - Rollback: tag `checkpoint/pre-c64-redesign` + archive `releases/2026-06-05_0146_pre-c64-redesign/`.
 
