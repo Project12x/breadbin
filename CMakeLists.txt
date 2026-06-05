@@ -34,6 +34,10 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
+set(GHOSTMOONGPL_DIR "C:/Users/estee/Desktop/My Stuff/Code/Antigravity/ghostmoongpl"
+    CACHE PATH "Path to the GhostmoonGPL repo")
+add_subdirectory("${GHOSTMOONGPL_DIR}" "${CMAKE_BINARY_DIR}/ghostmoongpl-build")
+
 # Collect reSIDfp source files
 set(RESIDFP_DIR "${libsidplayfp_SOURCE_DIR}/src/builders/residfp-builder/residfp")
 file(GLOB RESIDFP_SOURCES
@@ -182,6 +186,7 @@ endif()
 target_link_libraries(Breadbin
     PRIVATE
         BreadbinAssets
+        ghostmoongpl::ui
         juce::juce_audio_utils
         juce::juce_audio_processors
         juce::juce_audio_devices
@@ -224,6 +229,7 @@ target_include_directories(BreadbinIntegrationTests PRIVATE
 )
 target_link_libraries(BreadbinIntegrationTests PRIVATE
     BreadbinAssets
+    ghostmoongpl::ui
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_audio_devices
