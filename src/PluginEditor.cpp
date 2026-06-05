@@ -1,6 +1,9 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 #include <functional>
+#include <ghostmoon/ui/Controls.h>
+#include <ghostmoon/ui/Chrome.h>
+#include <ghostmoon/ui/Theme.h>
 
 // ========== CUSTOM LOOKANDFEEL ==========
 
@@ -32,73 +35,12 @@ BreadbinLookAndFeel::BreadbinLookAndFeel() {
 
 void BreadbinLookAndFeel::drawRotarySlider(
     juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
-    float rotaryStartAngle, float rotaryEndAngle, juce::Slider &slider) {
-
-  auto bounds = juce::Rectangle<float>(
-                    static_cast<float>(x), static_cast<float>(y),
-                    static_cast<float>(width), static_cast<float>(height))
-                    .reduced(2.0f);
-  float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-  float centreX = bounds.getCentreX();
-  float centreY = bounds.getCentreY();
-  float rx = centreX - radius;
-  float ry = centreY - radius;
-  float rw = radius * 2.0f;
-  float angle =
-      rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-  // Accent colour from slider's trackColourId
-  auto accentColour = slider.findColour(juce::Slider::trackColourId);
-
-  // Dark recessed background
-  g.setColour(juce::Colour(15, 15, 20));
-  g.fillEllipse(rx, ry, rw, rw);
-
-  // Inner shadow gradient
-  juce::ColourGradient innerShadow(juce::Colours::black.withAlpha(0.4f),
-                                   centreX - radius, centreY - radius,
-                                   juce::Colours::white.withAlpha(0.05f),
-                                   centreX + radius, centreY + radius, true);
-  g.setGradientFill(innerShadow);
-  g.fillEllipse(rx + 1.0f, ry + 1.0f, rw - 2.0f, rw - 2.0f);
-
-  // Background arc track
-  const float trackWidth = 3.0f;
-  juce::Path backgroundArc;
-  backgroundArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f,
-                              0.0f, rotaryStartAngle, rotaryEndAngle, true);
-  g.setColour(juce::Colour(50, 50, 55));
-  g.strokePath(backgroundArc,
-               juce::PathStrokeType(trackWidth, juce::PathStrokeType::curved,
-                                    juce::PathStrokeType::rounded));
-
-  // Value arc with glow
-  if (sliderPos > 0.0f) {
-    juce::Path valueArc;
-    valueArc.addCentredArc(centreX, centreY, radius - 4.0f, radius - 4.0f, 0.0f,
-                           rotaryStartAngle, angle, true);
-    // Glow (wider, lower alpha)
-    g.setColour(accentColour.withAlpha(0.15f));
-    g.strokePath(valueArc, juce::PathStrokeType(trackWidth + 4.0f,
-                                                juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
-    // Solid arc
-    g.setColour(accentColour);
-    g.strokePath(valueArc,
-                 juce::PathStrokeType(trackWidth, juce::PathStrokeType::curved,
-                                      juce::PathStrokeType::rounded));
-  }
-
-  // Pointer dot
-  float dotRadius = 3.0f;
-  float dotDist = radius - 4.0f;
-  float dotX =
-      centreX + dotDist * std::cos(angle - juce::MathConstants<float>::halfPi);
-  float dotY =
-      centreY + dotDist * std::sin(angle - juce::MathConstants<float>::halfPi);
-  g.setColour(juce::Colours::white);
-  g.fillEllipse(dotX - dotRadius, dotY - dotRadius, dotRadius * 2.0f,
-                dotRadius * 2.0f);
+    float /*rotaryStartAngle*/, float /*rotaryEndAngle*/, juce::Slider &slider) {
+  gm::ui::drawKnob(g,
+                   juce::Rectangle<float>((float)x, (float)y, (float)width, (float)height),
+                   sliderPos,
+                   accentOf(slider),
+                   slider.getMinimum() < 0.0);
 }
 
 void BreadbinLookAndFeel::drawLinearSlider(
@@ -106,97 +48,23 @@ void BreadbinLookAndFeel::drawLinearSlider(
     float /*minSliderPos*/, float /*maxSliderPos*/,
     juce::Slider::SliderStyle style, juce::Slider &slider) {
 
-  bool isHorizontal = (style == juce::Slider::LinearHorizontal ||
-                       style == juce::Slider::LinearBar);
+  const auto bounds = juce::Rectangle<float>((float)x, (float)y,
+                                             (float)width, (float)height);
+  const bool isVertical = (style == juce::Slider::LinearVertical ||
+                           style == juce::Slider::LinearBarVertical);
+  const bool bipolar = (slider.getMinimum() < 0.0);
+  const juce::Colour accent = accentOf(slider);
 
-  auto trackColour = slider.findColour(juce::Slider::trackColourId);
-
-  if (isHorizontal) {
-    float trackY = static_cast<float>(y) + static_cast<float>(height) * 0.5f;
-    float trackH = 4.0f;
-    float trackTop = trackY - trackH * 0.5f;
-    float fx = static_cast<float>(x);
-    float fw = static_cast<float>(width);
-
-    // Recessed channel
-    g.setColour(juce::Colour(15, 15, 20));
-    g.fillRoundedRectangle(fx, trackTop, fw, trackH, 2.0f);
-    // Inner shadow edges
-    g.setColour(juce::Colours::black.withAlpha(0.3f));
-    g.drawHorizontalLine(static_cast<int>(trackTop), fx, fx + fw);
-    g.setColour(juce::Colours::white.withAlpha(0.05f));
-    g.drawHorizontalLine(static_cast<int>(trackTop + trackH), fx, fx + fw);
-
-    // Neon fill (bipolar-aware)
-    float fillStart = fx;
-    float fillEnd = sliderPos;
-    auto range = slider.getRange();
-    if (range.getStart() < 0.0 && range.getEnd() > 0.0) {
-      float centre =
-          fx + fw * static_cast<float>(-range.getStart() / range.getLength());
-      fillStart = juce::jmin(centre, sliderPos);
-      fillEnd = juce::jmax(centre, sliderPos);
-    }
-    // Glow
-    g.setColour(trackColour.withAlpha(0.15f));
-    g.fillRoundedRectangle(fillStart, trackTop - 1.5f, fillEnd - fillStart,
-                           trackH + 3.0f, 2.0f);
-    // Solid fill
-    g.setColour(trackColour.withAlpha(0.7f));
-    g.fillRoundedRectangle(fillStart, trackTop, fillEnd - fillStart, trackH,
-                           2.0f);
-
-    // Pill thumb
-    float thumbW = 14.0f;
-    float thumbH = static_cast<float>(height) * 0.65f;
-    float thumbX = sliderPos - thumbW * 0.5f;
-    float thumbY = trackY - thumbH * 0.5f;
-
-    juce::ColourGradient thumbGrad(juce::Colour(200, 200, 210), thumbX, thumbY,
-                                   juce::Colour(80, 80, 90), thumbX,
-                                   thumbY + thumbH, false);
-    g.setGradientFill(thumbGrad);
-    g.fillRoundedRectangle(thumbX, thumbY, thumbW, thumbH, thumbW * 0.35f);
-
-    g.setColour(juce::Colour(60, 60, 70));
-    g.drawRoundedRectangle(thumbX, thumbY, thumbW, thumbH, thumbW * 0.35f,
-                           0.5f);
-
+  if (isVertical) {
+    const float fh = (float)height;
+    const float v01 = juce::jlimit(0.0f, 1.0f,
+        (fh > 0.0f) ? ((float)(y + height) - sliderPos) / fh : 0.0f);
+    gm::ui::drawVSlider(g, bounds, v01, accent, bipolar);
   } else {
-    // Vertical
-    float trackX = static_cast<float>(x) + static_cast<float>(width) * 0.5f;
-    float trackW = 4.0f;
-    float trackLeft = trackX - trackW * 0.5f;
-    float fy = static_cast<float>(y);
-    float fh = static_cast<float>(height);
-
-    // Recessed channel
-    g.setColour(juce::Colour(15, 15, 20));
-    g.fillRoundedRectangle(trackLeft, fy, trackW, fh, 2.0f);
-    g.setColour(juce::Colours::black.withAlpha(0.3f));
-    g.drawLine(trackLeft, fy, trackLeft, fy + fh);
-
-    // Neon fill from bottom to thumb
-    float fillBottom = fy + fh;
-    g.setColour(trackColour.withAlpha(0.5f));
-    if (fillBottom > sliderPos)
-      g.fillRoundedRectangle(trackLeft, sliderPos, trackW,
-                             fillBottom - sliderPos, 2.0f);
-
-    // Horizontal thumb
-    float thumbH = 8.0f;
-    float thumbW = static_cast<float>(width) * 0.7f;
-    float thumbX = trackX - thumbW * 0.5f;
-    float thumbY = sliderPos - thumbH * 0.5f;
-
-    juce::ColourGradient thumbGrad(juce::Colour(200, 200, 210), thumbX, thumbY,
-                                   juce::Colour(80, 80, 90), thumbX,
-                                   thumbY + thumbH, false);
-    g.setGradientFill(thumbGrad);
-    g.fillRoundedRectangle(thumbX, thumbY, thumbW, thumbH, 3.0f);
-
-    g.setColour(juce::Colour(60, 60, 70));
-    g.drawRoundedRectangle(thumbX, thumbY, thumbW, thumbH, 3.0f, 0.5f);
+    const float fw = (float)width;
+    const float v01 = juce::jlimit(0.0f, 1.0f,
+        (fw > 0.0f) ? (sliderPos - (float)x) / fw : 0.0f);
+    gm::ui::drawHSlider(g, bounds, v01, accent, bipolar);
   }
 }
 
@@ -204,78 +72,32 @@ void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
                                            juce::ToggleButton &button,
                                            bool /*highlighted*/,
                                            bool /*down*/) {
-  auto bounds = button.getLocalBounds().toFloat();
-  bool isOn = button.getToggleState();
+  const auto bounds = button.getLocalBounds().toFloat();
+  const bool isOn = button.getToggleState();
+  const juce::Colour accent = accentOf(button);
 
-  // LED indicator
-  float ledSize = juce::jmin(14.0f, bounds.getHeight() - 2.0f);
-  float ledX = bounds.getX() + 2.0f;
-  float ledY = bounds.getCentreY() - ledSize * 0.5f;
-  auto ledRect = juce::Rectangle<float>(ledX, ledY, ledSize, ledSize);
+  // Dot indicator: 10x10 square at left edge, vertically centred
+  const float dotSize = 10.0f;
+  const float dotX = bounds.getX() + 2.0f;
+  const float dotY = bounds.getCentreY() - dotSize * 0.5f;
+  const auto dotRect = juce::Rectangle<float>(dotX, dotY, dotSize, dotSize);
+  gm::ui::drawToggleDot(g, dotRect, accent, isOn);
 
-  auto accentColour = button.findColour(juce::ToggleButton::tickColourId);
-
-  if (isOn) {
-    // Outer glow
-    g.setColour(accentColour.withAlpha(0.25f));
-    g.fillRoundedRectangle(ledRect.expanded(2.0f), 4.0f);
-    // Filled LED
-    g.setColour(accentColour);
-    g.fillRoundedRectangle(ledRect, 3.0f);
-    // Bright centre highlight
-    g.setColour(accentColour.brighter(0.4f).withAlpha(0.6f));
-    g.fillRoundedRectangle(ledRect.reduced(2.0f), 2.0f);
-  } else {
-    g.setColour(juce::Colour(35, 35, 40));
-    g.fillRoundedRectangle(ledRect, 3.0f);
-    g.setColour(juce::Colour(60, 60, 65));
-    g.drawRoundedRectangle(ledRect, 3.0f, 0.5f);
-  }
-
-  // Label text
-  float textX = ledX + ledSize + 4.0f;
-  float textW = bounds.getWidth() - (textX - bounds.getX());
-  g.setColour(isOn ? juce::Colours::white : juce::Colours::lightgrey);
-  g.setFont(proFont.withHeight(12.0f));
-  g.drawText(
-      button.getButtonText(),
-      juce::Rectangle<float>(textX, bounds.getY(), textW, bounds.getHeight()),
-      juce::Justification::centredLeft);
+  // Label text to the right of the dot
+  const float textX = dotX + dotSize + 4.0f;
+  const float textW = bounds.getRight() - textX;
+  g.setColour(isOn ? gm::ui::theme::txt : gm::ui::theme::txt2);
+  g.setFont(boldFont.withHeight(10.0f));
+  g.drawText(button.getButtonText(),
+             juce::Rectangle<float>(textX, bounds.getY(), textW, bounds.getHeight()),
+             juce::Justification::centredLeft);
 }
 
 void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
                                                juce::Button &button,
-                                               const juce::Colour &bgColour,
-                                               bool highlighted, bool down) {
-  auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
-  float cornerRadius = bounds.getHeight() * 0.4f;
-
-  auto baseColour = bgColour;
-  if (down)
-    baseColour = baseColour.darker(0.3f);
-  else if (highlighted)
-    baseColour = baseColour.brighter(0.15f);
-
-  // 3D gradient
-  juce::Colour topColour, bottomColour;
-  if (down) {
-    topColour = baseColour.darker(0.15f);
-    bottomColour = baseColour.brighter(0.05f);
-  } else {
-    topColour = baseColour.brighter(0.15f);
-    bottomColour = baseColour.darker(0.15f);
-  }
-
-  juce::ColourGradient grad = juce::ColourGradient::vertical(
-      topColour, bounds.getY(), bottomColour, bounds.getBottom());
-  g.setGradientFill(grad);
-  g.fillRoundedRectangle(bounds, cornerRadius);
-
-  // Neon accent border
-  auto accentColour = button.findColour(juce::TextButton::textColourOnId);
-  g.setColour(accentColour.withAlpha(highlighted ? 0.6f : 0.3f));
-  g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
-  g.drawRoundedRectangle(bounds, cornerRadius, 1.0f);
+                                               const juce::Colour & /*bgColour*/,
+                                               bool /*highlighted*/, bool down) {
+  gm::ui::drawButtonBackground(g, button.getLocalBounds().toFloat(), down);
 }
 
 void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
@@ -312,7 +134,7 @@ void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
     g.fillPath(p);
   } else {
     auto bounds = button.getLocalBounds().toFloat().reduced(4.0f, 2.0f);
-    g.setFont(proFont.withHeight(juce::jmin(15.0f, bounds.getHeight() * 0.7f)));
+    g.setFont(boldFont.withHeight(juce::jmin(11.0f, bounds.getHeight() * 0.7f)));
     g.setColour(button.findColour(button.getToggleState()
                                       ? juce::TextButton::textColourOnId
                                       : juce::TextButton::textColourOffId)
@@ -323,33 +145,25 @@ void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
 }
 
 void BreadbinLookAndFeel::drawComboBox(juce::Graphics &g, int width, int height,
-                                       bool isButtonDown, int buttonX,
+                                       bool /*isButtonDown*/, int buttonX,
                                        int /*buttonY*/, int buttonW,
                                        int /*buttonH*/, juce::ComboBox &box) {
-  auto bounds = juce::Rectangle<float>(0.0f, 0.0f, static_cast<float>(width),
-                                       static_cast<float>(height));
-  float corner = 4.0f;
+  gm::ui::drawComboBackground(g, juce::Rectangle<float>(0.0f, 0.0f,
+                                                        (float)width, (float)height));
 
-  // Dark recessed background
-  g.setColour(juce::Colour(20, 20, 25));
-  g.fillRoundedRectangle(bounds, corner);
-
-  // Neon accent border
-  auto accentColour = box.findColour(juce::ComboBox::outlineColourId);
-  g.setColour(accentColour.withAlpha(isButtonDown ? 0.8f : 0.4f));
-  g.drawRoundedRectangle(bounds.reduced(0.5f), corner, 1.0f);
-
-  // Arrow indicator
-  float arrowX =
-      static_cast<float>(buttonX) + static_cast<float>(buttonW) * 0.5f;
-  float arrowY = static_cast<float>(height) * 0.5f;
-  float arrowSize = 5.0f;
+  // Chevron arrow near the right edge
+  const float arrowX = (float)buttonX + (float)buttonW * 0.5f;
+  const float arrowY = (float)height * 0.5f;
+  const float arrowSize = 4.5f;
   juce::Path arrow;
   arrow.addTriangle(arrowX - arrowSize, arrowY - arrowSize * 0.4f,
-                    arrowX + arrowSize, arrowY - arrowSize * 0.4f, arrowX,
-                    arrowY + arrowSize * 0.6f);
-  g.setColour(box.findColour(juce::ComboBox::arrowColourId));
+                    arrowX + arrowSize, arrowY - arrowSize * 0.4f,
+                    arrowX,             arrowY + arrowSize * 0.6f);
+  g.setColour(gm::ui::theme::txt3);
   g.fillPath(arrow);
+
+  // Apply accent colour to the combo text label
+  box.setColour(juce::ComboBox::textColourId, accentOf(box));
 }
 
 void BreadbinLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width,
@@ -381,17 +195,17 @@ void BreadbinLookAndFeel::drawPopupMenuItem(
   g.setColour(isActive ? (isHighlighted ? juce::Colours::white
                                         : juce::Colours::lightgrey)
                        : juce::Colours::grey);
-  g.setFont(proFont.withHeight(14.0f));
+  g.setFont(boldFont.withHeight(11.0f));
 
   auto textArea = r.reduced(10, 0);
   if (isTicked) {
     auto tickArea = textArea.removeFromLeft(16);
     g.setColour(juce::Colours::cyan);
-    g.setFont(proFont.withHeight(14.0f));
+    g.setFont(boldFont.withHeight(11.0f));
     g.drawText(juce::String(juce::CharPointer_UTF8("\xe2\x9c\x93")), tickArea,
                juce::Justification::centred);
     g.setColour(isActive ? juce::Colours::white : juce::Colours::grey);
-    g.setFont(proFont.withHeight(14.0f));
+    g.setFont(boldFont.withHeight(11.0f));
   }
 
   g.drawFittedText(text, textArea, juce::Justification::centredLeft, 1);
@@ -412,7 +226,7 @@ void BreadbinLookAndFeel::drawPopupMenuSectionHeaderWithOptions(
     juce::Graphics &g, const juce::Rectangle<int> &area,
     const juce::String &sectionName, const juce::PopupMenu::Options &) {
   g.setColour(juce::Colours::cyan);
-  g.setFont(proFont.withHeight(13.0f).boldened());
+  g.setFont(boldFont.withHeight(11.0f));
   g.drawFittedText(sectionName, area.reduced(10, 0),
                    juce::Justification::centredLeft, 1);
   // Subtle underline

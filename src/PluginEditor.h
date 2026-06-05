@@ -22,12 +22,17 @@ public:
   const juce::Font &getBoldFont() const { return boldFont; }
   const juce::Font &getMonoFont() const { return monoFont; }
 
-  juce::Font getComboBoxFont(juce::ComboBox &) override {
-    return proFont.withHeight(14.0f);
+  static juce::Colour accentOf(juce::Component& c) {
+    return juce::Colour((juce::uint32)(int)c.getProperties().getWithDefault(
+        "accent", (int)0xFF33EDED));
   }
-  juce::Font getPopupMenuFont() override { return proFont.withHeight(14.0f); }
+
+  juce::Font getComboBoxFont(juce::ComboBox &) override {
+    return boldFont.withHeight(11.0f);
+  }
+  juce::Font getPopupMenuFont() override { return boldFont.withHeight(11.0f); }
   juce::Font getSliderPopupFont(juce::Slider &) override {
-    return proFont.withHeight(12.0f);
+    return monoFont.withHeight(11.0f);
   }
 
   void drawRotarySlider(juce::Graphics &, int x, int y, int width, int height,
@@ -79,7 +84,7 @@ public:
 
   juce::Label *createSliderTextBox(juce::Slider &slider) override {
     auto *l = juce::LookAndFeel_V4::createSliderTextBox(slider);
-    l->setFont(proFont.withHeight(11.0f));
+    l->setFont(monoFont.withHeight(11.0f));
     return l;
   }
 
