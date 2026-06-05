@@ -3352,10 +3352,10 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   auto &panSlider = isLeft ? leftPanSlider : rightPanSlider;
   auto &sid = isLeft ? processor.getLeftSID() : processor.getRightSID();
 
-  // SID label
+  // SID label — text is drawn by drawGlowText in paint(); suppress Label's own text draw.
   sidLabel.setText(sidName.toUpperCase() + " SID", juce::dontSendNotification);
   sidLabel.setFont(retroFont.withHeight(10.0f));
-  sidLabel.setColour(juce::Label::textColourId, colour);
+  sidLabel.setColour(juce::Label::textColourId, juce::Colours::transparentBlack);
   sidLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(sidLabel);
 
@@ -3511,9 +3511,10 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
 }
 
 void BreadbinEditor::setupVoiceEditor() {
+  // voiceEditorLabel text is drawn by drawGlowText in paint(); suppress Label's own text draw.
   voiceEditorLabel.setText("VOICE EDITOR", juce::dontSendNotification);
   voiceEditorLabel.setFont(retroFont.withHeight(8.0f));
-  voiceEditorLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+  voiceEditorLabel.setColour(juce::Label::textColourId, juce::Colours::transparentBlack);
   addAndMakeVisible(voiceEditorLabel);
 
   waveformLabel.setText("Wave:", juce::dontSendNotification);
@@ -3815,15 +3816,15 @@ void BreadbinEditor::paint(juce::Graphics &g) {
 void BreadbinEditor::resizedContent() {
   // OptionD 6-region layout — positioning only, no behavior changes.
   // Content area: ~984 wide × 727 tall (1000x743 minus 8px padding each side).
-  // Region heights (sum = 687): topBar=46, towers=240, voiceEd=175, fx=104, dock=24, keyboard=98.
+  // Region heights (sum = 687): topBar=46, towers=240, voiceEd=175, fx=104, dock=34, keyboard=88.
   // 5 gaps × 8px = 40px. Total = 727px. ✓
   static constexpr int kGap      = 8;  // vertical gap between regions
   static constexpr int kTopBarH  = 46;
   static constexpr int kTowersH  = 240;
   static constexpr int kVoiceH   = 175;
   static constexpr int kFxH      = 104;
-  static constexpr int kDockH    = 24;
-  static constexpr int kKbH      = 98;
+  static constexpr int kDockH    = 34;
+  static constexpr int kKbH      = 88;
 
   midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
@@ -3995,8 +3996,12 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
 
   leftPanel.removeFromTop(pad);
 
-  // FilterDisplay — full column width × 74px
-  filterDisplay_L.setBounds(leftPanel.removeFromTop(74));
+  // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
+  {
+    auto fdRow = leftPanel.removeFromTop(74);
+    int inset = fdRow.getWidth() * 15 / 200; // 7.5% each side → 85% total
+    filterDisplay_L.setBounds(fdRow.reduced(inset, 0));
+  }
 
   leftPanel.removeFromTop(pad);
 
@@ -4051,8 +4056,12 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
 
   rightPanel.removeFromTop(pad);
 
-  // FilterDisplay — full column width × 74px
-  filterDisplay_R.setBounds(rightPanel.removeFromTop(74));
+  // FilterDisplay — ~85% column width × 74px (centred; small inset keeps it from bleeding edge)
+  {
+    auto fdRow = rightPanel.removeFromTop(74);
+    int inset = fdRow.getWidth() * 15 / 200; // 7.5% each side → 85% total
+    filterDisplay_R.setBounds(fdRow.reduced(inset, 0));
+  }
 
   rightPanel.removeFromTop(pad);
 
