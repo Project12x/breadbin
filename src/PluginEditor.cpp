@@ -4038,19 +4038,21 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   // ----- RIGHT SID -----
   auto rightPanel = bounds.removeFromLeft(sidWidth).reduced(8, 6);
 
-  // Header row: SID label + chip selector (mirrored)
+  // Header row: SID label + chip selector — right-justified to mirror the left tower
+  // (label hugs the outer-right edge, combo just inside it).
   auto rightHeader = rightPanel.removeFromTop(20);
-  rightSIDLabel.setBounds(rightHeader.removeFromLeft(120));
-  rightChipSelector.setBounds(rightHeader.removeFromLeft(150));
+  rightSIDLabel.setBounds(rightHeader.removeFromRight(120));
+  rightChipSelector.setBounds(rightHeader.removeFromRight(150));
 
   rightPanel.removeFromTop(pad);
 
-  // Voice enable + button row (voices 4-6, mirrored layout)
+  // Voice enable + button row (voices 4-6) — right-justified to mirror the left tower
   auto rightVoicesRow = rightPanel.removeFromTop(24);
+  auto vrow = rightVoicesRow.removeFromRight(3 * (20 + 52) + 2 * pad);
   for (int i = 0; i < 3; ++i) {
-    rightVoiceEnables[i].setBounds(rightVoicesRow.removeFromLeft(20).reduced(0, 2));
-    rightVoiceButtons[i].setBounds(rightVoicesRow.removeFromLeft(52).reduced(0, 1));
-    if (i < 2) rightVoicesRow.removeFromLeft(pad);
+    rightVoiceEnables[i].setBounds(vrow.removeFromLeft(20).reduced(0, 2));
+    rightVoiceButtons[i].setBounds(vrow.removeFromLeft(52).reduced(0, 1));
+    if (i < 2) vrow.removeFromLeft(pad);
   }
 
   rightPanel.removeFromTop(pad);
