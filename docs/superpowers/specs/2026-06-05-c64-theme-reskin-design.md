@@ -38,6 +38,24 @@ Each phase is its own review + commit. Phases B–D get their own brainstorm/pla
 
 ## Phase A design
 
+### A0. Component home — GhostmoonGPL (shared LGPL UI library)
+Reusable synthwave primitives live in the user's **GhostmoonGPL** library
+(LGPL-2.1-or-later; `…/Antigravity/ghostmoongpl`), not in Breadbin's `src/`. This
+**supersedes the `src/` locations noted below** for the *reusable* pieces:
+- **→ GhostmoonGPL** (`ui/include/ghostmoon/ui/`, namespace `gm::ui::`, header-only;
+  new `ghostmoongpl_ui` INTERFACE target that assumes the consumer provides JUCE):
+  theme token constants (`gm::ui::theme`), the 270° knob / linear-slider / CRT-scope /
+  glass-panel renderers, and glow helpers.
+- **→ Breadbin `src/`**: `BreadbinLookAndFeel` (wires the `gm::ui::` primitives to
+  Breadbin's controls, accent assignments, and layout) and the project `DESIGN.md`.
+- **Consumption**: default `add_subdirectory` via a `GHOSTMOONGPL_DIR` cache var
+  (switchable to CPM/FetchContent if the repo gains a remote); finalized when Phase A
+  wires it up.
+- **Related cleanup (bonus)**: GhostmoonGPL's README documents that `ReverbSC` is
+  **LGPL, not MIT** — so Breadbin's `src/dsp/ReverbSC.h` ("MIT copy") is mislabeled.
+  Once consumption is wired, switch the reverb to `gm::ReverbSC` from GhostmoonGPL and
+  delete the local copy (GPLv3 + LGPL = clean).
+
 ### A1. Theme tokens — single source of truth
 New `src/BreadbinTheme.h` (`bb::theme` namespace):
 - `juce::Colour` constants for every `synthwave.css` token:
