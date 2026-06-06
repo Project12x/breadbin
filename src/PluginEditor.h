@@ -471,6 +471,7 @@ public:
 private:
   BreadbinProcessor &processor;
   juce::Font panelProFont, panelBoldFont, panelMonoFont;
+  juce::Image gridCache, scanCache;
 
   // ========== LFO1 ==========
   MappableToggle lfoEnableButton{"LFO", processor,
@@ -570,6 +571,7 @@ public:
 private:
   BreadbinProcessor &processor;
   juce::Font panelProFont, panelBoldFont;
+  juce::Image gridCache, scanCache;
   juce::ToggleButton enableButton{"Enable"};
   std::array<juce::TextButton, 4> slotButtons;
   std::array<juce::TextButton, 4> learnButtons;
@@ -611,6 +613,7 @@ public:
 private:
   BreadbinProcessor &processor;
   juce::Font panelProFont, panelBoldFont;
+  juce::Image gridCache, scanCache;
 
   // Global controls (moved from main editor)
   juce::ToggleButton enableButton{"Enable"};
@@ -663,11 +666,12 @@ public:
   void timerCallback() override;
   void refreshFonts(const juce::Font &mono);
   static constexpr int panelWidth = 520;
-  static constexpr int panelHeight = 370;
+  static constexpr int panelHeight = 400;
 
 private:
   BreadbinProcessor &processor;
   juce::Font panelMonoFont;
+  juce::Image gridCache, scanCache;
 
   juce::TextButton loadButton{"Load SID"};
   juce::TextButton playButton{"Play"};
@@ -706,6 +710,7 @@ public:
 private:
   BreadbinProcessor &processor;
   juce::Font panelProFont, panelBoldFont, panelMonoFont;
+  juce::Image gridCache, scanCache;
 
   juce::TextButton loadButton{"Load WAV"};
   juce::Label fileNameLabel;

@@ -37,6 +37,24 @@ inline void drawPopupGlass(juce::Graphics &g, juce::Rectangle<float> fb, juce::C
     g.drawRect(fb.reduced(inset[i]), i == 0 ? 1.5f : 1.0f);
   }
 }
+// Build the dimmed grid backdrop + scanline caches for a popup (call from resized()).
+// The grid is drawn faint over near-black so it reads as a subtle texture, not a focal point.
+inline void buildPopupCaches(juce::Component &c, juce::Image &gridCache,
+                             juce::Image &scanCache) {
+  const int w = c.getWidth(), h = c.getHeight();
+  if (w <= 0 || h <= 0) return;
+  gridCache = juce::Image(juce::Image::ARGB, w, h, true);
+  juce::Graphics gc(gridCache);
+  gc.setColour(gm::ui::theme::bg0);
+  gc.fillAll();
+  auto src = juce::ImageCache::getFromMemory(BinaryData::popup_grid_png,
+                                             BinaryData::popup_grid_pngSize);
+  if (src.isValid()) {
+    gc.setOpacity(0.30f); // faint backdrop
+    gc.drawImage(src, 0, 0, w, h, 0, 0, src.getWidth(), src.getHeight());
+  }
+  scanCache = gm::ui::makeScanlineOverlay(w, h);
+}
 } // namespace
 
 // ========== CUSTOM LOOKANDFEEL ==========
@@ -421,53 +439,41 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
 }
 
 void SidPlayerPanel::resized() {
-  auto bounds = getLocalBounds().reduced(10);
+  // Row 1: Load + filename + Sub-tune
+  loadButton.setBounds(10, 8, 110, 26);
+  subtuneSelector.setBounds(panelWidth - 120, 8, 110, 26);
+  subtuneLabel.setBounds(panelWidth - 186, 8, 62, 26);
+  tuneInfoLabel.setBounds(128, 8, panelWidth - 320, 26);
 
-  // Row 1: Load button + tune info
-  auto row1 = bounds.removeFromTop(24);
-  loadButton.setBounds(row1.removeFromLeft(100));
-  row1.removeFromLeft(8);
-  tuneInfoLabel.setBounds(row1);
+  // Info block: title / author / released (left) + transport (right)
+  titleLabel.setBounds(20, 50, panelWidth - 200, 22);
+  authorLabel.setBounds(20, 72, panelWidth - 200, 18);
+  releasedLabel.setBounds(20, 90, panelWidth - 200, 16);
+  const int ty = 64, tw = 50, th = 30;
+  playButton.setBounds(panelWidth - 178, ty, tw, th);
+  pauseButton.setBounds(panelWidth - 124, ty, tw, th);
+  stopButton.setBounds(panelWidth - 70, ty, tw, th);
 
-  bounds.removeFromTop(4);
+  // Volume
+  volumeLabel.setBounds(10, 122, 36, 24);
+  volumeSlider.setBounds(50, 122, panelWidth - 60, 24);
 
-  // Row 2: Title, Author, Released
-  titleLabel.setBounds(bounds.removeFromTop(20));
-  authorLabel.setBounds(bounds.removeFromTop(20));
-  releasedLabel.setBounds(bounds.removeFromTop(20));
+  // Register display fills the middle
+  registerDisplay.setBounds(10, 154, panelWidth - 20, panelHeight - 200);
 
-  bounds.removeFromTop(4);
+  // Snapshot (bottom-right)
+  snapshotButton.setBounds(panelWidth - 170, panelHeight - 36, 160, 26);
 
-  // Row 3: Transport + subtune + volume
-  auto row3 = bounds.removeFromTop(26);
-  playButton.setBounds(row3.removeFromLeft(55));
-  row3.removeFromLeft(4);
-  pauseButton.setBounds(row3.removeFromLeft(55));
-  row3.removeFromLeft(4);
-  stopButton.setBounds(row3.removeFromLeft(55));
-  row3.removeFromLeft(12);
-  subtuneLabel.setBounds(row3.removeFromLeft(60));
-  subtuneSelector.setBounds(row3.removeFromLeft(100));
-
-  bounds.removeFromTop(4);
-
-  // Row 4: Volume + Snapshot
-  auto row4 = bounds.removeFromTop(26);
-  volumeLabel.setBounds(row4.removeFromLeft(30));
-  volumeSlider.setBounds(row4.removeFromLeft(200));
-  row4.removeFromLeft(12);
-  snapshotButton.setBounds(row4);
-
-  bounds.removeFromTop(6);
-
-  // Remaining: Register display
-  registerDisplay.setBounds(bounds);
+  buildPopupCaches(*this, gridCache, scanCache);
 }
 
 void SidPlayerPanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(30, 30, 35));
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
-  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
+  // Info block ground (title / author / transport)
+  g.setColour(juce::Colour(0x99101018));
+  g.fillRoundedRectangle(8.0f, 44.0f, static_cast<float>(panelWidth - 16), 70.0f,
+                         5.0f);
 }
 
 void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
@@ -655,14 +661,13 @@ void DigiSamplerPanel::resized() {
   ctrlRow.removeFromLeft(16);
   bitDepthLabel.setBounds(ctrlRow.removeFromLeft(36));
   bitDepthSelector.setBounds(ctrlRow.removeFromLeft(90));
+
+  buildPopupCaches(*this, gridCache, scanCache);
 }
 
 void DigiSamplerPanel::paint(juce::Graphics &g) {
-  auto bounds = getLocalBounds().toFloat();
-  g.setColour(juce::Colour(30, 30, 35));
-  g.fillRoundedRectangle(bounds, 6.0f);
-  g.setColour(juce::Colours::cyan.withAlpha(0.3f));
-  g.drawRoundedRectangle(bounds.reduced(0.5f), 6.0f, 1.0f);
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
   // Waveform display area
   auto waveArea = getLocalBounds().reduced(12);
@@ -1621,9 +1626,8 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
 }
 
 void ModMatrixPanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(30, 30, 35));
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
-  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
   // Dark recessed section backgrounds
   auto drawSectionBg = [&](int y, int h) {
@@ -1760,6 +1764,8 @@ void ModMatrixPanel::resized() {
   totalPWLabel.setBounds(132, 360, 120, 16);
   totalPitchLabel.setBounds(256, 360, 120, 16);
   totalResLabel.setBounds(380, 360, 132, 16);
+
+  buildPopupCaches(*this, gridCache, scanCache);
 }
 
 void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
@@ -2038,69 +2044,57 @@ void ChordMemoryPanel::timerCallback() {
 }
 
 void ChordMemoryPanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(30, 30, 35));
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
-  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
-  // Title with glow pill
-  g.setColour(juce::Colours::cyan.withAlpha(0.15f));
-  g.fillRoundedRectangle(8.0f, 4.0f, 140.0f, 22.0f, 4.0f);
-  g.setColour(juce::Colours::cyan);
-  g.setFont(panelBoldFont.withHeight(14.0f));
-  g.drawText("CHORD MEMORY", 14, 6, 130, 20, juce::Justification::centredLeft);
+  const juce::Colour acc = BreadbinLookAndFeel::accentOf(*this);
 
-  // Subtitle
-  g.setColour(juce::Colour(120, 120, 135));
-  g.setFont(panelProFont.withHeight(10.0f));
-  // Hint text is left of the slot buttons (x=155+); limit width to avoid overlap
-  g.drawFittedText("Play a chord and click Learn, or set intervals manually "
-                   "(up to 6 notes; 3 per SID)",
-                   10, 28, 140, 28, juce::Justification::centredLeft, 2);
-
-  // Divider below header
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
-  g.drawHorizontalLine(58, 8.0f, static_cast<float>(panelWidth - 8));
-
-  // Dark recessed background behind slot rows
-  g.setColour(juce::Colour(22, 22, 27));
-  g.fillRoundedRectangle(4.0f, 60.0f, static_cast<float>(panelWidth - 8),
-                         static_cast<float>(panelHeight - 64), 4.0f);
-
-  // Column headers
-  g.setColour(juce::Colours::lightgrey);
+  // Hint line under the top controls
+  g.setColour(juce::Colour(160, 160, 175));
   g.setFont(panelProFont.withHeight(11.0f));
-  for (int i = 0; i < 5; ++i)
-    g.drawText("Note " + juce::String(i + 2), 140 + i * 72, 62, 66, 14,
-               juce::Justification::centred);
+  g.drawText("Trigger one key produces a full chord.  Play a chord then Learn, "
+             "or set intervals manually.",
+             10, 34, panelWidth - 20, 16, juce::Justification::centredLeft);
 
-  // Sub-header
-  g.setColour(juce::Colour(100, 100, 110));
+  // Recessed ground behind the interval table
+  g.setColour(juce::Colour(0x99101018));
+  g.fillRoundedRectangle(6.0f, 56.0f, static_cast<float>(panelWidth - 12),
+                         static_cast<float>(panelHeight - 62), 5.0f);
+
+  // Column headers aligned with the slider columns
+  const int slidersX = 88, sliderW = 72;
+  g.setColour(acc.withAlpha(0.8f));
   g.setFont(panelProFont.withHeight(9.0f));
-  g.drawText("(semitones from root)", 140, 74, 360, 12,
-             juce::Justification::centredLeft);
+  for (int i = 0; i < 5; ++i)
+    g.drawText("Note " + juce::String(i + 2), slidersX + i * sliderW, 60,
+               sliderW - 6, 12, juce::Justification::centred);
 }
 
 void ChordMemoryPanel::resized() {
-  // Row 1: Enable + Preset browser + Save/Load
-  enableButton.setBounds(155, 4, 80, 24);
-  presetPrevButton.setBounds(240, 5, 20, 22);
-  presetSelector.setBounds(262, 5, 120, 22);
-  presetNextButton.setBounds(384, 5, 20, 22);
-  saveButton.setBounds(panelWidth - 100, 5, 46, 22);
-  loadButton.setBounds(panelWidth - 50, 5, 46, 22);
+  // Top row: Enable + preset stepper + Save/Load
+  enableButton.setBounds(10, 8, 80, 24);
+  presetPrevButton.setBounds(panelWidth - 278, 9, 20, 22);
+  presetSelector.setBounds(panelWidth - 256, 9, 120, 22);
+  presetNextButton.setBounds(panelWidth - 134, 9, 20, 22);
+  saveButton.setBounds(panelWidth - 104, 9, 46, 22);
+  loadButton.setBounds(panelWidth - 54, 9, 46, 22);
 
-  // Row 2: Slot select buttons
-  for (int s = 0; s < 4; ++s)
-    slotButtons[s].setBounds(155 + s * 65, 32, 56, 22);
-
-  // Slot rows (shifted down slightly)
+  // Interval table: 4 rows, each [Slot button | 5 interval sliders | Learn]
+  const int slotW = 70, learnW = 54, slidersX = 88, sliderW = 72;
+  const int tableTop = 74;
+  const int rowH = (panelHeight - 12 - tableTop) / 4;
   for (int s = 0; s < 4; ++s) {
-    int y = 88 + s * 62;
-    slots[s].label.setBounds(10, y + 10, 50, 20);
-    learnButtons[s].setBounds(60, y + 10, 50, 20);
+    int y = tableTop + s * rowH;
+    int cy = y + rowH / 2;
+    slots[s].label.setVisible(false); // redundant with the Slot button
+    slotButtons[s].setBounds(10, cy - 12, slotW, 24);
     for (int i = 0; i < 5; ++i)
-      slots[s].sliders[i].setBounds(120 + i * 72, y, 66, 56);
+      slots[s].sliders[i].setBounds(slidersX + i * sliderW, y + 2, sliderW - 6,
+                                    rowH - 8);
+    learnButtons[s].setBounds(panelWidth - 10 - learnW, cy - 12, learnW, 24);
   }
+
+  buildPopupCaches(*this, gridCache, scanCache);
 }
 
 // ========== WAVETABLE PANEL ==========
@@ -2276,9 +2270,8 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
 }
 
 void WavetablePanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(30, 30, 35));
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.5f));
-  g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
   // Title with glow background
   g.setColour(juce::Colours::cyan.withAlpha(0.15f));
@@ -2382,6 +2375,8 @@ void WavetablePanel::resized() {
     step.pitchSlider.setBounds(x, 100, ctrlW, 120);
     step.pwSlider.setBounds(x, 224, ctrlW, 120);
   }
+
+  buildPopupCaches(*this, gridCache, scanCache);
 }
 
 void WavetablePanel::refreshFonts(const juce::Font &pro,
@@ -2500,10 +2495,12 @@ void BreadbinEditor::showChordMemoryPopup() {
 
   auto *panel = new ChordMemoryPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::mag.getARGB());
   panel->refreshFonts(proFont, boldFont);
 
   auto *window =
       new NonModalPopup("Chord Memory", juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::mag.getARGB());
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(false);
   window->setDropShadowEnabled(true);
@@ -2527,10 +2524,12 @@ void BreadbinEditor::showSidPlayerPopup() {
 
   auto *panel = new SidPlayerPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   panel->refreshFonts(monoFont);
 
   auto *window =
       new NonModalPopup("SID File Player", juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(false);
   window->setDropShadowEnabled(true);
@@ -2554,10 +2553,12 @@ void BreadbinEditor::showModMatrixPopup() {
 
   auto *panel = new ModMatrixPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   panel->refreshFonts(proFont, boldFont, monoFont);
 
   auto *window =
       new NonModalPopup("Modulation", juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(false);
   window->setDropShadowEnabled(true);
@@ -2581,10 +2582,12 @@ void BreadbinEditor::showWavetablePopup() {
 
   auto *panel = new WavetablePanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   panel->refreshFonts(proFont, boldFont);
 
   auto *window = new NonModalPopup("Wavetable Step Sequencer",
                                    juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(false);
   window->setDropShadowEnabled(true);
@@ -2608,10 +2611,12 @@ void BreadbinEditor::showDigiPopup() {
 
   auto *panel = new DigiSamplerPanel(processor);
   panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   panel->refreshFonts(proFont, boldFont, monoFont);
 
   auto *window =
       new NonModalPopup("Digi Sampler ($D418)", juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
   window->setContentOwned(panel, true);
   window->setUsingNativeTitleBar(false);
   window->setDropShadowEnabled(true);
