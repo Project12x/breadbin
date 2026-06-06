@@ -119,6 +119,7 @@ juce_add_binary_data(BreadbinAssets
         assets/JetBrainsMono-Regular.ttf
         assets/background_clean.png
         assets/logo.png
+        assets/popup_grid.png
 )
 
 juce_add_plugin(Breadbin
