@@ -435,6 +435,23 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   registerDisplay.setText("Registers will appear during playback...");
   addAndMakeVisible(registerDisplay);
 
+  // ========== PER-ROLE ACCENT COLOURS ==========
+  // Transport/playback = cyan; snapshot = orange. accentOf() reads "accent".
+  {
+    const int cy = (int)gm::ui::theme::cyan.getARGB(),
+              orr = (int)gm::ui::theme::orange.getARGB();
+    auto acc = [](juce::Component &c, int a) {
+      c.getProperties().set("accent", a);
+    };
+    acc(loadButton, cy);
+    acc(playButton, cy);
+    acc(pauseButton, cy);
+    acc(stopButton, cy);
+    acc(subtuneSelector, cy);
+    acc(volumeSlider, cy);
+    acc(snapshotButton, orr);
+  }
+
   startTimerHz(30); // 30Hz register display updates
 }
 
@@ -637,6 +654,20 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
         p->convertTo0to1(static_cast<float>(bitDepthSelector.getSelectedId() - 1)));
   };
   addAndMakeVisible(bitDepthSelector);
+
+  // ========== PER-ROLE ACCENT COLOURS ==========
+  // All controls = cyan; loop toggle = green. accentOf() reads "accent".
+  {
+    const int cy = (int)gm::ui::theme::cyan.getARGB(),
+              gr = (int)gm::ui::theme::grn.getARGB();
+    auto acc = [](juce::Component &c, int a) {
+      c.getProperties().set("accent", a);
+    };
+    acc(loadButton, cy);
+    acc(rootNoteSelector, cy);
+    acc(bitDepthSelector, cy);
+    acc(loopButton, gr);
+  }
 
   updateInfoLabels();
 }
@@ -1621,6 +1652,50 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(lfoDisplay1);
   addAndMakeVisible(lfoDisplay2);
 
+  // ========== PER-ROLE ACCENT COLOURS ==========
+  // LFO1 = cyan, LFO2 = orange, PWM = green, pitch-bend = cyan, mod slots = mag.
+  // accentOf() reads this "accent" property; renderers honour it (per-section colours).
+  {
+    const int cy = (int)gm::ui::theme::cyan.getARGB(),
+              orr = (int)gm::ui::theme::orange.getARGB(),
+              gr = (int)gm::ui::theme::grn.getARGB(),
+              mg = (int)gm::ui::theme::mag.getARGB();
+    auto acc = [](juce::Component &c, int a) {
+      c.getProperties().set("accent", a);
+    };
+    // LFO1 = CYAN
+    acc(lfoEnableButton, cy);
+    acc(lfoWaveformSelector, cy);
+    if (lfoRateSlider) acc(*lfoRateSlider, cy);
+    if (lfoDepthFilterSlider) acc(*lfoDepthFilterSlider, cy);
+    if (lfoDepthPWSlider) acc(*lfoDepthPWSlider, cy);
+    if (lfoDepthPitchSlider) acc(*lfoDepthPitchSlider, cy);
+    acc(lfoSyncModeBtn, cy);
+    acc(lfoSyncDivCombo, cy);
+    // LFO2 = ORANGE
+    acc(lfo2EnableButton, orr);
+    acc(lfo2WaveformSelector, orr);
+    if (lfo2RateSlider) acc(*lfo2RateSlider, orr);
+    if (lfo2DepthFilterSlider) acc(*lfo2DepthFilterSlider, orr);
+    if (lfo2DepthPWSlider) acc(*lfo2DepthPWSlider, orr);
+    if (lfo2DepthPitchSlider) acc(*lfo2DepthPitchSlider, orr);
+    acc(lfo2SyncModeBtn, orr);
+    acc(lfo2SyncDivCombo, orr);
+    // PWM Sweep = GREEN
+    acc(pwmSweepEnableButton, gr);
+    acc(pwmSweepRateSlider, gr);
+    acc(pwmSweepDepthSlider, gr);
+    // Pitch-bend range = CYAN
+    acc(pitchBendRangeSelector, cy);
+    // Mod-matrix slots = MAGENTA
+    for (auto &s : slots) {
+      acc(s.enableButton, mg);
+      acc(s.srcBox, mg);
+      acc(s.dstBox, mg);
+      acc(s.amtSlider, mg);
+    }
+  }
+
   startTimerHz(30);
   setSize(panelWidth, panelHeight);
 }
@@ -1991,6 +2066,26 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
   loadButton.setTooltip("Load chord memory from file");
   loadButton.onClick = [this]() { loadChordPreset(); };
   addAndMakeVisible(loadButton);
+
+  // ========== PER-ROLE ACCENT COLOURS ==========
+  // All chord-memory controls = magenta. accentOf() reads "accent".
+  {
+    const int mg = (int)gm::ui::theme::mag.getARGB();
+    auto acc = [](juce::Component &c, int a) {
+      c.getProperties().set("accent", a);
+    };
+    acc(enableButton, mg);
+    for (auto &b : slotButtons) acc(b, mg);
+    for (auto &b : learnButtons) acc(b, mg);
+    for (auto &s : slots)
+      for (auto &sl : s.sliders) acc(sl, mg);
+    acc(presetSelector, mg);
+    acc(presetPrevButton, mg);
+    acc(presetNextButton, mg);
+    acc(saveButton, mg);
+    acc(loadButton, mg);
+  }
+
   startTimer(33);
   setSize(panelWidth, panelHeight);
 }
@@ -2265,6 +2360,38 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
   loadButton.setTooltip("Load wavetable from file");
   loadButton.onClick = [this]() { loadWavetablePreset(); };
   addAndMakeVisible(loadButton);
+
+  // ========== PER-ROLE ACCENT COLOURS ==========
+  // Most controls = cyan; loop + per-step PW = green. accentOf() reads "accent".
+  {
+    const int cy = (int)gm::ui::theme::cyan.getARGB(),
+              gr = (int)gm::ui::theme::grn.getARGB();
+    auto acc = [](juce::Component &c, int a) {
+      c.getProperties().set("accent", a);
+    };
+    // CYAN controls
+    acc(enableButton, cy);
+    acc(numStepsSlider, cy);
+    acc(rateSlider, cy);
+    acc(shiftLeftButton, cy);
+    acc(shiftRightButton, cy);
+    acc(randomizeButton, cy);
+    acc(clearButton, cy);
+    acc(presetSelector, cy);
+    acc(presetPrevButton, cy);
+    acc(presetNextButton, cy);
+    acc(saveButton, cy);
+    acc(loadButton, cy);
+    // GREEN
+    acc(loopButton, gr);
+    // Per-step: wave + pitch = CYAN, pulse-width = GREEN
+    for (auto &step : steps) {
+      acc(step.waveBox, cy);
+      acc(step.pitchSlider, cy);
+      acc(step.pwSlider, gr);
+    }
+  }
+
   startTimer(33);
   setSize(panelWidth, panelHeight);
 }
