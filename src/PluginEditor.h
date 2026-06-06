@@ -16,8 +16,8 @@ class BreadbinLookAndFeel : public juce::LookAndFeel_V4 {
 public:
   BreadbinLookAndFeel();
   void setFonts(const juce::Font &pro, const juce::Font &bold,
-                const juce::Font &mono) {
-    proFont = pro; boldFont = bold; monoFont = mono;
+                const juce::Font &mono, const juce::Font &retro) {
+    proFont = pro; boldFont = bold; monoFont = mono; retroFont = retro;
   }
   const juce::Font &getProFont()  const { return proFont; }
   const juce::Font &getBoldFont() const { return boldFont; }
@@ -90,7 +90,7 @@ public:
   }
 
 private:
-  juce::Font proFont, boldFont, monoFont;
+  juce::Font proFont, boldFont, monoFont, retroFont;
 };
 
 // Non-modal popup window that hides on close (instead of staying allocated)

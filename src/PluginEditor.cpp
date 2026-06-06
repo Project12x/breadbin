@@ -6,6 +6,39 @@
 #include <ghostmoon/ui/synthwave/Theme.h>
 #include <ghostmoon/ui/synthwave/Scope.h>
 
+namespace {
+// Shared synthwave glass gradient (keeps the main panel + popups in sync).
+inline juce::ColourGradient bbGlassGradient(juce::Rectangle<float> fb) {
+  return juce::ColourGradient::vertical(juce::Colour(0x70141622),
+                                        juce::Colour(0x9907080E), fb);
+}
+// Rounded glass panel fill (main editor panels).
+inline void drawGlassFill(juce::Graphics &g, juce::Rectangle<float> fb, float radius) {
+  g.setGradientFill(bbGlassGradient(fb));
+  g.fillRoundedRectangle(fb, radius);
+  g.setColour(gm::ui::theme::line);
+  g.drawRoundedRectangle(fb, radius, 1.0f);
+  g.setColour(juce::Colour(0x0AFFFFFF));
+  g.drawLine(fb.getX() + radius * 0.5f, fb.getY() + 1.0f,
+             fb.getRight() - radius * 0.5f, fb.getY() + 1.0f, 1.0f);
+}
+// Full-rect popup chrome: grid backdrop -> glass -> scanline -> accent glow edge.
+inline void drawPopupGlass(juce::Graphics &g, juce::Rectangle<float> fb, juce::Colour accent,
+                           const juce::Image &gridCache, const juce::Image &scanCache) {
+  if (gridCache.isValid()) g.drawImageAt(gridCache, 0, 0);
+  else { g.setColour(gm::ui::theme::bg0); g.fillRect(fb); }
+  g.setGradientFill(bbGlassGradient(fb));
+  g.fillRect(fb);
+  if (scanCache.isValid()) g.drawImageAt(scanCache, 0, 0);
+  const float alpha[] = {0.85f, 0.22f, 0.10f};
+  const float inset[] = {0.5f, 2.0f, 4.0f};
+  for (int i = 0; i < 3; ++i) {
+    g.setColour(accent.withAlpha(alpha[i]));
+    g.drawRect(fb.reduced(inset[i]), i == 0 ? 1.5f : 1.0f);
+  }
+}
+} // namespace
+
 // ========== CUSTOM LOOKANDFEEL ==========
 
 BreadbinLookAndFeel::BreadbinLookAndFeel() {
@@ -242,19 +275,17 @@ void BreadbinLookAndFeel::drawDocumentWindowTitleBar(
     int titleSpaceX, int titleSpaceW, const juce::Image *, bool) {
   if (w * h == 0) return;
 
-  // Dark background matching panel theme
-  g.setColour(juce::Colour(22, 22, 27));
+  const juce::Colour accent = accentOf(window);
+  // Dark title bar
+  g.setColour(juce::Colour(0xFF101016));
   g.fillRect(0, 0, w, h);
-
-  // Subtle bottom border
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
+  // Accent bottom border
+  g.setColour(accent.withAlpha(0.55f));
   g.drawHorizontalLine(h - 1, 0.0f, static_cast<float>(w));
-
-  // Title text in cyan, centred
-  g.setFont(boldFont.withHeight(13.0f));
-  g.setColour(juce::Colours::cyan);
-  g.drawText(window.getName(), titleSpaceX, 0, titleSpaceW, h,
-             juce::Justification::centred);
+  // Glow title in the popup's accent (Press Start 2P)
+  gm::ui::drawGlowText(g, window.getName(), retroFont.withHeight(10.0f),
+                       juce::Rectangle<int>(titleSpaceX, 0, titleSpaceW, h).toFloat(),
+                       accent, juce::Justification::centred);
 }
 
 // ========== END CUSTOM LOOKANDFEEL ==========
@@ -744,7 +775,7 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       BinaryData::JetBrainsMonoRegular_ttfSize);
   monoFont = juce::Font(juce::FontOptions(monoTypeface).withHeight(12.0f));
 
-  customLookAndFeel.setFonts(proFont, boldFont, monoFont);
+  customLookAndFeel.setFonts(proFont, boldFont, monoFont, retroFont);
   setLookAndFeel(&customLookAndFeel);
   midiLearnOverlay.refreshFonts(proFont, boldFont);
 
@@ -3822,22 +3853,7 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   // The fill is translucent so the background image reads through.
   auto drawGlassPanel = [&](juce::Rectangle<int> bounds) {
     if (bounds.isEmpty()) return;
-    const float radius = 8.0f;
-    auto fb = bounds.toFloat();
-    // Glass fill: ~rgba(20,22,34,.44) top -> ~rgba(7,8,14,.60) bottom
-    juce::ColourGradient glassFill = juce::ColourGradient::vertical(
-        juce::Colour(0x70141622),   // rgba(20,22,34,.44)
-        juce::Colour(0x9907080E),   // rgba(7,8,14,.60)
-        fb);
-    g.setGradientFill(glassFill);
-    g.fillRoundedRectangle(fb, radius);
-    // Accent-tinted 1px border
-    g.setColour(gm::ui::theme::line);
-    g.drawRoundedRectangle(fb, radius, 1.0f);
-    // Inner top sheen
-    g.setColour(juce::Colour(0x0AFFFFFF));
-    g.drawLine(fb.getX() + radius * 0.5f, fb.getY() + 1.0f,
-               fb.getRight() - radius * 0.5f, fb.getY() + 1.0f, 1.0f);
+    drawGlassFill(g, bounds.toFloat(), 8.0f);
   };
 
   drawGlassPanel(topBarPanelBounds);
