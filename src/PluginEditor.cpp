@@ -346,6 +346,12 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                 subtuneSelector.addItem("Sub-tune " + juce::String(i), i);
               subtuneSelector.setSelectedId(player.getCurrentSubtune(),
                                             juce::dontSendNotification);
+              loadedFileName = file.getFileNameWithoutExtension().toUpperCase();
+              loadLineLabel.setText(
+                  "LOAD\"" + loadedFileName +
+                      "\",8,1   READY.   \xE2\x96\x88   DEVICE 8 \xC2\xB7 1541",
+                  juce::dontSendNotification);
+              loadLineLabel.setVisible(true);
             } else {
               tuneInfoLabel.setText("Failed to load file",
                                     juce::dontSendNotification);
@@ -435,6 +441,26 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   registerDisplay.setText("Registers will appear during playback...");
   addAndMakeVisible(registerDisplay);
 
+  // REG / BASIC view toggle for the register dump
+  auto setupSeg = [this](juce::TextButton &b, const juce::String &txt, bool on) {
+    b.setButtonText(txt);
+    b.setClickingTogglesState(true);
+    b.setRadioGroupId(7001);
+    b.setToggleState(on, juce::dontSendNotification);
+    b.getProperties().set("accent", (int)gm::ui::theme::cyan.getARGB());
+    addAndMakeVisible(b);
+  };
+  setupSeg(regButton, "REG", true);
+  setupSeg(basicButton, "BASIC", false);
+  regButton.onClick = [this]() { basicView = false; updateRegisterDisplay(); };
+  basicButton.onClick = [this]() { basicView = true; updateRegisterDisplay(); };
+
+  // C64 LOAD line (shown once a file is loaded)
+  loadLineLabel.setColour(juce::Label::textColourId, gm::ui::theme::cyan);
+  loadLineLabel.setJustificationType(juce::Justification::centredLeft);
+  loadLineLabel.setVisible(false);
+  addAndMakeVisible(loadLineLabel);
+
   // ========== PER-ROLE ACCENT COLOURS ==========
   // Transport/playback = cyan; snapshot = orange. accentOf() reads "accent".
   {
@@ -462,24 +488,31 @@ void SidPlayerPanel::resized() {
   subtuneLabel.setBounds(panelWidth - 186, 8, 62, 26);
   tuneInfoLabel.setBounds(128, 8, panelWidth - 320, 26);
 
+  // C64 LOAD line
+  loadLineLabel.setBounds(12, 40, panelWidth - 24, 18);
+
   // Info block: title / author / released (left) + transport (right)
-  titleLabel.setBounds(20, 50, panelWidth - 200, 22);
-  authorLabel.setBounds(20, 72, panelWidth - 200, 18);
-  releasedLabel.setBounds(20, 90, panelWidth - 200, 16);
-  const int ty = 64, tw = 50, th = 30;
+  titleLabel.setBounds(20, 66, panelWidth - 200, 22);
+  authorLabel.setBounds(20, 88, panelWidth - 200, 18);
+  releasedLabel.setBounds(20, 106, panelWidth - 200, 16);
+  const int ty = 78, tw = 50, th = 30;
   playButton.setBounds(panelWidth - 178, ty, tw, th);
   pauseButton.setBounds(panelWidth - 124, ty, tw, th);
   stopButton.setBounds(panelWidth - 70, ty, tw, th);
 
   // Volume
-  volumeLabel.setBounds(10, 122, 36, 24);
-  volumeSlider.setBounds(50, 122, panelWidth - 60, 24);
+  volumeLabel.setBounds(10, 140, 36, 24);
+  volumeSlider.setBounds(50, 140, panelWidth - 60, 24);
+
+  // REG / BASIC register-view toggle
+  regButton.setBounds(10, 170, 54, 24);
+  basicButton.setBounds(66, 170, 60, 24);
 
   // Register display fills the middle
-  registerDisplay.setBounds(10, 154, panelWidth - 20, panelHeight - 200);
+  registerDisplay.setBounds(10, 200, panelWidth - 20, panelHeight - 244);
 
   // Snapshot (bottom-right)
-  snapshotButton.setBounds(panelWidth - 170, panelHeight - 36, 160, 26);
+  snapshotButton.setBounds(panelWidth - 170, panelHeight - 38, 160, 26);
 
   buildPopupCaches(*this, gridCache, scanCache);
 }
@@ -489,13 +522,14 @@ void SidPlayerPanel::paint(juce::Graphics &g) {
                  BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
   // Info block ground (title / author / transport)
   g.setColour(juce::Colour(0x99101018));
-  g.fillRoundedRectangle(8.0f, 44.0f, static_cast<float>(panelWidth - 16), 70.0f,
+  g.fillRoundedRectangle(8.0f, 60.0f, static_cast<float>(panelWidth - 16), 76.0f,
                          5.0f);
 }
 
 void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
   panelMonoFont = mono;
   registerDisplay.setFont(panelMonoFont.withHeight(12.0f));
+  loadLineLabel.setFont(panelMonoFont.withHeight(11.0f));
 }
 
 void SidPlayerPanel::timerCallback() { updateRegisterDisplay(); }
@@ -508,6 +542,26 @@ void SidPlayerPanel::updateRegisterDisplay() {
   auto snapshot = player.getRegisterSnapshot();
   if (!snapshot.valid)
     return;
+
+  if (basicView) {
+    // Same register state rendered as a C64 BASIC POKE listing.
+    juce::String t;
+    t << "10 SID=54272 : REM $D400\n";
+    t << "20 POKE SID+24," << (int)(snapshot.regs[0x18] & 0x0F)
+      << " : REM VOLUME\n";
+    for (int v = 0; v < 3; ++v) {
+      int b = v * 7;
+      t << (30 + v * 20) << " POKE SID+" << b << "," << (int)snapshot.regs[b]
+        << " : POKE SID+" << (b + 1) << "," << (int)snapshot.regs[b + 1]
+        << " : REM V" << (v + 1) << " FREQ\n";
+      t << (40 + v * 20) << " POKE SID+" << (b + 5) << ","
+        << (int)snapshot.regs[b + 5] << " : POKE SID+" << (b + 6) << ","
+        << (int)snapshot.regs[b + 6] << " : REM V" << (v + 1) << " ADSR\n";
+    }
+    t << "90 POKE SID+4," << (int)snapshot.regs[0x04] << " : REM V1 CTRL\n";
+    registerDisplay.setText(t);
+    return;
+  }
 
   juce::String text;
 

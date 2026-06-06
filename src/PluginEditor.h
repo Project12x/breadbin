@@ -666,7 +666,7 @@ public:
   void timerCallback() override;
   void refreshFonts(const juce::Font &mono);
   static constexpr int panelWidth = 520;
-  static constexpr int panelHeight = 400;
+  static constexpr int panelHeight = 432;
 
 private:
   BreadbinProcessor &processor;
@@ -689,6 +689,10 @@ private:
   juce::Label volumeLabel;
 
   juce::TextEditor registerDisplay;
+  juce::TextButton regButton{"REG"}, basicButton{"BASIC"};
+  bool basicView = false;
+  juce::String loadedFileName;
+  juce::Label loadLineLabel;
 
   std::unique_ptr<juce::FileChooser> fileChooser;
 
