@@ -60,7 +60,11 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   Chorus/Delay/Reverb rows, 2-tier dock. Per-section accent colors (SID I cyan, SID II orange,
   voice editor magenta, ADSR/Filter Env/aux/CPU greenyellow) via the `accentOf` property.
   Tag: `checkpoint/phase-b-layout`.
-- **Pending — Phase C**: 5 popups restyled + NEON/C64 scheme switch.
+- **C64 "Neon Synthwave" Reskin Phase C — DONE**: the 5 popups restyled with glass chrome (generated
+  neon-grid backdrop, glass, accent glow border, glow title bar) + per-role accents; Chord inset
+  interval table, SID Player sectioned layout with icon transport + REG⟷BASIC register dump + LOAD
+  line, Wavetable per-step cards, floppy/tape button icons. NEON⟷C64 scheme switch dropped (NEON
+  only). Tag: `checkpoint/phase-c-popups`.
 - **Pending — Phase D**: PETSCII toggle + motion / animated mod rings.
 
 ### Known Issues

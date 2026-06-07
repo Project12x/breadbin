@@ -13,15 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
   filter and LFO, glow-header chrome, and a cached `background_clean.png` + light vignette
-  backdrop. Applied to the existing layout (no controls moved). Remaining: Phase C = popups +
-  NEON/C64 scheme switch; Phase D = PETSCII toggle + motion.
+  backdrop. Applied to the existing layout (no controls moved). Remaining: Phase D = PETSCII
+  toggle + motion.
 - **C64 "Neon Synthwave" Reskin — Phase B (OptionD re-layout + per-section colors)**: the main
   panel was re-laid-out to OptionD's structure — two mirror-symmetric SID towers with in-tower
   CRT filter graphs (slimmed to align with the cutoff/res controls below), the filter envelope
   relocated into the voice editor, FX as Chorus/Delay/Reverb rows, and a 2-tier dock. Per-section
   accent colors applied via the `accentOf` property: SID I cyan, SID II orange, voice editor
   magenta, ADSR + Filter Env + aux toggles (Ring/Sync/Arp/LFO/WT/Digi) + CPU greenyellow.
-- **UI Scale Selector**: DPI-aware window scaling — a 75/100/125/150% selector in the top row,
+- **C64 "Neon Synthwave" Reskin — Phase C (popup glass chrome + C64 nostalgia)**: the 5 popups
+  (Modulation, Wavetable, Chord, SID Player, Digi) restyled with the synthwave glass treatment —
+  a generated neon-grid backdrop (dimmed), translucent glass, accent glow border, and a Press-Start
+  glow title bar in each popup's accent — plus per-role control accents inside each popup. Reworked
+  the Chord (inset interval table, magenta) and SID Player (sectioned layout, Path-drawn icon
+  transport, REG⟷BASIC register dump, `LOAD"…",8,1` line, big title typography) panels; Wavetable
+  per-step cards with active-step glow; floppy/tape button icons. The NEON⟷C64 scheme switch was
+  dropped at the user's direction (NEON palette only). DPI-aware window scaling — a 75/100/125/150% selector in the top row,
   persisted per machine. The editor keeps a fixed 1000×800 logical layout and scales the whole
   window via an affine transform (`gm::ui::ScaledEditor` base), so existing layout code is untouched.
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
