@@ -993,6 +993,7 @@ private:
   juce::ToggleButton leftHPButton{"HP"};
   juce::ToggleButton leftFilterEnableButton{"Flt"};
   juce::Label leftCutoffLabel, leftResonanceLabel;
+  juce::Label leftCutoffValueLabel, leftResonanceValueLabel;
   MappableSlider leftDetuneSlider{processor,
                                   BreadbinProcessor::ControlParam::LeftDetune};
   juce::Label leftDetuneLabel;
@@ -1016,6 +1017,7 @@ private:
   juce::ToggleButton rightHPButton{"HP"};
   juce::ToggleButton rightFilterEnableButton{"Flt"};
   juce::Label rightCutoffLabel, rightResonanceLabel;
+  juce::Label rightCutoffValueLabel, rightResonanceValueLabel;
   MappableSlider rightDetuneSlider{
       processor, BreadbinProcessor::ControlParam::RightDetune};
   juce::Label rightDetuneLabel;

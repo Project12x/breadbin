@@ -1274,6 +1274,16 @@ void BreadbinEditor::updateModulationMeters() {
           static_cast<float>(processor.getLastAppliedResRight())))
     resMeterR.repaint();
 
+  // Filter knob value readouts (Label::setText no-ops when unchanged)
+  leftCutoffValueLabel.setText(juce::String((int)processor.getBaseFilterCutoff(true)),
+                               juce::dontSendNotification);
+  rightCutoffValueLabel.setText(juce::String((int)processor.getBaseFilterCutoff(false)),
+                                juce::dontSendNotification);
+  leftResonanceValueLabel.setText(juce::String((int)processor.getBaseFilterResonance(true)),
+                                  juce::dontSendNotification);
+  rightResonanceValueLabel.setText(juce::String((int)processor.getBaseFilterResonance(false)),
+                                   juce::dontSendNotification);
+
   // Filter response displays (setters have internal dirty checks)
   filterDisplay_L.setCutoff(processor.getBaseFilterCutoff(true));
   filterDisplay_L.setResonance(processor.getBaseFilterResonance(true));
@@ -3876,6 +3886,20 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   };
   addAndMakeVisible(resSlider);
 
+  // Value readouts under Cutoff / Res (accent mono — fills the previously silent knobs)
+  auto &cutoffValueLabel = isLeft ? leftCutoffValueLabel : rightCutoffValueLabel;
+  auto &resValueLabel = isLeft ? leftResonanceValueLabel : rightResonanceValueLabel;
+  for (auto *vl : {&cutoffValueLabel, &resValueLabel}) {
+    vl->setColour(juce::Label::textColourId, colour);
+    vl->setFont(monoFont.withHeight(11.0f));
+    vl->setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(*vl);
+  }
+  cutoffValueLabel.setText(juce::String((int)processor.getBaseFilterCutoff(isLeft)),
+                           juce::dontSendNotification);
+  resValueLabel.setText(juce::String((int)processor.getBaseFilterResonance(isLeft)),
+                        juce::dontSendNotification);
+
   // Modulation meters
   cutoffMeter.setRange(0.0f, 2047.0f);
   addAndMakeVisible(cutoffMeter);
@@ -4487,11 +4511,19 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
   {
     auto filterRow = leftPanel.removeFromTop(52);
     const int knob = 50;
-    leftCutoffLabel.setBounds(filterRow.removeFromLeft(46).withHeight(16).withY(filterRow.getCentreY() - 8));
+    {
+      auto col = filterRow.removeFromLeft(46).withSizeKeepingCentre(46, 30);
+      leftCutoffLabel.setBounds(col.removeFromTop(15));
+      leftCutoffValueLabel.setBounds(col);
+    }
     leftCutoffSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
     cutoffMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
     filterRow.removeFromLeft(pad * 4);
-    leftResonanceLabel.setBounds(filterRow.removeFromLeft(40).withHeight(16).withY(filterRow.getCentreY() - 8));
+    {
+      auto col = filterRow.removeFromLeft(40).withSizeKeepingCentre(40, 30);
+      leftResonanceLabel.setBounds(col.removeFromTop(15));
+      leftResonanceValueLabel.setBounds(col);
+    }
     leftResonanceSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
     resMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
   }
@@ -4549,11 +4581,19 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
     auto filterRow = rightPanel.removeFromTop(52);
     auto group = filterRow.removeFromRight(214);
     const int knob = 50;
-    rightCutoffLabel.setBounds(group.removeFromLeft(46).withHeight(16).withY(group.getCentreY() - 8));
+    {
+      auto col = group.removeFromLeft(46).withSizeKeepingCentre(46, 30);
+      rightCutoffLabel.setBounds(col.removeFromTop(15));
+      rightCutoffValueLabel.setBounds(col);
+    }
     rightCutoffSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
     cutoffMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
     group.removeFromLeft(pad * 4);
-    rightResonanceLabel.setBounds(group.removeFromLeft(40).withHeight(16).withY(group.getCentreY() - 8));
+    {
+      auto col = group.removeFromLeft(40).withSizeKeepingCentre(40, 30);
+      rightResonanceLabel.setBounds(col.removeFromTop(15));
+      rightResonanceValueLabel.setBounds(col);
+    }
     rightResonanceSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
     resMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
   }
