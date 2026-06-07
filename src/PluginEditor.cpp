@@ -1821,18 +1821,19 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   drawPopupGlass(g, getLocalBounds().toFloat(),
                  BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
-  // Dark recessed section backgrounds
+  // Translucent recessed section grounds (let the grid show faintly through)
   auto drawSectionBg = [&](int y, int h) {
-    g.setColour(juce::Colour(22, 22, 27));
+    g.setColour(juce::Colour(0x99101018));
     g.fillRoundedRectangle(2.0f, static_cast<float>(y),
                            static_cast<float>(panelWidth - 4),
-                           static_cast<float>(h), 4.0f);
+                           static_cast<float>(h), 5.0f);
   };
-  drawSectionBg(0, 54);   // LFO1
-  drawSectionBg(55, 54);  // LFO2
-  drawSectionBg(112, 34); // PWM (covers full slider area to y=146)
+  drawSectionBg(0, 54);    // LFO1
+  drawSectionBg(55, 54);   // LFO2
+  drawSectionBg(112, 56);  // PWM Sweep + pitch-bend range
+  drawSectionBg(172, 204); // Mod matrix
 
-  // Section labels with glow pill
+  // Section glow pills (theme tokens for consistent neon)
   auto drawGlowLabel = [&](const juce::String &text, int x, int y,
                            juce::Colour colour) {
     int pillW = text.length() * 7 + 10;
@@ -1843,29 +1844,23 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
     g.setFont(panelProFont.withHeight(11.0f));
     g.drawText(text, x + 4, y, pillW, 14, juce::Justification::centredLeft);
   };
-  drawGlowLabel("LFO 1", 4, 2, juce::Colours::cyan);
-  drawGlowLabel("LFO 2", 4, 57, juce::Colours::orange);
-  drawGlowLabel("PWM Sweep", 4, 112, juce::Colours::greenyellow);
+  drawGlowLabel("LFO 1", 4, 2, gm::ui::theme::cyan);
+  drawGlowLabel("LFO 2", 4, 57, gm::ui::theme::orange);
+  drawGlowLabel("PWM SWEEP", 4, 114, gm::ui::theme::grn);
 
-  // Separator bars
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
-  g.drawHorizontalLine(148, 6.0f, static_cast<float>(panelWidth - 6));
-  g.drawHorizontalLine(172, 6.0f, static_cast<float>(panelWidth - 6));
+  // Mod matrix column headers (magenta — the section accent)
+  g.setColour(gm::ui::theme::mag.withAlpha(0.85f));
+  g.setFont(panelProFont.withHeight(9.0f));
+  g.drawText("ON", 30, 178, 40, 12, juce::Justification::centred);
+  g.drawText("SOURCE", 70, 178, 90, 12, juce::Justification::centred);
+  g.drawText("DEST", 170, 178, 90, 12, juce::Justification::centred);
+  g.drawText("AMOUNT", 270, 178, 120, 12, juce::Justification::centred);
+  g.drawText("VAL", 400, 178, 45, 12, juce::Justification::centred);
+  g.drawText("OUT", 447, 178, 45, 12, juce::Justification::centred);
 
-  // Mod matrix column headers
-  const int mmTop = 176;
-  g.setColour(juce::Colours::cyan);
-  g.setFont(panelBoldFont.withHeight(12.0f));
-  g.drawText("On", 30, mmTop, 40, 16, juce::Justification::centred);
-  g.drawText("Source", 70, mmTop, 90, 16, juce::Justification::centred);
-  g.drawText("Dest", 170, mmTop, 90, 16, juce::Justification::centred);
-  g.drawText("Amount", 270, mmTop, 120, 16, juce::Justification::centred);
-  g.drawText("Src", 400, mmTop, 45, 16, juce::Justification::centred);
-  g.setColour(juce::Colours::orange);
-  g.drawText("Out", 447, mmTop, 45, 16, juce::Justification::centred);
-
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
-  g.drawHorizontalLine(342, 6.0f, static_cast<float>(panelWidth - 6));
+  // Destination totals
+  g.setColour(gm::ui::theme::mag.withAlpha(0.5f));
+  g.drawHorizontalLine(342, 8.0f, static_cast<float>(panelWidth - 8));
   g.setColour(juce::Colour(130, 130, 145));
   g.setFont(panelProFont.withHeight(10.0f));
   g.drawText("Destination Totals", 8, 346, 160, 14,
