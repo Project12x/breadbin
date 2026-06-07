@@ -332,12 +332,11 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
             if (player.loadFile(file.getFullPathName().toStdString())) {
               tuneInfoLabel.setText("Loaded: " + file.getFileName(),
                                     juce::dontSendNotification);
-              titleLabel.setText("Title: " + juce::String(player.getTitle()),
+              titleLabel.setText(juce::String(player.getTitle()),
                                  juce::dontSendNotification);
-              authorLabel.setText("Author: " + juce::String(player.getAuthor()),
+              authorLabel.setText(juce::String(player.getAuthor()),
                                   juce::dontSendNotification);
-              releasedLabel.setText("Released: " +
-                                        juce::String(player.getReleased()),
+              releasedLabel.setText(juce::String(player.getReleased()),
                                     juce::dontSendNotification);
               // Populate subtune selector
               subtuneSelector.clear();
@@ -362,17 +361,15 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(loadButton);
 
   // Transport buttons
-  auto setupTransport = [this](juce::TextButton &btn, const juce::String &text,
-                               juce::Colour col) {
-    btn.setButtonText(text);
+  auto setupTransport = [this](juce::TextButton &btn, juce::Colour col) {
+    btn.setButtonText(""); // glyph drawn in paint()
     btn.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 55));
-    btn.setColour(juce::TextButton::textColourOnId, col);
-    btn.setColour(juce::TextButton::textColourOffId, col);
+    btn.getProperties().set("accent", (int)col.getARGB());
     addAndMakeVisible(btn);
   };
-  setupTransport(playButton, "Play", juce::Colours::lime);
-  setupTransport(pauseButton, "Pause", juce::Colours::yellow);
-  setupTransport(stopButton, "Stop", juce::Colours::red);
+  setupTransport(playButton, juce::Colours::lime);
+  setupTransport(pauseButton, juce::Colours::yellow);
+  setupTransport(stopButton, juce::Colours::red);
 
   playButton.setTooltip("Play the loaded SID file");
   pauseButton.setTooltip("Pause playback");
@@ -399,9 +396,14 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
     addAndMakeVisible(lbl);
   };
   setupLabel(tuneInfoLabel, "No file loaded");
-  setupLabel(titleLabel, "Title: ---");
-  setupLabel(authorLabel, "Author: ---");
-  setupLabel(releasedLabel, "Released: ---");
+  setupLabel(titleLabel, "No SID loaded");
+  setupLabel(authorLabel, "");
+  setupLabel(releasedLabel, "");
+  titleLabel.setFont(juce::Font(juce::FontOptions(17.0f, juce::Font::bold)));
+  authorLabel.setColour(juce::Label::textColourId, gm::ui::theme::cyan);
+  authorLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+  releasedLabel.setColour(juce::Label::textColourId, juce::Colour(150, 150, 165));
+  releasedLabel.setFont(juce::Font(juce::FontOptions(11.0f)));
 
   // Subtune selector
   subtuneLabel.setText("Sub-tune:", juce::dontSendNotification);
@@ -470,9 +472,6 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
       c.getProperties().set("accent", a);
     };
     acc(loadButton, cy);
-    acc(playButton, cy);
-    acc(pauseButton, cy);
-    acc(stopButton, cy);
     acc(subtuneSelector, cy);
     acc(volumeSlider, cy);
     acc(snapshotButton, orr);
@@ -524,6 +523,31 @@ void SidPlayerPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colour(0x99101018));
   g.fillRoundedRectangle(8.0f, 60.0f, static_cast<float>(panelWidth - 16), 76.0f,
                          5.0f);
+
+  // Transport glyphs over the accent-glow buttons (play / pause / stop)
+  auto iconR = [](int x) {
+    return juce::Rectangle<int>(x, 78, 50, 30).toFloat().reduced(16.0f, 9.0f);
+  };
+  {
+    auto r = iconR(panelWidth - 178);
+    juce::Path p;
+    p.addTriangle(r.getX(), r.getY(), r.getX(), r.getBottom(), r.getRight(),
+                  r.getCentreY());
+    g.setColour(juce::Colours::lime);
+    g.fillPath(p);
+  }
+  {
+    auto r = iconR(panelWidth - 124);
+    g.setColour(juce::Colours::yellow);
+    float bw = r.getWidth() * 0.32f;
+    g.fillRect(r.getX(), r.getY(), bw, r.getHeight());
+    g.fillRect(r.getRight() - bw, r.getY(), bw, r.getHeight());
+  }
+  {
+    auto r = iconR(panelWidth - 70);
+    g.setColour(juce::Colours::red);
+    g.fillRect(r);
+  }
 }
 
 void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
@@ -2008,10 +2032,10 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     slotButtons[s].setButtonText("Slot " + juce::String(s + 1));
     slotButtons[s].setColour(juce::TextButton::buttonColourId,
                              s == currentSlot
-                                 ? juce::Colours::cyan.withAlpha(0.3f)
+                                 ? gm::ui::theme::mag.withAlpha(0.35f)
                                  : juce::Colour(50, 50, 60));
     slotButtons[s].setColour(juce::TextButton::textColourOnId,
-                             juce::Colours::cyan);
+                             gm::ui::theme::mag);
     slotButtons[s].setColour(juce::TextButton::textColourOffId,
                              juce::Colours::lightgrey);
     slotButtons[s].setTooltip("Select chord slot " + juce::String(s + 1));
@@ -2021,7 +2045,7 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
             param->convertTo0to1(static_cast<float>(s)));
       for (int j = 0; j < 4; ++j)
         slotButtons[j].setColour(juce::TextButton::buttonColourId,
-                                 j == s ? juce::Colours::cyan.withAlpha(0.3f)
+                                 j == s ? gm::ui::theme::mag.withAlpha(0.35f)
                                         : juce::Colour(50, 50, 60));
     };
     addAndMakeVisible(slotButtons[s]);
@@ -2063,8 +2087,7 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
       slider.setSliderStyle(juce::Slider::LinearVertical);
       slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 36, 14);
       slider.setRange(-24, 24, 1);
-      slider.setColour(juce::Slider::textBoxTextColourId,
-                       juce::Colours::lightgrey);
+      slider.setColour(juce::Slider::textBoxTextColourId, gm::ui::theme::mag);
       slider.setColour(juce::Slider::textBoxOutlineColourId,
                        juce::Colours::transparentBlack);
       slider.setTextValueSuffix(" st");
@@ -2454,41 +2477,15 @@ void WavetablePanel::paint(juce::Graphics &g) {
   drawPopupGlass(g, getLocalBounds().toFloat(),
                  BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
-  // Title with glow background
-  g.setColour(juce::Colours::cyan.withAlpha(0.15f));
-  g.fillRoundedRectangle(10.0f, 2.0f, static_cast<float>(panelWidth - 20),
-                         22.0f, 4.0f);
-  g.setColour(juce::Colours::cyan);
-  g.setFont(panelBoldFont.withHeight(14.0f));
-  g.drawText("WAVETABLE STEP SEQUENCER", 0, 4, panelWidth, 20,
-             juce::Justification::centred);
+  const juce::Colour acc = BreadbinLookAndFeel::accentOf(*this);
 
-  // Row labels (descriptive, left margin)
-  g.setColour(juce::Colours::lightgrey);
-  g.setFont(panelProFont.withHeight(11.0f));
-  g.drawText("Waveform", 2, 76, 50, 14, juce::Justification::centredRight);
-  g.drawText("Pitch", 2, 106, 50, 14, juce::Justification::centredRight);
+  // Left-margin row labels (aligned with the control rows)
+  g.setColour(juce::Colour(150, 150, 165));
   g.setFont(panelProFont.withHeight(9.0f));
-  g.setColour(juce::Colour(140, 140, 150));
-  g.drawText("(semitones)", 2, 118, 50, 12, juce::Justification::centredRight);
-  g.setFont(panelProFont.withHeight(11.0f));
-  g.setColour(juce::Colours::lightgrey);
-  g.drawText("Pulse", 2, 230, 50, 14, juce::Justification::centredRight);
-  g.drawText("Width", 2, 242, 50, 14, juce::Justification::centredRight);
-  g.setFont(panelProFont.withHeight(9.0f));
-  g.setColour(juce::Colour(140, 140, 150));
-  g.drawText("(0-4095)", 2, 256, 50, 12, juce::Justification::centredRight);
+  g.drawText("WAVE", 4, 80, 48, 12, juce::Justification::centredRight);
+  g.drawText("PITCH", 4, 156, 48, 12, juce::Justification::centredRight);
+  g.drawText("PW", 4, 280, 48, 12, juce::Justification::centredRight);
 
-  // Horizontal dividers between sections
-  g.setColour(juce::Colour(50, 50, 60).withAlpha(0.6f));
-  g.drawHorizontalLine(57, 10.0f,
-                       static_cast<float>(panelWidth - 10)); // below header
-  g.drawHorizontalLine(98, 55.0f,
-                       static_cast<float>(panelWidth - 10)); // below waveform
-  g.drawHorizontalLine(
-      222, 55.0f, static_cast<float>(panelWidth - 10)); // between pitch & PW
-
-  // Step number headers and column glow
   int numActiveSteps = static_cast<int>(numStepsSlider.getValue());
   auto &wt = processor.getWavetable();
   int currentStep = wt.enabled ? wt.currentStep : -1;
@@ -2501,26 +2498,23 @@ void WavetablePanel::paint(juce::Graphics &g) {
     bool isActive = i < numActiveSteps;
     bool isCurrent = (i == currentStep) && wt.enabled;
 
-    // Full column glow for current step
-    if (isCurrent) {
-      g.setColour(juce::Colours::cyan.withAlpha(0.08f));
-      g.fillRoundedRectangle(static_cast<float>(x - 1), 58.0f,
-                             static_cast<float>(colW), 286.0f, 4.0f);
-    }
+    // Per-step card
+    auto card = juce::Rectangle<float>(static_cast<float>(x - 1), 58.0f,
+                                       static_cast<float>(colW - 2), 290.0f);
+    g.setColour(isActive ? acc.withAlpha(isCurrent ? 0.22f : 0.10f)
+                         : juce::Colour(0x40000000));
+    g.fillRoundedRectangle(card, 5.0f);
+    g.setColour(isCurrent ? acc
+                          : (isActive ? acc.withAlpha(0.5f)
+                                      : juce::Colour(0x30FFFFFF)));
+    g.drawRoundedRectangle(card, 5.0f, isCurrent ? 1.6f : 1.0f);
 
-    // Step number header
+    // Step number
     g.setFont(panelProFont.withHeight(10.0f));
-    if (isCurrent) {
-      g.setColour(juce::Colours::cyan);
-      g.fillRoundedRectangle(static_cast<float>(x), 58.0f,
-                             static_cast<float>(colW - 3), 14.0f, 3.0f);
-      g.setColour(juce::Colours::black);
-    } else if (isActive) {
-      g.setColour(juce::Colours::white);
-    } else {
-      g.setColour(juce::Colour(70, 70, 80));
-    }
-    g.drawText(juce::String(i + 1), x, 58, colW - 3, 14,
+    g.setColour(isCurrent ? acc
+                          : (isActive ? juce::Colours::white
+                                      : juce::Colour(90, 90, 100)));
+    g.drawText(juce::String(i + 1).paddedLeft('0', 2), x, 62, colW - 3, 12,
                juce::Justification::centred);
   }
 }
