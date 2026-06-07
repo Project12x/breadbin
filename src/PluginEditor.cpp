@@ -55,6 +55,28 @@ inline void buildPopupCaches(juce::Component &c, juce::Image &gridCache,
   }
   scanCache = gm::ui::makeScanlineOverlay(w, h);
 }
+// Small floppy-disk glyph (C64 save nostalgia), stroked in the given colour.
+inline void drawFloppyIcon(juce::Graphics &g, juce::Rectangle<float> r,
+                           juce::Colour c) {
+  g.setColour(c);
+  g.drawRoundedRectangle(r, 1.5f, 1.0f);
+  g.fillRect(r.getX() + r.getWidth() * 0.55f, r.getY() + r.getHeight() * 0.14f,
+             r.getWidth() * 0.22f, r.getHeight() * 0.26f); // shutter
+  g.fillRect(r.getX() + r.getWidth() * 0.22f, r.getY() + r.getHeight() * 0.55f,
+             r.getWidth() * 0.56f, r.getHeight() * 0.30f); // label
+}
+// Small cassette-tape glyph (digi load nostalgia).
+inline void drawTapeIcon(juce::Graphics &g, juce::Rectangle<float> r,
+                         juce::Colour c) {
+  g.setColour(c);
+  g.drawRoundedRectangle(r, 1.5f, 1.0f);
+  float hr = r.getHeight() * 0.15f;
+  float cy = r.getCentreY();
+  g.drawEllipse(r.getX() + r.getWidth() * 0.32f - hr, cy - hr, hr * 2, hr * 2,
+                1.0f);
+  g.drawEllipse(r.getX() + r.getWidth() * 0.68f - hr, cy - hr, hr * 2, hr * 2,
+                1.0f);
+}
 } // namespace
 
 // ========== CUSTOM LOOKANDFEEL ==========
@@ -184,6 +206,44 @@ void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,
       g.setColour(button.findColour(juce::TextButton::textColourOnId));
 
     g.fillPath(p);
+  } else if (button.getProperties().contains("btnIcon")) {
+    auto which = button.getProperties()["btnIcon"].toString();
+    if (which == "play" || which == "pause" || which == "stop") {
+      // Centered transport glyph in the button's accent colour, no text.
+      auto b = button.getLocalBounds().toFloat();
+      auto r =
+          b.withSizeKeepingCentre(b.getHeight() * 0.42f, b.getHeight() * 0.42f);
+      g.setColour(accentOf(button).withAlpha(button.isEnabled() ? 1.0f : 0.5f));
+      if (which == "play") {
+        juce::Path p;
+        p.addTriangle(r.getX(), r.getY(), r.getX(), r.getBottom(), r.getRight(),
+                      r.getCentreY());
+        g.fillPath(p);
+      } else if (which == "stop") {
+        g.fillRect(r);
+      } else {
+        float bw = r.getWidth() * 0.34f;
+        g.fillRect(r.getX(), r.getY(), bw, r.getHeight());
+        g.fillRect(r.getRight() - bw, r.getY(), bw, r.getHeight());
+      }
+    } else {
+      auto bounds = button.getLocalBounds().toFloat().reduced(7.0f, 3.0f);
+      juce::Colour col =
+          button.findColour(button.getToggleState()
+                                ? juce::TextButton::textColourOnId
+                                : juce::TextButton::textColourOffId)
+              .withAlpha(button.isEnabled() ? 1.0f : 0.5f);
+      auto icon = bounds.removeFromLeft(bounds.getHeight()).reduced(1.0f);
+      bounds.removeFromLeft(4.0f);
+      if (which == "tape")
+        drawTapeIcon(g, icon, col);
+      else
+        drawFloppyIcon(g, icon, col);
+      g.setColour(col);
+      g.setFont(boldFont.withHeight(juce::jmin(11.0f, bounds.getHeight() * 0.9f)));
+      g.drawText(button.getButtonText(), bounds,
+                 juce::Justification::centredLeft, true);
+    }
   } else {
     auto bounds = button.getLocalBounds().toFloat().reduced(4.0f, 2.0f);
     g.setFont(boldFont.withHeight(juce::jmin(11.0f, bounds.getHeight() * 0.7f)));
@@ -318,6 +378,7 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
                        juce::Colour(60, 60, 70));
   loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
   loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  loadButton.getProperties().set("btnIcon", "floppy");
   loadButton.setTooltip("Load a .sid / .psid / .mus / .prg file for playback");
   loadButton.onClick = [this]() {
     fileChooser = std::make_unique<juce::FileChooser>(
@@ -361,15 +422,17 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
   addAndMakeVisible(loadButton);
 
   // Transport buttons
-  auto setupTransport = [this](juce::TextButton &btn, juce::Colour col) {
-    btn.setButtonText(""); // glyph drawn in paint()
+  auto setupTransport = [this](juce::TextButton &btn, juce::Colour col,
+                               const char *icon) {
+    btn.setButtonText("");
     btn.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 55));
     btn.getProperties().set("accent", (int)col.getARGB());
+    btn.getProperties().set("btnIcon", icon); // glyph drawn by drawButtonText
     addAndMakeVisible(btn);
   };
-  setupTransport(playButton, juce::Colours::lime);
-  setupTransport(pauseButton, juce::Colours::yellow);
-  setupTransport(stopButton, juce::Colours::red);
+  setupTransport(playButton, juce::Colours::lime, "play");
+  setupTransport(pauseButton, juce::Colours::yellow, "pause");
+  setupTransport(stopButton, juce::Colours::red, "stop");
 
   playButton.setTooltip("Play the loaded SID file");
   pauseButton.setTooltip("Pause playback");
@@ -523,31 +586,6 @@ void SidPlayerPanel::paint(juce::Graphics &g) {
   g.setColour(juce::Colour(0x99101018));
   g.fillRoundedRectangle(8.0f, 60.0f, static_cast<float>(panelWidth - 16), 76.0f,
                          5.0f);
-
-  // Transport glyphs over the accent-glow buttons (play / pause / stop)
-  auto iconR = [](int x) {
-    return juce::Rectangle<int>(x, 78, 50, 30).toFloat().reduced(16.0f, 9.0f);
-  };
-  {
-    auto r = iconR(panelWidth - 178);
-    juce::Path p;
-    p.addTriangle(r.getX(), r.getY(), r.getX(), r.getBottom(), r.getRight(),
-                  r.getCentreY());
-    g.setColour(juce::Colours::lime);
-    g.fillPath(p);
-  }
-  {
-    auto r = iconR(panelWidth - 124);
-    g.setColour(juce::Colours::yellow);
-    float bw = r.getWidth() * 0.32f;
-    g.fillRect(r.getX(), r.getY(), bw, r.getHeight());
-    g.fillRect(r.getRight() - bw, r.getY(), bw, r.getHeight());
-  }
-  {
-    auto r = iconR(panelWidth - 70);
-    g.setColour(juce::Colours::red);
-    g.fillRect(r);
-  }
 }
 
 void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
@@ -658,6 +696,7 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
   loadButton.setColour(juce::TextButton::buttonColourId, juce::Colour(50, 50, 60));
   loadButton.setColour(juce::TextButton::textColourOnId, juce::Colours::cyan);
   loadButton.setColour(juce::TextButton::textColourOffId, juce::Colours::cyan);
+  loadButton.getProperties().set("btnIcon", "tape");
   loadButton.onClick = [this]() {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Load Sample", juce::File{}, "*.wav;*.aiff;*.aif");
