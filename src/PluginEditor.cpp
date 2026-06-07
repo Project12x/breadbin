@@ -197,8 +197,8 @@ void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
   // Label text to the right of the dot
   const float textX = dotX + dotSize + 4.0f;
   const float textW = bounds.getRight() - textX;
-  g.setColour(isOn ? gm::ui::theme::txt : gm::ui::theme::txt2);
-  g.setFont(boldFont.withHeight(10.0f));
+  g.setColour(gm::ui::theme::txt);
+  g.setFont(boldFont.withHeight(12.0f));
   g.drawText(button.getButtonText(),
              juce::Rectangle<float>(textX, bounds.getY(), textW, bounds.getHeight()),
              juce::Justification::centredLeft);
@@ -887,7 +887,7 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
     g.strokePath(path, juce::PathStrokeType(1.0f));
   } else {
     g.setColour(juce::Colour(0xFF6F6F82));
-    g.setFont(panelProFont.withHeight(11.0f));
+    g.setFont(panelBoldFont.withHeight(11.0f));
     g.drawText("Load a WAV sample for 4-bit $D418 digi playback", waveRect,
                juce::Justification::centred);
   }
@@ -914,7 +914,7 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
         g.fillRoundedRectangle(hr, 4.0f);
       }
       g.setColour(on ? juce::Colour(0xFF0A0A0E) : juce::Colour(0xFF9090A0));
-      g.setFont(panelProFont.withHeight(10.0f));
+      g.setFont(panelBoldFont.withHeight(10.0f));
       g.drawText(k == 0 ? "4-BIT" : "8-BIT", hr, juce::Justification::centred);
     }
   }
@@ -1596,7 +1596,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
   pitchBendRangeLabel.setColour(juce::Label::textColourId,
                                 juce::Colours::lightgrey);
-  pitchBendRangeLabel.setFont(panelProFont.withHeight(11.0f));
+  pitchBendRangeLabel.setFont(panelBoldFont.withHeight(11.0f));
   addAndMakeVisible(pitchBendRangeLabel);
 
   pitchBendRangeSelector.addItem("+/- 2", 1);
@@ -1735,7 +1735,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepRateLabel.setText("Rate", juce::dontSendNotification);
   pwmSweepRateLabel.setColour(juce::Label::textColourId,
                               juce::Colours::greenyellow);
-  pwmSweepRateLabel.setFont(panelProFont.withHeight(10.0f));
+  pwmSweepRateLabel.setFont(panelBoldFont.withHeight(10.0f));
   addAndMakeVisible(pwmSweepRateLabel);
 
   pwmSweepDepthSlider.setTooltip("PWM sweep depth (0 = none, 1 = full range)");
@@ -1752,7 +1752,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
   pwmSweepDepthLabel.setText("Depth", juce::dontSendNotification);
   pwmSweepDepthLabel.setColour(juce::Label::textColourId,
                                juce::Colours::greenyellow);
-  pwmSweepDepthLabel.setFont(panelProFont.withHeight(10.0f));
+  pwmSweepDepthLabel.setFont(panelBoldFont.withHeight(10.0f));
   addAndMakeVisible(pwmSweepDepthLabel);
 
   // ========== APVTS ATTACHMENTS (LFO1/LFO2) ==========
@@ -1922,7 +1922,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
     g.fillRoundedRectangle(static_cast<float>(x), static_cast<float>(y),
                            static_cast<float>(pillW), 14.0f, 3.0f);
     g.setColour(colour);
-    g.setFont(panelProFont.withHeight(11.0f));
+    g.setFont(panelBoldFont.withHeight(11.0f));
     g.drawText(text, x + 4, y, pillW, 14, juce::Justification::centredLeft);
   };
   drawGlowLabel("LFO 1", 4, 2, gm::ui::theme::cyan);
@@ -1931,7 +1931,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
 
   // Mod matrix column headers (magenta — the section accent)
   g.setColour(gm::ui::theme::mag.withAlpha(0.85f));
-  g.setFont(panelProFont.withHeight(10.0f));
+  g.setFont(panelBoldFont.withHeight(10.0f));
   g.drawText("ON", 30, 178, 40, 12, juce::Justification::centred);
   g.drawText("SOURCE", 70, 178, 90, 12, juce::Justification::centred);
   g.drawText("DEST", 170, 178, 90, 12, juce::Justification::centred);
@@ -1943,7 +1943,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
   g.setColour(gm::ui::theme::mag.withAlpha(0.5f));
   g.drawHorizontalLine(342, 8.0f, static_cast<float>(panelWidth - 8));
   g.setColour(juce::Colour(130, 130, 145));
-  g.setFont(panelProFont.withHeight(10.0f));
+  g.setFont(panelBoldFont.withHeight(10.0f));
   g.drawText("Destination Totals", 8, 346, 160, 14,
              juce::Justification::centredLeft);
 }
@@ -2061,9 +2061,9 @@ void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
   lfo2DepthFilterLabel.setFont(bold.withHeight(10.0f));
   lfo2DepthPWLabel.setFont(bold.withHeight(10.0f));
   lfo2DepthPitchLabel.setFont(bold.withHeight(10.0f));
-  pitchBendRangeLabel.setFont(pro.withHeight(11.0f));
-  pwmSweepRateLabel.setFont(pro.withHeight(10.0f));
-  pwmSweepDepthLabel.setFont(pro.withHeight(10.0f));
+  pitchBendRangeLabel.setFont(bold.withHeight(11.0f));
+  pwmSweepRateLabel.setFont(bold.withHeight(10.0f));
+  pwmSweepDepthLabel.setFont(bold.withHeight(10.0f));
 
   // LFO rate sliders: initial text box used h=16 (default LAF).
   // Pass h=14 so JUCE detects a change and recreates via createSliderTextBox
@@ -2194,7 +2194,7 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
     slots[s].label.setText("Slot " + juce::String(s + 1),
                            juce::dontSendNotification);
     slots[s].label.setColour(juce::Label::textColourId, juce::Colours::cyan);
-    slots[s].label.setFont(panelProFont.withHeight(11.0f));
+    slots[s].label.setFont(panelBoldFont.withHeight(11.0f));
     addAndMakeVisible(slots[s].label);
 
     for (int i = 0; i < 5; ++i) {
@@ -2308,7 +2308,7 @@ void ChordMemoryPanel::refreshFonts(const juce::Font &pro,
   panelProFont = pro;
   panelBoldFont = bold;
   for (auto &s : slots)
-    s.label.setFont(pro.withHeight(11.0f));
+    s.label.setFont(bold.withHeight(11.0f));
   repaint();
 }
 
@@ -2340,7 +2340,7 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
 
   // Hint line under the top controls
   g.setColour(juce::Colour(160, 160, 175));
-  g.setFont(panelProFont.withHeight(11.0f));
+  g.setFont(panelBoldFont.withHeight(11.0f));
   g.drawText("Trigger one key produces a full chord.  Play a chord then Learn, "
              "or set intervals manually.",
              10, 34, panelWidth - 20, 16, juce::Justification::centredLeft);
@@ -2353,7 +2353,7 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   // Column headers aligned with the slider columns
   const int slidersX = 88, sliderW = 72;
   g.setColour(acc.withAlpha(0.8f));
-  g.setFont(panelProFont.withHeight(10.0f));
+  g.setFont(panelBoldFont.withHeight(10.0f));
   for (int i = 0; i < 5; ++i)
     g.drawText("Note " + juce::String(i + 2), slidersX + i * sliderW, 60,
                sliderW - 6, 12, juce::Justification::centred);
@@ -2657,7 +2657,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
 
   // Left-margin row labels (aligned with the control rows)
   g.setColour(juce::Colour(150, 150, 165));
-  g.setFont(panelProFont.withHeight(10.0f));
+  g.setFont(panelBoldFont.withHeight(10.0f));
   g.drawText("WAVE", 4, 80, 48, 12, juce::Justification::centredRight);
   g.drawText("PITCH", 4, 156, 48, 12, juce::Justification::centredRight);
   g.drawText("PW", 4, 280, 48, 12, juce::Justification::centredRight);
@@ -2686,7 +2686,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
     g.drawRoundedRectangle(card, 5.0f, isCurrent ? 1.6f : 1.0f);
 
     // Step number
-    g.setFont(panelProFont.withHeight(10.0f));
+    g.setFont(panelBoldFont.withHeight(10.0f));
     g.setColour(isCurrent ? acc
                           : (isActive ? juce::Colours::white
                                       : juce::Colour(90, 90, 100)));
@@ -2706,7 +2706,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
     // Wave-name label under the glyph
     static const char *wn[] = {"TRI", "SAW", "PLS", "NOI"};
     g.setColour(isActive ? acc.withAlpha(0.9f) : juce::Colour(0xFF6F6F82));
-    g.setFont(panelProFont.withHeight(10.0f));
+    g.setFont(panelBoldFont.withHeight(10.0f));
     g.drawText(wn[wave], x, 95, colW - 3, 11, juce::Justification::centred);
   }
 }
@@ -2767,8 +2767,8 @@ void WavetablePanel::refreshFonts(const juce::Font &pro,
                                   const juce::Font &bold) {
   panelProFont  = pro;
   panelBoldFont = bold;
-  stepsLabel.setFont(pro.withHeight(10.0f));
-  rateLabel.setFont(pro.withHeight(10.0f));
+  stepsLabel.setFont(bold.withHeight(10.0f));
+  rateLabel.setFont(bold.withHeight(10.0f));
   repaint();
 }
 
@@ -3411,7 +3411,7 @@ void BreadbinEditor::setupGlobalControls() {
   // Glide/Portamento
   glideTimeLabel.setText("Glide", juce::dontSendNotification);
   glideTimeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  glideTimeLabel.setFont(proFont.withHeight(10.0f));
+  glideTimeLabel.setFont(boldFont.withHeight(10.0f));
   addAndMakeVisible(glideTimeLabel);
 
   glideTimeSlider.setRange(0.0, 2000.0, 1.0);
@@ -3428,7 +3428,7 @@ void BreadbinEditor::setupGlobalControls() {
   // Master Volume
   masterVolLabel.setText("Master", juce::dontSendNotification);
   masterVolLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  masterVolLabel.setFont(proFont.withHeight(12.0f));
+  masterVolLabel.setFont(boldFont.withHeight(12.0f));
   addAndMakeVisible(masterVolLabel);
 
   masterVolSlider.setRange(0.0, 1.0, 0.01);
@@ -3441,7 +3441,7 @@ void BreadbinEditor::setupGlobalControls() {
 
   noiseGateLabel.setText("Gate", juce::dontSendNotification);
   noiseGateLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  noiseGateLabel.setFont(proFont.withHeight(12.0f));
+  noiseGateLabel.setFont(boldFont.withHeight(12.0f));
   addAndMakeVisible(noiseGateLabel);
 
   noiseGateSlider.setRange(0.0, 0.1, 0.001);
@@ -3462,7 +3462,7 @@ void BreadbinEditor::setupGlobalControls() {
 
   extInputLabel.setText("Level", juce::dontSendNotification);
   extInputLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  extInputLabel.setFont(proFont.withHeight(10.0f));
+  extInputLabel.setFont(boldFont.withHeight(10.0f));
   addAndMakeVisible(extInputLabel);
 
   extInputLevelSlider.setRange(0.0, 2.0, 0.01);
@@ -3481,7 +3481,7 @@ void BreadbinEditor::setupGlobalControls() {
   // Clock mode (PAL/NTSC)
   clockModeLabel.setText("Clock:", juce::dontSendNotification);
   clockModeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  clockModeLabel.setFont(retroFont.withHeight(7.0f));
+  clockModeLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(clockModeLabel);
 
   clockModeSelector.addItem("PAL", 1);
@@ -3509,7 +3509,7 @@ void BreadbinEditor::setupFXControls() {
                               const juce::String &tooltip) {
     label.setText(name, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(retroFont.withHeight(7.0f));
+    label.setFont(retroFont.withHeight(8.0f));
     label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(label);
 
@@ -3575,7 +3575,7 @@ void BreadbinEditor::setupFXControls() {
                                      const juce::String &tooltip) {
     label.setText(name, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(retroFont.withHeight(7.0f));
+    label.setFont(retroFont.withHeight(8.0f));
     label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(label);
 
@@ -3600,7 +3600,7 @@ void BreadbinEditor::setupFXControls() {
   filterEnvAmountLabel.setText("Amt", juce::dontSendNotification);
   filterEnvAmountLabel.setColour(juce::Label::textColourId,
                                  juce::Colours::lightgrey);
-  filterEnvAmountLabel.setFont(retroFont.withHeight(7.0f));
+  filterEnvAmountLabel.setFont(retroFont.withHeight(8.0f));
   filterEnvAmountLabel.setJustificationType(juce::Justification::centred);
   addAndMakeVisible(filterEnvAmountLabel);
 
@@ -3851,7 +3851,7 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   // Filter cutoff
   cutoffLabel.setText("Cutoff", juce::dontSendNotification);
   cutoffLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  cutoffLabel.setFont(retroFont.withHeight(7.0f));
+  cutoffLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(cutoffLabel);
 
   cutoffSlider.setRange(0, 2047, 1);
@@ -3870,7 +3870,7 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   // Filter resonance
   resLabel.setText("Res", juce::dontSendNotification);
   resLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  resLabel.setFont(retroFont.withHeight(7.0f));
+  resLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(resLabel);
 
   resSlider.setRange(0, 15, 1);
@@ -3932,7 +3932,7 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   // Detune slider
   detuneLabel.setText("Detune", juce::dontSendNotification);
   detuneLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  detuneLabel.setFont(retroFont.withHeight(7.0f));
+  detuneLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(detuneLabel);
 
   detuneSlider.setRange(-50.0, 50.0, 1.0);
@@ -3953,7 +3953,7 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   // Pan slider
   panLabel.setText("Pan", juce::dontSendNotification);
   panLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  panLabel.setFont(retroFont.withHeight(7.0f));
+  panLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(panLabel);
 
   panSlider.setRange(-1.0, 1.0, 0.01);
@@ -3994,7 +3994,7 @@ void BreadbinEditor::setupVoiceEditor() {
 
   waveformLabel.setText("Wave:", juce::dontSendNotification);
   waveformLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-  waveformLabel.setFont(retroFont.withHeight(7.0f));
+  waveformLabel.setFont(retroFont.withHeight(8.0f));
   addAndMakeVisible(waveformLabel);
 
   waveformSelector.addItem("Triangle", 1);
@@ -4031,7 +4031,7 @@ void BreadbinEditor::setupVoiceEditor() {
                           int defaultVal) {
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(proFont.withHeight(10.0f));
+    label.setFont(boldFont.withHeight(10.0f));
     addAndMakeVisible(label);
 
     slider.setRange(0, 15, 1);
@@ -4085,7 +4085,7 @@ void BreadbinEditor::setupVoiceEditor() {
       "Default: 7 (perfect fifth). Set to 0 for no offset.");
   addAndMakeVisible(modOffsetSlider);
   modOffsetLabel.setJustificationType(juce::Justification::centredRight);
-  modOffsetLabel.setFont(proFont.withHeight(11.0f));
+  modOffsetLabel.setFont(boldFont.withHeight(11.0f));
   addAndMakeVisible(modOffsetLabel);
 
   // Update Ring Mod enable state when waveform changes
