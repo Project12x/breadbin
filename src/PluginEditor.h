@@ -708,8 +708,8 @@ public:
   void paint(juce::Graphics &g) override;
   void refreshFonts(const juce::Font &pro, const juce::Font &bold,
                     const juce::Font &mono);
-  static constexpr int panelWidth = 400;
-  static constexpr int panelHeight = 250;
+  static constexpr int panelWidth = 440;
+  static constexpr int panelHeight = 270;
 
 private:
   BreadbinProcessor &processor;
@@ -1284,6 +1284,7 @@ private:
   juce::Image backgroundImage;
   // Cached background composite (bg + vignette, built once in resizedContent)
   juce::Image bgCache;
+  juce::Image bgBlurCache; // frosted-glass: pre-blurred backdrop (built with bgCache)
   // Panel bounds stored in resizedContent() for use in paint()
   juce::Rectangle<int> topBarPanelBounds;
   juce::Rectangle<int> leftSidPanelBounds;

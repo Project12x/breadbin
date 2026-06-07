@@ -24,6 +24,15 @@ CPMAddPackage(
         "JUCE_BUILD_EXAMPLES OFF"
 )
 
+# melatonin_blur (frosted-glass blur, MIT). JUCE module — fetch into a folder literally named
+# "melatonin_blur" so juce_add_module finds melatonin_blur.h (CPM's "-src" suffix breaks that).
+include(FetchContent)
+FetchContent_Declare(melatonin_blur
+    GIT_REPOSITORY https://github.com/sudara/melatonin_blur.git
+    GIT_TAG v1.4
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/melatonin_blur")
+FetchContent_MakeAvailable(melatonin_blur)
+
 # libsidplayfp (for reSIDfp + full player engine)
 # Use release tarball (not git) because it includes pre-built .bin files
 # (psiddrv.bin, sidplayer1.bin, sidplayer2.bin) generated from 6502 assembly
@@ -197,6 +206,7 @@ target_link_libraries(Breadbin
         juce::juce_audio_devices
         juce::juce_gui_basics
         juce::juce_dsp
+        melatonin_blur
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -242,6 +252,7 @@ target_link_libraries(BreadbinIntegrationTests PRIVATE
     juce::juce_audio_devices
     juce::juce_gui_basics
     juce::juce_dsp
+    melatonin_blur
 )
 target_compile_definitions(BreadbinIntegrationTests PRIVATE
     JUCE_WEB_BROWSER=0

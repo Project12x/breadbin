@@ -5,6 +5,7 @@
 #include <ghostmoon/ui/synthwave/Chrome.h>
 #include <ghostmoon/ui/synthwave/Theme.h>
 #include <ghostmoon/ui/synthwave/Scope.h>
+#include "melatonin_blur/melatonin_blur.h"
 
 namespace {
 // Shared synthwave glass gradient (keeps the main panel + popups in sync).
@@ -44,15 +45,20 @@ inline void buildPopupCaches(juce::Component &c, juce::Image &gridCache,
   const int w = c.getWidth(), h = c.getHeight();
   if (w <= 0 || h <= 0) return;
   gridCache = juce::Image(juce::Image::ARGB, w, h, true);
-  juce::Graphics gc(gridCache);
-  gc.setColour(gm::ui::theme::bg0);
-  gc.fillAll();
-  auto src = juce::ImageCache::getFromMemory(BinaryData::popup_grid_png,
-                                             BinaryData::popup_grid_pngSize);
-  if (src.isValid()) {
-    gc.setOpacity(0.30f); // faint backdrop
-    gc.drawImage(src, 0, 0, w, h, 0, 0, src.getWidth(), src.getHeight());
+  {
+    juce::Graphics gc(gridCache);
+    gc.setColour(gm::ui::theme::bg0);
+    gc.fillAll();
+    auto src = juce::ImageCache::getFromMemory(BinaryData::popup_grid_png,
+                                               BinaryData::popup_grid_pngSize);
+    if (src.isValid()) {
+      gc.setOpacity(0.30f); // faint backdrop
+      gc.drawImage(src, 0, 0, w, h, 0, 0, src.getWidth(), src.getHeight());
+    }
   }
+  // Frosted glass: blur the static grid backdrop once (melatonin cached stack blur).
+  melatonin::CachedBlur blur(12);
+  gridCache = blur.render(gridCache).createCopy();
   scanCache = gm::ui::makeScanlineOverlay(w, h);
 }
 // Small floppy-disk glyph (C64 save nostalgia), stroked in the given colour.
@@ -76,6 +82,15 @@ inline void drawTapeIcon(juce::Graphics &g, juce::Rectangle<float> r,
                 1.0f);
   g.drawEllipse(r.getX() + r.getWidth() * 0.68f - hr, cy - hr, hr * 2, hr * 2,
                 1.0f);
+}
+// Translucent recessed inset card (popup sub-panel) — the grid shows faintly through.
+inline void drawInsetCard(juce::Graphics &g, juce::Rectangle<float> r) {
+  g.setColour(juce::Colour(0x990C0D15));
+  g.fillRoundedRectangle(r, 5.0f);
+  g.setColour(juce::Colours::black.withAlpha(0.85f));
+  g.drawRoundedRectangle(r, 5.0f, 1.0f);
+  g.setColour(juce::Colour(0x44000000)); // inner top shadow
+  g.fillRect(r.getX() + 2.0f, r.getY() + 1.0f, r.getWidth() - 4.0f, 2.0f);
 }
 } // namespace
 
@@ -728,8 +743,8 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
                             juce::Colours::grey);
   addAndMakeVisible(sampleInfoLabel);
 
-  rootNoteLabel.setText("Root:", juce::dontSendNotification);
-  rootNoteLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  rootNoteLabel.setText("ROOT NOTE", juce::dontSendNotification);
+  rootNoteLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF6F6F82));
   addAndMakeVisible(rootNoteLabel);
 
   // Populate root note selector: C1 (24) to C7 (96)
@@ -751,6 +766,7 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
   };
   addAndMakeVisible(rootNoteSelector);
 
+  loopButton.setButtonText("LOOP");
   loopButton.setColour(juce::ToggleButton::textColourId, juce::Colours::cyan);
   loopButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::cyan);
   addAndMakeVisible(loopButton);
@@ -758,12 +774,12 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "digiLoop", loopButton);
 
-  bitDepthLabel.setText("Depth:", juce::dontSendNotification);
-  bitDepthLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+  bitDepthLabel.setText("BIT DEPTH", juce::dontSendNotification);
+  bitDepthLabel.setColour(juce::Label::textColourId, juce::Colour(0xFF6F6F82));
   addAndMakeVisible(bitDepthLabel);
 
-  bitDepthSelector.addItem("4-bit ($D418)", 1);
-  bitDepthSelector.addItem("8-bit (Direct)", 2);
+  bitDepthSelector.addItem("4-bit", 1);
+  bitDepthSelector.addItem("8-bit", 2);
   bitDepthSelector.setSelectedId(1, juce::dontSendNotification);
   bitDepthSelector.onChange = [this]() {
     auto *p = processor.apvts.getParameter("digiBitDepth");
@@ -790,25 +806,17 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
 }
 
 void DigiSamplerPanel::resized() {
-  auto bounds = getLocalBounds().reduced(12);
+  // Header: tape-icon Load + filename / sample info
+  loadButton.setBounds(14, 16, 120, 28);
+  fileNameLabel.setBounds(146, 13, panelWidth - 160, 18);
+  sampleInfoLabel.setBounds(146, 32, panelWidth - 160, 13);
 
-  auto topRow = bounds.removeFromTop(24);
-  loadButton.setBounds(topRow.removeFromLeft(90));
-  topRow.removeFromLeft(8);
-  fileNameLabel.setBounds(topRow);
-
-  bounds.removeFromTop(4);
-  sampleInfoLabel.setBounds(bounds.removeFromTop(18));
-
-  bounds.removeFromTop(8);
-  auto ctrlRow = bounds.removeFromTop(24);
-  rootNoteLabel.setBounds(ctrlRow.removeFromLeft(36));
-  rootNoteSelector.setBounds(ctrlRow.removeFromLeft(80));
-  ctrlRow.removeFromLeft(16);
-  loopButton.setBounds(ctrlRow.removeFromLeft(70));
-  ctrlRow.removeFromLeft(16);
-  bitDepthLabel.setBounds(ctrlRow.removeFromLeft(36));
-  bitDepthSelector.setBounds(ctrlRow.removeFromLeft(90));
+  // Controls card (paint draws the card at y=140, h=64): 3 labeled columns
+  rootNoteLabel.setBounds(26, 148, 120, 12);
+  rootNoteSelector.setBounds(26, 164, 120, 28);
+  bitDepthLabel.setBounds(160, 148, 130, 12);
+  bitDepthSelector.setBounds(160, 164, 130, 28);
+  loopButton.setBounds(306, 160, 110, 28);
 
   buildPopupCaches(*this, gridCache, scanCache);
 }
@@ -817,40 +825,32 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
   drawPopupGlass(g, getLocalBounds().toFloat(),
                  BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
 
-  // Waveform display area
-  auto waveArea = getLocalBounds().reduced(12);
-  waveArea.removeFromTop(90); // skip controls
-  auto waveRect = waveArea.toFloat();
-  g.setColour(juce::Colour(18, 18, 22));
-  g.fillRoundedRectangle(waveRect, 4.0f);
-  g.setColour(juce::Colour(50, 50, 62));
-  g.drawRoundedRectangle(waveRect.reduced(0.5f), 4.0f, 0.5f);
+  const juce::Colour acc = BreadbinLookAndFeel::accentOf(*this);
+
+  // Waveform card
+  auto waveRect = juce::Rectangle<float>(14.0f, 54.0f,
+                                         static_cast<float>(panelWidth - 28), 78.0f);
+  drawInsetCard(g, waveRect);
 
   auto &digi = processor.getDigiSampler();
   if (digi.isLoaded() && digi.getNumSamples() > 0) {
-    // Draw 4-bit waveform
     const auto &packed = digi.getPackedData();
     int numSamples = digi.getNumSamples();
-    float padX = 4.0f, padY = 4.0f;
+    float padX = 6.0f, padY = 6.0f;
     float w = waveRect.getWidth() - padX * 2.0f;
     float h = waveRect.getHeight() - padY * 2.0f;
     float x0 = waveRect.getX() + padX;
     float y0 = waveRect.getY() + padY;
-
     juce::Path path;
     int numPts = juce::jmin(static_cast<int>(w), numSamples);
     for (int i = 0; i < numPts; ++i) {
       float t = static_cast<float>(i) / static_cast<float>(juce::jmax(1, numPts - 1));
       int sampleIdx = static_cast<int>(t * static_cast<float>(numSamples - 1));
-      // Unpack 4-bit sample
       int byteIdx = sampleIdx / 2;
-      uint8_t val;
-      if (sampleIdx % 2 == 0)
-        val = (packed[static_cast<size_t>(byteIdx)] >> 4) & 0x0F;
-      else
-        val = packed[static_cast<size_t>(byteIdx)] & 0x0F;
-
-      float norm = static_cast<float>(val) / 15.0f; // 0..1
+      uint8_t val = (sampleIdx % 2 == 0)
+                        ? ((packed[static_cast<size_t>(byteIdx)] >> 4) & 0x0F)
+                        : (packed[static_cast<size_t>(byteIdx)] & 0x0F);
+      float norm = static_cast<float>(val) / 15.0f;
       float px = x0 + static_cast<float>(i);
       float py = y0 + h * (1.0f - norm);
       if (i == 0)
@@ -858,16 +858,29 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
       else
         path.lineTo(px, py);
     }
-    g.setColour(juce::Colours::cyan.withAlpha(0.2f));
+    g.setColour(acc.withAlpha(0.25f));
     g.strokePath(path, juce::PathStrokeType(2.5f));
-    g.setColour(juce::Colours::cyan);
+    g.setColour(acc);
     g.strokePath(path, juce::PathStrokeType(1.0f));
   } else {
-    g.setColour(juce::Colours::grey.withAlpha(0.4f));
+    g.setColour(juce::Colour(0xFF6F6F82));
     g.setFont(panelProFont.withHeight(11.0f));
-    g.drawText("Load a WAV sample for 4-bit $D418 digi playback",
-               waveRect, juce::Justification::centred);
+    g.drawText("Load a WAV sample for 4-bit $D418 digi playback", waveRect,
+               juce::Justification::centred);
   }
+
+  // Controls card
+  drawInsetCard(g, juce::Rectangle<float>(
+                       14.0f, 140.0f, static_cast<float>(panelWidth - 28), 64.0f));
+
+  // Hint card
+  auto hintRect = juce::Rectangle<int>(14, 212, panelWidth - 28, 44);
+  drawInsetCard(g, hintRect.toFloat());
+  g.setColour(juce::Colour(0xFF8A8A9A));
+  g.setFont(panelMonoFont.withHeight(9.5f));
+  g.drawFittedText("4-bit mode = authentic C64 $D418 volume-register crunch. "
+                   "Pitch tracks the MIDI note relative to root.",
+                   hintRect.reduced(10, 6), juce::Justification::centredLeft, 3);
 }
 
 void DigiSamplerPanel::refreshFonts(const juce::Font &pro,
@@ -876,9 +889,10 @@ void DigiSamplerPanel::refreshFonts(const juce::Font &pro,
   panelProFont = pro;
   panelBoldFont = bold;
   panelMonoFont = mono;
-  fileNameLabel.setFont(pro.withHeight(13.0f));
-  sampleInfoLabel.setFont(mono.withHeight(11.0f));
-  rootNoteLabel.setFont(pro.withHeight(13.0f));
+  fileNameLabel.setFont(bold.withHeight(14.0f));
+  sampleInfoLabel.setFont(mono.withHeight(10.0f));
+  rootNoteLabel.setFont(pro.withHeight(9.5f));
+  bitDepthLabel.setFont(pro.withHeight(9.5f));
 }
 
 void DigiSamplerPanel::updateInfoLabels() {
@@ -4067,7 +4081,16 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   // The fill is translucent so the background image reads through.
   auto drawGlassPanel = [&](juce::Rectangle<int> bounds) {
     if (bounds.isEmpty()) return;
-    drawGlassFill(g, bounds.toFloat(), 8.0f);
+    auto fb = bounds.toFloat();
+    // Frosted glass: blurred backdrop clipped to the panel, then the glass tint over it.
+    if (bgBlurCache.isValid()) {
+      juce::Graphics::ScopedSaveState ss(g);
+      juce::Path clip;
+      clip.addRoundedRectangle(fb, 8.0f);
+      g.reduceClipRegion(clip);
+      g.drawImageAt(bgBlurCache, 0, 0);
+    }
+    drawGlassFill(g, fb, 8.0f);
   };
 
   drawGlassPanel(topBarPanelBounds);
@@ -4186,6 +4209,12 @@ void BreadbinEditor::resizedContent() {
     vignette.addColour(0.85, juce::Colour(0x85040409));
     gc.setGradientFill(vignette);
     gc.fillRect(0, 0, w, h);
+  }
+
+  // Frosted glass: pre-blur the backdrop once for the glass panels (melatonin, cached).
+  if (bgCache.isValid()) {
+    melatonin::CachedBlur bgBlur(20);
+    bgBlurCache = bgBlur.render(bgCache).createCopy();
   }
 }
 
