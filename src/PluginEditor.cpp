@@ -144,6 +144,59 @@ BreadbinLookAndFeel::BreadbinLookAndFeel() {
   setColour(juce::ResizableWindow::backgroundColourId, juce::Colour(30, 30, 35));
 }
 
+void C64Keyboard::drawWhiteNote(int midiNoteNumber, juce::Graphics &g,
+                                juce::Rectangle<float> area, bool isDown, bool isOver,
+                                juce::Colour /*lineColour*/, juce::Colour /*textColour*/) {
+  const juce::Colour accent = gm::ui::theme::cyan;
+  // Key cap: dark vertical gradient
+  g.setGradientFill(juce::ColourGradient(
+      juce::Colour(0xFF24252F), area.getX(), area.getY(),
+      juce::Colour(0xFF0E0E16), area.getX(), area.getBottom(), false));
+  g.fillRect(area);
+  if (isDown) {
+    g.setColour(accent.withAlpha(0.45f));
+    g.fillRect(area);
+    g.setColour(accent.withAlpha(0.95f)); // bright glow bar at the played end
+    g.fillRect(area.getX(), area.getBottom() - 4.0f, area.getWidth(), 4.0f);
+  } else if (isOver) {
+    g.setColour(accent.withAlpha(0.14f));
+    g.fillRect(area);
+  }
+  // Top sheen + dark separator on the right edge
+  g.setColour(juce::Colours::white.withAlpha(0.05f));
+  g.fillRect(area.getX(), area.getY(), area.getWidth(), 1.5f);
+  g.setColour(juce::Colours::black);
+  g.fillRect(area.getRight() - 1.0f, area.getY(), 1.0f, area.getHeight());
+  // Octave C labels in the pixel font (C2..C6)
+  if (midiNoteNumber % 12 == 0) {
+    g.setColour(isDown ? juce::Colours::white : gm::ui::theme::txt3);
+    g.setFont(labelFont.withHeight(8.0f));
+    juce::Rectangle<float> lbl(area.getX(), area.getBottom() - 14.0f, area.getWidth(), 12.0f);
+    g.drawText("C" + juce::String(midiNoteNumber / 12 - 1), lbl,
+               juce::Justification::centred, false);
+  }
+}
+
+void C64Keyboard::drawBlackNote(int /*midiNoteNumber*/, juce::Graphics &g,
+                                juce::Rectangle<float> area, bool isDown, bool isOver,
+                                juce::Colour /*noteFillColour*/) {
+  const juce::Colour accent = gm::ui::theme::cyan;
+  g.setGradientFill(juce::ColourGradient(
+      juce::Colour(0xFF16161F), area.getX(), area.getY(),
+      juce::Colour(0xFF020207), area.getX(), area.getBottom(), false));
+  g.fillRect(area);
+  if (isDown) {
+    g.setColour(accent.withAlpha(0.65f));
+    g.fillRect(area);
+  } else if (isOver) {
+    g.setColour(accent.withAlpha(0.20f));
+    g.fillRect(area);
+  }
+  // Neon top edge — synthwave glint on the sharps
+  g.setColour(accent.withAlpha(isDown ? 0.95f : 0.40f));
+  g.fillRect(area.getX(), area.getY(), area.getWidth(), 1.5f);
+}
+
 void BreadbinLookAndFeel::drawRotarySlider(
     juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
     float /*rotaryStartAngle*/, float /*rotaryEndAngle*/, juce::Slider &slider) {
@@ -3774,9 +3827,13 @@ void BreadbinEditor::setupPopupButtons() {
   setupOverlay(sidOverlayCutoff);
   setupOverlay(sidOverlayRes);
 
-  // Keyboard
-  keyboard.setKeyWidth(16.0f);
+  // Keyboard — C64 neon-stylized; key width auto-fit to region in resizedContent()
   keyboard.setAvailableRange(36, 84); // C2 to C6 - reasonable SID range
+  keyboard.setLabelFont(retroFont);
+  keyboard.setColour(juce::MidiKeyboardComponent::shadowColourId,
+                     juce::Colours::transparentBlack);
+  keyboard.setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId,
+                     juce::Colours::transparentBlack);
   addAndMakeVisible(keyboard);
 }
 
@@ -4371,6 +4428,19 @@ void BreadbinEditor::resizedContent() {
 
   // --- Region 6: Keyboard ---
   keyboard.setBounds(bounds.removeFromTop(kKbH));
+  // Widen keys to fill the full region width (C2-C6 white keys) instead of a
+  // cramped left strip with dead space.
+  {
+    int whites = 0;
+    for (int n = 36; n <= 84; ++n) {
+      int p = n % 12;
+      if (p != 1 && p != 3 && p != 6 && p != 8 && p != 10)
+        ++whites;
+    }
+    if (whites > 0)
+      keyboard.setKeyWidth(
+          juce::jmax(18.0f, (float)(keyboard.getWidth() - 2) / (float)whites));
+  }
 
   // Now lay out FX and dock controls using their stored rects
   {

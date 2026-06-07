@@ -885,6 +885,23 @@ private:
   juce::Image scanlineCache;
 };
 
+// C64-stylized neon on-screen keyboard: dark gradient key caps, accent glow on
+// press/hover, neon top edges on sharps, pixel-font octave labels. Key width is
+// auto-fit to the region in resizedContent(). Drawing is defined in the .cpp.
+class C64Keyboard : public juce::MidiKeyboardComponent {
+public:
+  using juce::MidiKeyboardComponent::MidiKeyboardComponent;
+  void setLabelFont(juce::Font f) { labelFont = f; }
+  void drawWhiteNote(int midiNoteNumber, juce::Graphics &g, juce::Rectangle<float> area,
+                     bool isDown, bool isOver, juce::Colour lineColour,
+                     juce::Colour textColour) override;
+  void drawBlackNote(int midiNoteNumber, juce::Graphics &g, juce::Rectangle<float> area,
+                     bool isDown, bool isOver, juce::Colour noteFillColour) override;
+
+private:
+  juce::Font labelFont;
+};
+
 class BreadbinEditor : public gm::ui::ScaledEditor,
                        private juce::MidiKeyboardState::Listener,
                        private juce::Timer {
@@ -1286,7 +1303,7 @@ private:
 
   // Virtual keyboard
   juce::MidiKeyboardState keyboardState;
-  juce::MidiKeyboardComponent keyboard;
+  C64Keyboard keyboard;
 
   MidiLearnOverlay midiLearnOverlay{processor};
 

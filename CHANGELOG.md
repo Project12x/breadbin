@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI polish — hover feedback**: buttons and toggles now show a subtle accent edge + faint wash on
   mouse-over, rendered in Breadbin's `LookAndFeel` via the JUCE highlight flag (the shared `gm::ui`
   renderers are untouched). Knobs are not yet included (JUCE sliders need an extra repaint hook).
+- **UI polish — C64 neon keyboard**: the on-screen keyboard is restyled and enlarged. Keys auto-fit to
+  fill the full window width (previously a cramped ~half-width strip), with dark gradient key caps,
+  cyan neon-edged sharps, a cyan glow on press + faint cyan on hover, and Press-Start pixel-font
+  octave labels (C2–C6). Implemented as a `C64Keyboard : juce::MidiKeyboardComponent` subclass with
+  custom `drawWhiteNote`/`drawBlackNote` (no `gm::ui` change).
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
   Polyphonic (per-note SID pair allocation, up to 8 notes), and Poly+Para (paraphonic within
   each poly voice, up to 24 notes). Replaces the old polyEnable toggle with a voiceMode selector.
