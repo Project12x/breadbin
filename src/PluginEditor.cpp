@@ -181,11 +181,17 @@ void BreadbinLookAndFeel::drawLinearSlider(
 
 void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
                                            juce::ToggleButton &button,
-                                           bool /*highlighted*/,
+                                           bool highlighted,
                                            bool /*down*/) {
   const auto bounds = button.getLocalBounds().toFloat();
   const bool isOn = button.getToggleState();
   const juce::Colour accent = accentOf(button);
+
+  // Hover: faint accent wash behind the toggle (Breadbin-local, no gm::ui change)
+  if (highlighted) {
+    g.setColour(accent.withAlpha(0.10f));
+    g.fillRoundedRectangle(bounds, 4.0f);
+  }
 
   // Dot indicator: 10x10 square at left edge, vertically centred
   const float dotSize = 10.0f;
@@ -207,8 +213,17 @@ void BreadbinLookAndFeel::drawToggleButton(juce::Graphics &g,
 void BreadbinLookAndFeel::drawButtonBackground(juce::Graphics &g,
                                                juce::Button &button,
                                                const juce::Colour & /*bgColour*/,
-                                               bool /*highlighted*/, bool down) {
-  gm::ui::drawButtonBackground(g, button.getLocalBounds().toFloat(), down);
+                                               bool highlighted, bool down) {
+  const auto bounds = button.getLocalBounds().toFloat();
+  gm::ui::drawButtonBackground(g, bounds, down);
+  // Hover: subtle accent edge + wash (Breadbin-local, no gm::ui change)
+  if (highlighted && !down) {
+    const juce::Colour accent = accentOf(button);
+    g.setColour(accent.withAlpha(0.10f));
+    g.fillRoundedRectangle(bounds.reduced(1.0f), 4.0f);
+    g.setColour(accent.withAlpha(0.55f));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 5.0f, 1.0f);
+  }
 }
 
 void BreadbinLookAndFeel::drawButtonText(juce::Graphics &g,

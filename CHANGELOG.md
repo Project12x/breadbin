@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by the dot indicator) instead of dimming to `txt2` when off. The small Press-Start pixel-font slider/control
   labels (Cutoff, Res, Detune, Pan, Waveform, FX, Filter-Env, clock mode) keep the C64 pixel
   aesthetic and are bumped 7px → 8px for legibility (typeface unchanged).
+- **UI polish — hover feedback**: buttons and toggles now show a subtle accent edge + faint wash on
+  mouse-over, rendered in Breadbin's `LookAndFeel` via the JUCE highlight flag (the shared `gm::ui`
+  renderers are untouched). Knobs are not yet included (JUCE sliders need an extra repaint hook).
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
   Polyphonic (per-note SID pair allocation, up to 8 notes), and Poly+Para (paraphonic within
   each poly voice, up to 24 notes). Replaces the old polyEnable toggle with a voiceMode selector.
