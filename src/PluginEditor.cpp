@@ -92,6 +92,28 @@ inline void drawInsetCard(juce::Graphics &g, juce::Rectangle<float> r) {
   g.setColour(juce::Colour(0x44000000)); // inner top shadow
   g.fillRect(r.getX() + 2.0f, r.getY() + 1.0f, r.getWidth() - 4.0f, 2.0f);
 }
+// Mini waveform glyph (0=Triangle, 1=Saw, 2=Pulse, 3=Noise) stroked in the given colour.
+inline void drawWaveGlyph(juce::Graphics &g, juce::Rectangle<float> box, int wave,
+                          juce::Colour c) {
+  auto a = box.reduced(box.getWidth() * 0.20f, box.getHeight() * 0.30f);
+  const float x0 = a.getX(), x1 = a.getRight(), yT = a.getY(), yB = a.getBottom(),
+              yM = a.getCentreY(), xM = a.getCentreX();
+  juce::Path p;
+  if (wave == 0) { // triangle
+    p.startNewSubPath(x0, yB); p.lineTo(xM, yT); p.lineTo(x1, yB);
+  } else if (wave == 1) { // saw
+    p.startNewSubPath(x0, yB); p.lineTo(x1, yT); p.lineTo(x1, yB);
+  } else if (wave == 2) { // pulse
+    p.startNewSubPath(x0, yB); p.lineTo(x0, yT); p.lineTo(xM, yT);
+    p.lineTo(xM, yB); p.lineTo(x1, yB); p.lineTo(x1, yT);
+  } else { // noise — zigzag
+    p.startNewSubPath(x0, yM);
+    for (int i = 1; i <= 6; ++i)
+      p.lineTo(x0 + (x1 - x0) * (float)i / 6.0f, (i % 2) ? yT : yB);
+  }
+  g.setColour(c);
+  g.strokePath(p, juce::PathStrokeType(1.4f));
+}
 } // namespace
 
 // ========== CUSTOM LOOKANDFEEL ==========
@@ -2382,6 +2404,7 @@ WavetablePanel::WavetablePanel(BreadbinProcessor &proc) : processor(proc) {
     step.waveBox.addItem("Noi", 4);
     step.waveBox.setTooltip("Waveform: Triangle, Sawtooth, Pulse, or Noise");
     addAndMakeVisible(step.waveBox);
+    step.waveBox.setVisible(false); // replaced by a click-to-cycle glyph box (paint + mouseDown)
     step.waveAttach = std::make_unique<
         juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         processor.apvts, prefix + "wave", step.waveBox);
@@ -2564,6 +2587,22 @@ void WavetablePanel::paint(juce::Graphics &g) {
                                       : juce::Colour(90, 90, 100)));
     g.drawText(juce::String(i + 1).paddedLeft('0', 2), x, 62, colW - 3, 12,
                juce::Justification::centred);
+
+    // Waveform glyph box (click to cycle Tri/Saw/Pulse/Noise)
+    int wave = (int)processor.apvts
+                   .getRawParameterValue("wt_s" + juce::String(i) + "_wave")
+                   ->load();
+    auto gbox = juce::Rectangle<float>((float)x, 76.0f, (float)(colW - 3), 18.0f);
+    g.setColour(juce::Colour(0x66000000));
+    g.fillRoundedRectangle(gbox, 3.0f);
+    g.setColour(isActive ? acc.withAlpha(0.6f) : juce::Colour(0x33FFFFFF));
+    g.drawRoundedRectangle(gbox, 3.0f, 1.0f);
+    drawWaveGlyph(g, gbox, wave, isActive ? acc : juce::Colour(0xFF8A8A9A));
+    // Wave-name label under the glyph
+    static const char *wn[] = {"TRI", "SAW", "PLS", "NOI"};
+    g.setColour(isActive ? acc.withAlpha(0.9f) : juce::Colour(0xFF6F6F82));
+    g.setFont(panelProFont.withHeight(8.5f));
+    g.drawText(wn[wave], x, 95, colW - 3, 11, juce::Justification::centred);
   }
 }
 
@@ -2595,11 +2634,28 @@ void WavetablePanel::resized() {
     int x = leftMargin + i * colW;
     auto &step = steps[i];
     step.waveBox.setBounds(x, 76, ctrlW, 22);
-    step.pitchSlider.setBounds(x, 100, ctrlW, 120);
+    step.pitchSlider.setBounds(x, 110, ctrlW, 110);
     step.pwSlider.setBounds(x, 224, ctrlW, 120);
   }
 
   buildPopupCaches(*this, gridCache, scanCache);
+}
+
+void WavetablePanel::mouseDown(const juce::MouseEvent &e) {
+  // Click a step's waveform glyph box to cycle Tri -> Saw -> Pulse -> Noise.
+  const int leftMargin = 55, colW = 47;
+  for (int i = 0; i < 16; ++i) {
+    int x = leftMargin + i * colW;
+    if (juce::Rectangle<int>(x, 76, colW - 3, 30).contains(e.getPosition())) {
+      auto id = "wt_s" + juce::String(i) + "_wave";
+      if (auto *p = processor.apvts.getParameter(id)) {
+        int cur = (int)processor.apvts.getRawParameterValue(id)->load();
+        p->setValueNotifyingHost(p->convertTo0to1((float)((cur + 1) % 4)));
+      }
+      repaint();
+      return;
+    }
+  }
 }
 
 void WavetablePanel::refreshFonts(const juce::Font &pro,

@@ -605,6 +605,7 @@ public:
   }
   void resized() override;
   void paint(juce::Graphics &g) override;
+  void mouseDown(const juce::MouseEvent &e) override;
   void timerCallback() override;
   void refreshFonts(const juce::Font &pro, const juce::Font &bold);
   static constexpr int panelWidth = 820;
