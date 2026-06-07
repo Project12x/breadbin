@@ -17,6 +17,10 @@ cmake -B build -G "Visual Studio 17 2022"
 # Build Release
 cmake --build build --config Release
 
+# Build Release (clean — required when you see MSB8028 or stale-artifact symptoms;
+# shared intermediate dirs between JUCE module targets can corrupt incremental links)
+cmake --build build --config Release --target Breadbin_All --clean-first
+
 # Build Debug
 cmake --build build --config Debug
 ```

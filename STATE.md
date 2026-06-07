@@ -1,6 +1,6 @@
 # Project State
 
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-06-07
 
 ## Current Status: Beta
 
@@ -50,7 +50,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - State persistence (XML via APVTS) + full parameter automation
 - ASIO standalone support
 
-### In Progress (branch `polish/ui-2026-06-05`)
+### In Progress / Recent (branch `polish/ui-2026-06-05`)
 - **C64 "Neon Synthwave" Reskin Phase A — DONE**: `BreadbinLookAndFeel` rebuilt on `gm::ui`
   synthwave renderers (glowing knobs, CRT scopes, glass panels, glow headers, cached backdrop).
   `gm::ui::ScaledEditor` promoted from local `src/ScaledEditor.h`; `gm::ReverbSC` replaces
@@ -65,7 +65,14 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   interval table, SID Player sectioned layout with icon transport + REG⟷BASIC register dump + LOAD
   line, Wavetable per-step cards, floppy/tape button icons. NEON⟷C64 scheme switch dropped (NEON
   only). Tag: `checkpoint/phase-c-popups`.
-- **Pending — Phase D**: PETSCII toggle + motion / animated mod rings.
+- **UI Polish sub-phase (post-Phase-C) — DONE**:
+  - Filter value readouts: Cutoff/Res knobs on both SID towers show live numeric values (JBMono, accent color, updated from editor timer).
+  - Label readability pass: control labels promoted from Lato Regular to Lato Bold; sub-10px labels raised to 10px floor; toggle labels to 12px, full-brightness in both states; Press-Start pixel labels bumped 7px→8px.
+  - Hover feedback: buttons and toggles show accent edge + faint wash on mouse-over via `BreadbinLookAndFeel` JUCE highlight flag (knobs pending).
+  - C64 neon keyboard: `juce::MidiKeyboardComponent` replaced by `C64Keyboard` subclass — dark gradient key caps, near-black sharps with cyan neon top edge, cyan glow on press + hover, Press-Start octave labels (C2–C6), key width auto-fit to full window width.
+- **Phase D motion design — SPEC WRITTEN, NOT IMPLEMENTED**: design spec at
+  `docs/superpowers/specs/2026-06-07-c64-reskin-phase-d-motion-design.md` covers blinking C64
+  cursor, opt-in animated mod rings (default OFF), and subtle scope scanline drift. Parked/pending.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing

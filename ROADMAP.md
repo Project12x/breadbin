@@ -111,6 +111,21 @@
 - [x] Preset dirty detection indicator
 - [x] ASIO standalone support
 
+### Post-Phase-C UI Polish ✅
+
+- [x] Filter value readouts (Cutoff/Res live numeric values, JBMono accent color, both SID towers)
+- [x] Label readability pass (Lato Regular → Bold; 10px floor; toggle labels 12px, full-brightness in both states; Press-Start pixel labels 7px→8px)
+- [x] Hover feedback on buttons/toggles (accent edge + faint wash via JUCE highlight flag in `BreadbinLookAndFeel`)
+- [x] C64 neon keyboard (`C64Keyboard` subclass — dark gradient caps, cyan neon sharps, press/hover glow, pixel-font octave labels, auto-fit width)
+- [x] Top-bar logo emblem
+
+### C64 Neon Synthwave Reskin — Phase D (Motion Design) — PENDING
+
+- [ ] Blinking C64 cursor animation
+- [ ] Opt-in animated mod rings (default OFF)
+- [ ] Subtle scope scanline drift
+- Spec written: `docs/superpowers/specs/2026-06-07-c64-reskin-phase-d-motion-design.md`
+
 ### Release Engineering
 
 - [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)

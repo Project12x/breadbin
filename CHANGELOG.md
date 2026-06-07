@@ -13,8 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
   filter and LFO, glow-header chrome, and a cached `background_clean.png` + light vignette
-  backdrop. Applied to the existing layout (no controls moved). Remaining: Phase D = PETSCII
-  toggle + motion.
+  backdrop. Applied to the existing layout (no controls moved).
 - **C64 "Neon Synthwave" Reskin — Phase B (OptionD re-layout + per-section colors)**: the main
   panel was re-laid-out to OptionD's structure — two mirror-symmetric SID towers with in-tower
   CRT filter graphs (slimmed to align with the cutoff/res controls below), the filter envelope
@@ -46,11 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI polish — hover feedback**: buttons and toggles now show a subtle accent edge + faint wash on
   mouse-over, rendered in Breadbin's `LookAndFeel` via the JUCE highlight flag (the shared `gm::ui`
   renderers are untouched). Knobs are not yet included (JUCE sliders need an extra repaint hook).
+- **UI polish — top-bar logo emblem**: a Breadbin logo emblem is rendered in the top bar of the
+  main editor.
 - **UI polish — C64 neon keyboard**: the on-screen keyboard is restyled and enlarged. Keys auto-fit to
   fill the full window width (previously a cramped ~half-width strip), with dark gradient key caps,
   cyan neon-edged sharps, a cyan glow on press + faint cyan on hover, and Press-Start pixel-font
   octave labels (C2–C6). Implemented as a `C64Keyboard : juce::MidiKeyboardComponent` subclass with
   custom `drawWhiteNote`/`drawBlackNote` (no `gm::ui` change).
+- **Phase D motion design spec** written at
+  `docs/superpowers/specs/2026-06-07-c64-reskin-phase-d-motion-design.md`. Covers blinking C64
+  cursor, opt-in animated mod rings (default OFF), and subtle scope scanline drift. Design only —
+  Phase D is not yet implemented.
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
   Polyphonic (per-note SID pair allocation, up to 8 notes), and Poly+Para (paraphonic within
   each poly voice, up to 24 notes). Replaces the old polyEnable toggle with a voiceMode selector.

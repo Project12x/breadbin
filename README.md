@@ -6,6 +6,16 @@ A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip e
 
 ## Features
 
+### UI
+
+- **C64 Neon Synthwave skin**: full LookAndFeel reskin — glowing 270° rotary knobs, CRT phosphor
+  scope displays (filter/LFO), frosted-glass popup panels (melatonin_blur), per-section accent
+  colors (SID I cyan, SID II orange, voice editor magenta), DPI-aware window scaling (75–150%).
+- **C64 Neon Keyboard**: custom `MidiKeyboardComponent` subclass with dark gradient key caps,
+  cyan neon-edged sharps, press/hover glow, and Press-Start pixel-font octave labels.
+- **Live filter readouts**: Cutoff and Resonance knobs on each SID tower display their current
+  value in real time.
+
 ### Sound Engine
 - **Dual SID Engine**: Two independent SID emulators with 6 voices total
 - **8 Chip Model Variants**: MOS 6581 (+ R2, R3, R4), MOS 8580 (+ R5, 8580D), CSG 9580
@@ -60,6 +70,7 @@ ctest --test-dir build -C Release
 
 - JUCE 8.0.4
 - libsidplayfp 2.16.0
+- melatonin_blur v1.4 (MIT, fetched automatically)
 - CMake 3.22+
 
 ## License
