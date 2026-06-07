@@ -923,7 +923,7 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
   auto hintRect = juce::Rectangle<int>(14, 212, panelWidth - 28, 44);
   drawInsetCard(g, hintRect.toFloat());
   g.setColour(juce::Colour(0xFF8A8A9A));
-  g.setFont(panelMonoFont.withHeight(9.5f));
+  g.setFont(panelMonoFont.withHeight(10.0f));
   g.drawFittedText("4-bit mode = authentic C64 $D418 volume-register crunch. "
                    "Pitch tracks the MIDI note relative to root.",
                    hintRect.reduced(10, 6), juce::Justification::centredLeft, 3);
@@ -948,8 +948,8 @@ void DigiSamplerPanel::refreshFonts(const juce::Font &pro,
   panelMonoFont = mono;
   fileNameLabel.setFont(bold.withHeight(14.0f));
   sampleInfoLabel.setFont(mono.withHeight(10.0f));
-  rootNoteLabel.setFont(pro.withHeight(9.5f));
-  bitDepthLabel.setFont(pro.withHeight(9.5f));
+  rootNoteLabel.setFont(bold.withHeight(10.0f));
+  bitDepthLabel.setFont(bold.withHeight(10.0f));
 }
 
 void DigiSamplerPanel::updateInfoLabels() {
@@ -1532,7 +1532,7 @@ ModMatrixPanel::ModMatrixPanel(BreadbinProcessor &proc) : processor(proc) {
     slider->setTooltip(name);
     label.setText(name, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    label.setFont(panelProFont.withHeight(9.0f));
+    label.setFont(panelBoldFont.withHeight(10.0f));
     addAndMakeVisible(label);
   };
 
@@ -1931,7 +1931,7 @@ void ModMatrixPanel::paint(juce::Graphics &g) {
 
   // Mod matrix column headers (magenta — the section accent)
   g.setColour(gm::ui::theme::mag.withAlpha(0.85f));
-  g.setFont(panelProFont.withHeight(9.0f));
+  g.setFont(panelProFont.withHeight(10.0f));
   g.drawText("ON", 30, 178, 40, 12, juce::Justification::centred);
   g.drawText("SOURCE", 70, 178, 90, 12, juce::Justification::centred);
   g.drawText("DEST", 170, 178, 90, 12, juce::Justification::centred);
@@ -2053,14 +2053,14 @@ void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
   totalResLabel.setFont(mono.withHeight(10.0f));
 
   // Control labels → Lato Regular
-  lfoRateLabel.setFont(pro.withHeight(9.0f));
-  lfoDepthFilterLabel.setFont(pro.withHeight(9.0f));
-  lfoDepthPWLabel.setFont(pro.withHeight(9.0f));
-  lfoDepthPitchLabel.setFont(pro.withHeight(9.0f));
-  lfo2RateLabel.setFont(pro.withHeight(9.0f));
-  lfo2DepthFilterLabel.setFont(pro.withHeight(9.0f));
-  lfo2DepthPWLabel.setFont(pro.withHeight(9.0f));
-  lfo2DepthPitchLabel.setFont(pro.withHeight(9.0f));
+  lfoRateLabel.setFont(bold.withHeight(10.0f));
+  lfoDepthFilterLabel.setFont(bold.withHeight(10.0f));
+  lfoDepthPWLabel.setFont(bold.withHeight(10.0f));
+  lfoDepthPitchLabel.setFont(bold.withHeight(10.0f));
+  lfo2RateLabel.setFont(bold.withHeight(10.0f));
+  lfo2DepthFilterLabel.setFont(bold.withHeight(10.0f));
+  lfo2DepthPWLabel.setFont(bold.withHeight(10.0f));
+  lfo2DepthPitchLabel.setFont(bold.withHeight(10.0f));
   pitchBendRangeLabel.setFont(pro.withHeight(11.0f));
   pwmSweepRateLabel.setFont(pro.withHeight(10.0f));
   pwmSweepDepthLabel.setFont(pro.withHeight(10.0f));
@@ -2353,7 +2353,7 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   // Column headers aligned with the slider columns
   const int slidersX = 88, sliderW = 72;
   g.setColour(acc.withAlpha(0.8f));
-  g.setFont(panelProFont.withHeight(9.0f));
+  g.setFont(panelProFont.withHeight(10.0f));
   for (int i = 0; i < 5; ++i)
     g.drawText("Note " + juce::String(i + 2), slidersX + i * sliderW, 60,
                sliderW - 6, 12, juce::Justification::centred);
@@ -2657,7 +2657,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
 
   // Left-margin row labels (aligned with the control rows)
   g.setColour(juce::Colour(150, 150, 165));
-  g.setFont(panelProFont.withHeight(9.0f));
+  g.setFont(panelProFont.withHeight(10.0f));
   g.drawText("WAVE", 4, 80, 48, 12, juce::Justification::centredRight);
   g.drawText("PITCH", 4, 156, 48, 12, juce::Justification::centredRight);
   g.drawText("PW", 4, 280, 48, 12, juce::Justification::centredRight);
@@ -2706,7 +2706,7 @@ void WavetablePanel::paint(juce::Graphics &g) {
     // Wave-name label under the glyph
     static const char *wn[] = {"TRI", "SAW", "PLS", "NOI"};
     g.setColour(isActive ? acc.withAlpha(0.9f) : juce::Colour(0xFF6F6F82));
-    g.setFont(panelProFont.withHeight(8.5f));
+    g.setFont(panelProFont.withHeight(10.0f));
     g.drawText(wn[wave], x, 95, colW - 3, 11, juce::Justification::centred);
   }
 }
@@ -3745,7 +3745,7 @@ void BreadbinEditor::setupPopupButtons() {
     lbl.setColour(juce::Label::textColourId, juce::Colours::cyan);
     lbl.setColour(juce::Label::backgroundColourId,
                   juce::Colours::black.withAlpha(0.7f));
-    lbl.setFont(proFont.withHeight(9.0f));
+    lbl.setFont(boldFont.withHeight(10.0f));
     lbl.setJustificationType(juce::Justification::centred);
     lbl.setVisible(false);
     addAndMakeVisible(lbl);

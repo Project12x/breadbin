@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their live numeric value (accent-colored JetBrains Mono, stacked under each label), filling the
   previously silent headline filter controls. Updated from the base parameter values the editor
   timer already reads; `Label::setText` no-ops when unchanged, so no added per-frame repaint.
+- **UI polish — label readability pass**: small descriptor labels that were Lato Regular below the
+  design kit's 10px floor (LFO Rate/Filter/PW/Pitch rows, Digi root-note/bit-depth, SID register
+  overlay, and assorted popup labels) are now Lato Bold ~10px; paint-drawn section text below 10px
+  bumped to the 10px floor. The intentional Press-Start pixel-font micro-labels are unchanged.
 - **4-Mode Voice System**: Mono, Paraphonic (up to 6 notes on 2 SID engines, shared filter),
   Polyphonic (per-note SID pair allocation, up to 8 notes), and Poly+Para (paraphonic within
   each poly voice, up to 24 notes). Replaces the old polyEnable toggle with a voiceMode selector.
