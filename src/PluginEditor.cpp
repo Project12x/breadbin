@@ -2198,6 +2198,7 @@ ChordMemoryPanel::ChordMemoryPanel(BreadbinProcessor &proc) : processor(proc) {
       slider.setTextValueSuffix(" st");
       slider.setTooltip("Semitone offset from root (0 = unused)");
       addAndMakeVisible(slider);
+      slider.setVisible(false); // replaced by a drag-to-edit value chip (paint + mouse)
 
       auto id = "chord_s" + juce::String(s) + "_i" + juce::String(i);
       slots[s].attachments[i] = std::make_unique<
@@ -2318,6 +2319,7 @@ void ChordMemoryPanel::timerCallback() {
       learnButtons[s].setButtonText("Learn");
     }
   }
+  repaint(); // keep interval chips current (Learn / presets update the params)
 }
 
 void ChordMemoryPanel::paint(juce::Graphics &g) {
@@ -2345,6 +2347,64 @@ void ChordMemoryPanel::paint(juce::Graphics &g) {
   for (int i = 0; i < 5; ++i)
     g.drawText("Note " + juce::String(i + 2), slidersX + i * sliderW, 60,
                sliderW - 6, 12, juce::Justification::centred);
+
+  // Interval value chips (drag up/down to change)
+  for (int s = 0; s < 4; ++s)
+    for (int i = 0; i < 5; ++i) {
+      auto cb = chipBounds(s, i).toFloat();
+      int val = (int)processor.apvts
+                    .getRawParameterValue("chord_s" + juce::String(s) + "_i" +
+                                          juce::String(i))
+                    ->load();
+      bool active = (s == dragSlot && i == dragInterval);
+      g.setColour(gm::ui::theme::mag.withAlpha(active ? 0.30f : 0.16f));
+      g.fillRoundedRectangle(cb, 4.0f);
+      g.setColour(gm::ui::theme::mag.withAlpha(active ? 0.9f : 0.5f));
+      g.drawRoundedRectangle(cb, 4.0f, 1.0f);
+      g.setColour(gm::ui::theme::mag);
+      g.setFont(panelBoldFont.withHeight(12.0f));
+      g.drawText((val > 0 ? "+" : "") + juce::String(val), cb,
+                 juce::Justification::centred);
+    }
+}
+
+juce::Rectangle<int> ChordMemoryPanel::chipBounds(int slot, int interval) const {
+  const int slidersX = 88, sliderW = 72, tableTop = 74;
+  const int rowH = (panelHeight - 12 - tableTop) / 4;
+  int y = tableTop + slot * rowH;
+  return juce::Rectangle<int>(slidersX + interval * sliderW + 6,
+                              y + rowH / 2 - 13, sliderW - 14, 26);
+}
+
+void ChordMemoryPanel::mouseDown(const juce::MouseEvent &e) {
+  for (int s = 0; s < 4; ++s)
+    for (int i = 0; i < 5; ++i)
+      if (chipBounds(s, i).contains(e.getPosition())) {
+        dragSlot = s;
+        dragInterval = i;
+        dragStartY = e.getPosition().y;
+        dragStartValue = (int)processor.apvts
+                             .getRawParameterValue("chord_s" + juce::String(s) +
+                                                   "_i" + juce::String(i))
+                             ->load();
+        return;
+      }
+}
+
+void ChordMemoryPanel::mouseDrag(const juce::MouseEvent &e) {
+  if (dragSlot < 0)
+    return;
+  int nv = juce::jlimit(-24, 24,
+                        dragStartValue + (dragStartY - e.getPosition().y) / 5);
+  auto id =
+      "chord_s" + juce::String(dragSlot) + "_i" + juce::String(dragInterval);
+  if (auto *p = processor.apvts.getParameter(id))
+    p->setValueNotifyingHost(p->convertTo0to1((float)nv));
+  repaint();
+}
+
+void ChordMemoryPanel::mouseUp(const juce::MouseEvent &) {
+  dragSlot = dragInterval = -1;
 }
 
 void ChordMemoryPanel::resized() {

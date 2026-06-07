@@ -565,6 +565,9 @@ public:
   void paint(juce::Graphics &g) override;
   void timerCallback() override;
   void refreshFonts(const juce::Font &pro, const juce::Font &bold);
+  void mouseDown(const juce::MouseEvent &e) override;
+  void mouseDrag(const juce::MouseEvent &e) override;
+  void mouseUp(const juce::MouseEvent &e) override;
   static constexpr int panelWidth = 520;
   static constexpr int panelHeight = 340;
 
@@ -584,6 +587,9 @@ private:
         attachments;
   };
   std::array<SlotRow, 4> slots;
+  // Drag-to-edit interval chips (replace the per-interval sliders visually)
+  juce::Rectangle<int> chipBounds(int slot, int interval) const;
+  int dragSlot = -1, dragInterval = -1, dragStartValue = 0, dragStartY = 0;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
       enableAttach;
   juce::ComboBox presetSelector;
