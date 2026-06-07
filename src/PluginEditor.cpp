@@ -4251,6 +4251,16 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   drawGlassPanel(fxPanelBounds);
   drawGlassPanel(dockPanelBounds);
 
+  // Logo emblem in the top bar's reserved left area
+  {
+    auto logo = juce::ImageCache::getFromMemory(BinaryData::logo_png,
+                                                BinaryData::logo_pngSize);
+    auto lb = titleLabel.getBounds();
+    if (logo.isValid() && !lb.isEmpty())
+      g.drawImageWithin(logo, lb.getX(), lb.getY(), lb.getWidth(), lb.getHeight(),
+                        juce::RectanglePlacement::centred, false);
+  }
+
   // Glow text headers for SID and voice editor sections
   // drawGlowText draws bloom passes then accent; the Label child renders sharp text on top.
   if (!leftSIDLabel.getBounds().isEmpty())
