@@ -707,6 +707,7 @@ public:
   ~DigiSamplerPanel() override { setLookAndFeel(nullptr); }
   void resized() override;
   void paint(juce::Graphics &g) override;
+  void mouseDown(const juce::MouseEvent &e) override;
   void refreshFonts(const juce::Font &pro, const juce::Font &bold,
                     const juce::Font &mono);
   static constexpr int panelWidth = 440;

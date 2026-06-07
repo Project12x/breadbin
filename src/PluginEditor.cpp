@@ -809,6 +809,7 @@ DigiSamplerPanel::DigiSamplerPanel(BreadbinProcessor &proc) : processor(proc) {
         p->convertTo0to1(static_cast<float>(bitDepthSelector.getSelectedId() - 1)));
   };
   addAndMakeVisible(bitDepthSelector);
+  bitDepthSelector.setVisible(false); // replaced by a click segment (paint + mouseDown)
 
   // ========== PER-ROLE ACCENT COLOURS ==========
   // All controls = cyan; loop toggle = green. accentOf() reads "accent".
@@ -895,6 +896,29 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
   drawInsetCard(g, juce::Rectangle<float>(
                        14.0f, 140.0f, static_cast<float>(panelWidth - 28), 64.0f));
 
+  // Bit-depth segmented pill (4-bit / 8-bit)
+  {
+    auto seg = juce::Rectangle<float>(160.0f, 164.0f, 130.0f, 28.0f);
+    int bd = (int)processor.apvts.getRawParameterValue("digiBitDepth")->load();
+    g.setColour(juce::Colour(0x99000000));
+    g.fillRoundedRectangle(seg, 5.0f);
+    g.setColour(juce::Colour(0x33FFFFFF));
+    g.drawRoundedRectangle(seg, 5.0f, 1.0f);
+    for (int k = 0; k < 2; ++k) {
+      auto hr = seg.withWidth(seg.getWidth() * 0.5f)
+                    .translated(k * seg.getWidth() * 0.5f, 0.0f)
+                    .reduced(2.0f);
+      bool on = (bd == k);
+      if (on) {
+        g.setColour(acc.withAlpha(0.85f));
+        g.fillRoundedRectangle(hr, 4.0f);
+      }
+      g.setColour(on ? juce::Colour(0xFF0A0A0E) : juce::Colour(0xFF9090A0));
+      g.setFont(panelProFont.withHeight(10.0f));
+      g.drawText(k == 0 ? "4-BIT" : "8-BIT", hr, juce::Justification::centred);
+    }
+  }
+
   // Hint card
   auto hintRect = juce::Rectangle<int>(14, 212, panelWidth - 28, 44);
   drawInsetCard(g, hintRect.toFloat());
@@ -903,6 +927,17 @@ void DigiSamplerPanel::paint(juce::Graphics &g) {
   g.drawFittedText("4-bit mode = authentic C64 $D418 volume-register crunch. "
                    "Pitch tracks the MIDI note relative to root.",
                    hintRect.reduced(10, 6), juce::Justification::centredLeft, 3);
+}
+
+void DigiSamplerPanel::mouseDown(const juce::MouseEvent &e) {
+  // Bit-depth segment: click the 4-bit / 8-bit half.
+  auto seg = juce::Rectangle<int>(160, 164, 130, 28);
+  if (seg.contains(e.getPosition())) {
+    int k = (e.getPosition().x < seg.getCentreX()) ? 0 : 1;
+    if (auto *p = processor.apvts.getParameter("digiBitDepth"))
+      p->setValueNotifyingHost(p->convertTo0to1((float)k));
+    repaint();
+  }
 }
 
 void DigiSamplerPanel::refreshFonts(const juce::Font &pro,
