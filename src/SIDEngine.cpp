@@ -220,6 +220,7 @@ void SIDEngine::noteOn(int voice, int midiNote, int velocity,
   // Convert to SID frequency register value
   double fn = (hz * 16777216.0) / getClockHz();
   uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+  frequencyRegs[voice] = freq;
 
   // Set frequency registers
   int baseReg = voice * 7;
@@ -253,6 +254,12 @@ void SIDEngine::setFrequency(int voice, double hz) {
   // Convert Hz to SID frequency register value
   double fn = (hz * 16777216.0) / getClockHz();
   uint16_t freq = static_cast<uint16_t>(std::clamp(fn, 0.0, 65535.0));
+  if (perfCountersEnabled) {
+    ++perfCounters.setFrequencyCalls;
+    if (frequencyRegs[voice] == freq)
+      ++perfCounters.setFrequencySame;
+  }
+  frequencyRegs[voice] = freq;
 
   // Set frequency registers only - no gate change
   int baseReg = voice * 7;
@@ -270,7 +277,13 @@ void SIDEngine::setWaveform(int voice, Waveform waveform) {
 void SIDEngine::setPulseWidth(int voice, int pw) {
   if (voice < 0 || voice > 2)
     return;
-  voiceCache[voice].pulseWidth = static_cast<uint16_t>(std::clamp(pw, 0, 4095));
+  const auto next = static_cast<uint16_t>(std::clamp(pw, 0, 4095));
+  if (perfCountersEnabled) {
+    ++perfCounters.setPulseWidthCalls;
+    if (voiceCache[voice].pulseWidth == next)
+      ++perfCounters.setPulseWidthSame;
+  }
+  voiceCache[voice].pulseWidth = next;
 
   int baseReg = voice * 7;
   writeRegister(baseReg + 2, voiceCache[voice].pulseWidth & 0xFF);
@@ -322,34 +335,58 @@ void SIDEngine::setSync(int voice, bool enabled) {
 }
 
 void SIDEngine::setFilterCutoff(int cutoff) {
-  filterCutoff = static_cast<uint16_t>(std::clamp(cutoff, 0, 2047));
+  const auto next = static_cast<uint16_t>(std::clamp(cutoff, 0, 2047));
+  if (perfCountersEnabled) {
+    ++perfCounters.setFilterCutoffCalls;
+    if (filterCutoff == next)
+      ++perfCounters.setFilterCutoffSame;
+  }
+  filterCutoff = next;
   updateFilterRegisters();
 }
 
 void SIDEngine::setFilterResonance(int resonance) {
-  filterResonance = static_cast<uint8_t>(std::clamp(resonance, 0, 15));
+  const auto next = static_cast<uint8_t>(std::clamp(resonance, 0, 15));
+  if (perfCountersEnabled) {
+    ++perfCounters.setFilterResonanceCalls;
+    if (filterResonance == next)
+      ++perfCounters.setFilterResonanceSame;
+  }
+  filterResonance = next;
   updateFilterRegisters();
 }
 
 void SIDEngine::setFilterMode(bool lowpass, bool bandpass, bool highpass) {
-  filterMode = 0;
+  uint8_t nextMode = 0;
   if (lowpass)
-    filterMode |= 0x10;
+    nextMode |= 0x10;
   if (bandpass)
-    filterMode |= 0x20;
+    nextMode |= 0x20;
   if (highpass)
-    filterMode |= 0x40;
+    nextMode |= 0x40;
+  if (perfCountersEnabled) {
+    ++perfCounters.setFilterModeCalls;
+    if (filterMode == nextMode)
+      ++perfCounters.setFilterModeSame;
+  }
+  filterMode = nextMode;
   updateFilterRegisters();
 }
 
 void SIDEngine::setFilterVoices(bool v1, bool v2, bool v3) {
-  filterVoiceMask = 0;
+  uint8_t nextMask = 0;
   if (v1)
-    filterVoiceMask |= 0x01;
+    nextMask |= 0x01;
   if (v2)
-    filterVoiceMask |= 0x02;
+    nextMask |= 0x02;
   if (v3)
-    filterVoiceMask |= 0x04;
+    nextMask |= 0x04;
+  if (perfCountersEnabled) {
+    ++perfCounters.setFilterVoicesCalls;
+    if (filterVoiceMask == nextMask)
+      ++perfCounters.setFilterVoicesSame;
+  }
+  filterVoiceMask = nextMask;
   updateFilterRegisters();
 }
 
@@ -402,6 +439,16 @@ void SIDEngine::resetRuntimeSilenceState() {
 }
 
 void SIDEngine::writeRegister(uint8_t reg, uint8_t value) {
+  if (reg < registerCache.size()) {
+    if (perfCountersEnabled) {
+      ++perfCounters.writeRegisterCalls;
+      if (registerCache[reg] == value)
+        ++perfCounters.writeRegisterSame;
+    }
+    registerCache[reg] = value;
+  } else if (perfCountersEnabled) {
+    ++perfCounters.writeRegisterCalls;
+  }
   sid->write(reg, value);
 }
 

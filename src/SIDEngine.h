@@ -39,6 +39,29 @@ public:
   // Generate one sample at host sample rate (handles internal clock/resample)
   float clock();
 
+  struct PerfCounters {
+    uint64_t setFrequencyCalls = 0;
+    uint64_t setFrequencySame = 0;
+    uint64_t setPulseWidthCalls = 0;
+    uint64_t setPulseWidthSame = 0;
+    uint64_t setFilterCutoffCalls = 0;
+    uint64_t setFilterCutoffSame = 0;
+    uint64_t setFilterResonanceCalls = 0;
+    uint64_t setFilterResonanceSame = 0;
+    uint64_t setFilterModeCalls = 0;
+    uint64_t setFilterModeSame = 0;
+    uint64_t setFilterVoicesCalls = 0;
+    uint64_t setFilterVoicesSame = 0;
+    uint64_t writeRegisterCalls = 0;
+    uint64_t writeRegisterSame = 0;
+  };
+
+  void setPerfCountersEnabled(bool enabled) noexcept {
+    perfCountersEnabled = enabled;
+  }
+  void resetPerfCounters() noexcept { perfCounters = {}; }
+  PerfCounters getPerfCounters() const noexcept { return perfCounters; }
+
   // Voice control (0-2)
   void noteOn(int voice, int midiNote, int velocity);
   void noteOn(int voice, int midiNote, int velocity, float detuneCents);
@@ -134,6 +157,10 @@ private:
   uint8_t filterVoiceMask = 0;
   uint8_t masterVolume = 15;
   bool voicesMuted = false; // True when digi mute is active
+  bool perfCountersEnabled = false;
+  PerfCounters perfCounters;
+  std::array<uint16_t, 3> frequencyRegs{};
+  std::array<uint8_t, 32> registerCache{};
 
   void writeRegister(uint8_t reg, uint8_t value);
   void updateVoiceRegisters(int voice);
