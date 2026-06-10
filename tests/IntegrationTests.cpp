@@ -58,11 +58,14 @@ static int testsFailed = 0;
 // ============================================================================
 
 static std::unique_ptr<BreadbinProcessor>
-createTestProcessor(double sampleRate = 44100.0, int blockSize = 512) {
+createTestProcessor(double sampleRate = 44100.0, int blockSize = 512,
+                    bool enableInputBus = false) {
   auto p = std::make_unique<BreadbinProcessor>();
 
   // Must enable buses before prepareToPlay in headless mode
   juce::AudioProcessor::BusesLayout layout;
+  if (enableInputBus)
+    layout.inputBuses.add(juce::AudioChannelSet::stereo());
   layout.outputBuses.add(juce::AudioChannelSet::stereo());
   p->setBusesLayout(layout);
 
@@ -2945,43 +2948,136 @@ struct Scenario {
   const char *name;
   const char *description;
   double seconds;
+  bool needsInputBus = false;
+  bool saveInput = false;
+  bool loopForProfile = true;
   std::function<void(BreadbinProcessor &)> setup;
+  std::function<void(juce::AudioBuffer<float> &, int64_t, int)> audioForBlock;
   std::function<void(juce::MidiBuffer &, int64_t, int)> midiForBlock;
+
+  int64_t totalSamples() const {
+    return static_cast<int64_t>(std::llround(seconds * kRenderSampleRate));
+  }
 };
 
+static float dbToGain(float db) {
+  return std::pow(10.0f, db / 20.0f);
+}
+
+static void fillLogSweep(juce::AudioBuffer<float> &buffer, int64_t blockStart,
+                         int blockSamples, double seconds) {
+  constexpr double f0 = 20.0;
+  constexpr double f1 = 20000.0;
+  const double logRatio = std::log(f1 / f0);
+  const double amp = dbToGain(-12.0f);
+  for (int i = 0; i < blockSamples; ++i) {
+    const int64_t sample = blockStart + i;
+    const double t =
+        std::clamp(static_cast<double>(sample) / kRenderSampleRate, 0.0, seconds);
+    const double phase =
+        2.0 * juce::MathConstants<double>::pi * f0 * seconds / logRatio *
+        (std::exp((t / seconds) * logRatio) - 1.0);
+    const float s = static_cast<float>(amp * std::sin(phase));
+    buffer.setSample(0, i, s);
+    buffer.setSample(1, i, s);
+  }
+}
+
+static uint32_t hash32(uint32_t x) {
+  x ^= x >> 16;
+  x *= 0x7feb352dU;
+  x ^= x >> 15;
+  x *= 0x846ca68bU;
+  x ^= x >> 16;
+  return x;
+}
+
+static float signedHash(uint32_t x) {
+  return static_cast<float>((hash32(x) & 0x00ffffffU) / 8388607.5 - 1.0);
+}
+
+static float deterministicPinkishNoise(int64_t sample) {
+  float sum = 0.0f;
+  float weight = 0.0f;
+  for (int octave = 0; octave < 8; ++octave) {
+    const float w = 1.0f / static_cast<float>(octave + 1);
+    sum += signedHash(static_cast<uint32_t>((sample >> octave) + 7919 * octave)) * w;
+    weight += w;
+  }
+  return sum / weight;
+}
+
+static void fillPinkBurst(juce::AudioBuffer<float> &buffer, int64_t blockStart,
+                          int blockSamples) {
+  const int64_t start = static_cast<int64_t>(1.5 * kRenderSampleRate);
+  const int64_t end = static_cast<int64_t>(7.5 * kRenderSampleRate);
+  const float amp = dbToGain(-15.0f);
+  for (int i = 0; i < blockSamples; ++i) {
+    const int64_t sample = blockStart + i;
+    float s = 0.0f;
+    if (sample >= start && sample < end) {
+      const float fadeIn = std::min(1.0f, static_cast<float>(sample - start) /
+                                              static_cast<float>(kRenderSampleRate / 20));
+      const float fadeOut = std::min(1.0f, static_cast<float>(end - sample) /
+                                               static_cast<float>(kRenderSampleRate / 20));
+      s = deterministicPinkishNoise(sample) * amp * std::min(fadeIn, fadeOut);
+    }
+    buffer.setSample(0, i, s);
+    buffer.setSample(1, i, s);
+  }
+}
+
 static Scenario idleScenario() {
-  return {"idle-default", "defaults, no MIDI", 10.0,
+  return {"s1-idle-default", "S1 idle/always-on: defaults, no MIDI/input", 10.0,
+          false, false, true,
           [](BreadbinProcessor &) {},
+          [](juce::AudioBuffer<float> &, int64_t, int) {},
           [](juce::MidiBuffer &, int64_t, int) {}};
 }
 
 static Scenario typicalScenario() {
-  return {"typical-playing", "held C4 pulse voice, release tail", 12.0,
+  return {"s2-typical-playing", "S2 typical: moderate polyphony, default timbre", 16.0,
+          false, false, true,
           [](BreadbinProcessor &p) {
             setParamReal(p, "masterVol", 0.8f);
             setParamReal(p, "dualMode", 0.0f);
-            setParamReal(p, "voiceMode", 0.0f);
-            setParamReal(p, "leftDetune", -3.0f);
-            setParamReal(p, "rightDetune", 4.0f);
+            setParamReal(p, "voiceMode", 2.0f);
+            setParamReal(p, "polyMaxNotes", 4.0f);
           },
+          [](juce::AudioBuffer<float> &, int64_t, int) {},
           [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
-            addMidiAt(midi, blockStart, blockSamples, 0,
-                      juce::MidiMessage::noteOn(1, 60, (juce::uint8)104));
-            addMidiAt(midi, blockStart, blockSamples,
-                      static_cast<int64_t>(8.0 * kRenderSampleRate),
-                      juce::MidiMessage::noteOff(1, 60));
+            const int chord[][4] = {{60, 64, 67, 72}, {55, 59, 62, 67},
+                                    {57, 60, 64, 69}, {52, 55, 59, 64}};
+            for (int bar = 0; bar < 4; ++bar) {
+              const int64_t on = static_cast<int64_t>(bar * 3.0 * kRenderSampleRate);
+              const int64_t off = on + static_cast<int64_t>(2.45 * kRenderSampleRate);
+              for (int n = 0; n < 4; ++n) {
+                addMidiAt(midi, blockStart, blockSamples, on + n * 17,
+                          juce::MidiMessage::noteOn(1, chord[bar][n],
+                                                    static_cast<juce::uint8>(88 + n * 6)));
+                addMidiAt(midi, blockStart, blockSamples, off + n * 11,
+                          juce::MidiMessage::noteOff(1, chord[bar][n]));
+              }
+            }
           }};
 }
 
 static Scenario fullStackScenario() {
-  return {"full-stack", "poly+para, LFOs, wavetable, mod matrix, FX", 14.0,
+  return {"s3-worst-case", "S3 worst case: max poly+para, modulation, all FX", 18.0,
+          false, false, true,
           [](BreadbinProcessor &p) {
             setParamReal(p, "masterVol", 0.72f);
             setParamReal(p, "dualMode", 1.0f);
             setParamReal(p, "voiceMode", 3.0f);
-            setParamReal(p, "polyMaxNotes", 6.0f);
+            setParamReal(p, "polyMaxNotes", 8.0f);
             setParamReal(p, "paraSpread", 16.0f);
             setParamReal(p, "glide", 35.0f);
+            for (int v = 0; v < 6; ++v) {
+              const auto prefix = juce::String("v") + juce::String(v) + "_";
+              setParamReal(p, (prefix + "release").toRawUTF8(), 12.0f);
+              setParamReal(p, (prefix + "ringMod").toRawUTF8(), 1.0f);
+              setParamReal(p, (prefix + "sync").toRawUTF8(), 1.0f);
+            }
 
             setParamReal(p, "lfoEnable", 1.0f);
             setParamReal(p, "lfoWave", 4.0f);
@@ -3048,27 +3144,116 @@ static Scenario fullStackScenario() {
             setParamReal(p, "arpRate", 12.0f);
             setParamReal(p, "arpOctaves", 2.0f);
           },
+          [](juce::AudioBuffer<float> &, int64_t, int) {},
           [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
-            const int64_t off = static_cast<int64_t>(9.0 * kRenderSampleRate);
-            const int notes[] = {48, 55, 60, 64, 67};
-            for (int i = 0; i < 5; ++i) {
-              addMidiAt(midi, blockStart, blockSamples, i * 24,
-                        juce::MidiMessage::noteOn(1, notes[i], (juce::uint8)(92 + i * 5)));
-              addMidiAt(midi, blockStart, blockSamples, off + i * 24,
+            addMidiAt(midi, blockStart, blockSamples, 0,
+                      juce::MidiMessage::controllerEvent(1, 64, 127));
+            const int notes[] = {36, 40, 43, 47, 48, 52, 55, 59,
+                                 60, 64, 67, 71, 72, 76, 79, 83,
+                                 84, 88, 91, 95, 96, 100, 103, 107};
+            const int64_t off = static_cast<int64_t>(14.0 * kRenderSampleRate);
+            for (int i = 0; i < 24; ++i) {
+              addMidiAt(midi, blockStart, blockSamples, i * 19,
+                        juce::MidiMessage::noteOn(1, notes[i],
+                                                  static_cast<juce::uint8>(76 + (i % 8) * 6)));
+              addMidiAt(midi, blockStart, blockSamples, off + i * 13,
+                        juce::MidiMessage::noteOff(1, notes[i]));
+            }
+            addMidiAt(midi, blockStart, blockSamples, off + 512,
+                      juce::MidiMessage::controllerEvent(1, 64, 0));
+          }};
+}
+
+static Scenario decayScenario() {
+  return {"s4-decay-to-silence", "S4 dense burst then long release to silence", 18.0,
+          false, false, false,
+          [](BreadbinProcessor &p) {
+            setParamReal(p, "masterVol", 0.75f);
+            setParamReal(p, "voiceMode", 1.0f);
+            setParamReal(p, "paraSpread", 22.0f);
+            for (int v = 0; v < 6; ++v) {
+              const auto prefix = juce::String("v") + juce::String(v) + "_";
+              setParamReal(p, (prefix + "release").toRawUTF8(), 10.0f);
+            }
+            setParamReal(p, "delayEnable", 1.0f);
+            setParamReal(p, "delayFeedback", 0.38f);
+            setParamReal(p, "delayMix", 0.25f);
+            setParamReal(p, "reverbEnable", 1.0f);
+            setParamReal(p, "reverbDecay", 0.62f);
+            setParamReal(p, "reverbMix", 0.22f);
+          },
+          [](juce::AudioBuffer<float> &, int64_t, int) {},
+          [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
+            const int notes[] = {48, 55, 60, 64, 67, 72};
+            const int64_t off = static_cast<int64_t>(2.0 * kRenderSampleRate);
+            for (int i = 0; i < 6; ++i) {
+              addMidiAt(midi, blockStart, blockSamples, i * 23,
+                        juce::MidiMessage::noteOn(1, notes[i],
+                                                  static_cast<juce::uint8>(96 + i * 4)));
+              addMidiAt(midi, blockStart, blockSamples, off + i * 17,
                         juce::MidiMessage::noteOff(1, notes[i]));
             }
           }};
 }
 
+static void setupProcessedInput(BreadbinProcessor &p) {
+  setParamReal(p, "masterVol", 0.8f);
+  setParamReal(p, "extInputEnable", 1.0f);
+  setParamReal(p, "extInputLevel", 1.0f);
+  for (int v = 0; v < 6; ++v) {
+    const auto prefix = juce::String("v") + juce::String(v) + "_";
+    setParamReal(p, (prefix + "enable").toRawUTF8(), 0.0f);
+  }
+  setParamReal(p, "chorusEnable", 1.0f);
+  setParamReal(p, "chorusDepth", 0.45f);
+  setParamReal(p, "chorusMix", 0.35f);
+  setParamReal(p, "delayEnable", 1.0f);
+  setParamReal(p, "delayTimeL", 190.0f);
+  setParamReal(p, "delayTimeR", 285.0f);
+  setParamReal(p, "delayFeedback", 0.28f);
+  setParamReal(p, "delayMix", 0.22f);
+  setParamReal(p, "reverbEnable", 1.0f);
+  setParamReal(p, "reverbDecay", 0.48f);
+  setParamReal(p, "reverbMix", 0.18f);
+}
+
+static Scenario inputSweepScenario() {
+  return {"s5-input-sweep", "S5 processed input: 20 Hz-20 kHz log sweep", 15.0,
+          true, true, true,
+          setupProcessedInput,
+          [](juce::AudioBuffer<float> &buffer, int64_t blockStart, int blockSamples) {
+            fillLogSweep(buffer, blockStart, blockSamples, 15.0);
+          },
+          [](juce::MidiBuffer &, int64_t, int) {}};
+}
+
+static Scenario inputPinkBurstScenario() {
+  return {"s5-input-pink-burst", "S5 processed input: pink burst with silence padding", 12.0,
+          true, true, true,
+          setupProcessedInput,
+          [](juce::AudioBuffer<float> &buffer, int64_t blockStart, int blockSamples) {
+            fillPinkBurst(buffer, blockStart, blockSamples);
+          },
+          [](juce::MidiBuffer &, int64_t, int) {}};
+}
+
+static std::vector<Scenario> allScenarios() {
+  return {idleScenario(), typicalScenario(), fullStackScenario(),
+          decayScenario(), inputSweepScenario(), inputPinkBurstScenario()};
+}
+
 static bool renderScenario(const Scenario &scenario,
                            const std::filesystem::path &outDir) {
-  auto p = createTestProcessor(kRenderSampleRate, kRenderBlockSize);
+  auto p = createTestProcessor(kRenderSampleRate, kRenderBlockSize,
+                               scenario.needsInputBus);
   scenario.setup(*p);
 
-  const int totalSamples =
-      static_cast<int>(std::llround(scenario.seconds * kRenderSampleRate));
+  const int totalSamples = static_cast<int>(scenario.totalSamples());
   std::vector<float> interleaved;
   interleaved.reserve(static_cast<size_t>(totalSamples) * kRenderChannels);
+  std::vector<float> inputInterleaved;
+  if (scenario.saveInput)
+    inputInterleaved.reserve(static_cast<size_t>(totalSamples) * kRenderChannels);
 
   bool clean = true;
   int rendered = 0;
@@ -3076,6 +3261,12 @@ static bool renderScenario(const Scenario &scenario,
     const int n = std::min(kRenderBlockSize, totalSamples - rendered);
     juce::AudioBuffer<float> buffer(kRenderChannels, n);
     buffer.clear();
+    scenario.audioForBlock(buffer, rendered, n);
+    if (scenario.saveInput) {
+      for (int i = 0; i < n; ++i)
+        for (int ch = 0; ch < kRenderChannels; ++ch)
+          inputInterleaved.push_back(buffer.getSample(ch, i));
+    }
     juce::MidiBuffer midi;
     scenario.midiForBlock(midi, rendered, n);
     p->processBlock(buffer, midi);
@@ -3095,6 +3286,17 @@ static bool renderScenario(const Scenario &scenario,
                   kRenderChannels)) {
     std::cerr << "Failed to write " << path.string() << "\n";
     return false;
+  }
+
+  if (scenario.saveInput) {
+    const auto inputPath = outDir / (std::string(scenario.name) + "_input.wav");
+    if (!writeWav16(inputPath, inputInterleaved,
+                    static_cast<int>(kRenderSampleRate), kRenderChannels)) {
+      std::cerr << "Failed to write " << inputPath.string() << "\n";
+      return false;
+    }
+    std::cout << "Rendered " << scenario.name
+              << " input -> " << inputPath.string() << "\n";
   }
 
   std::cout << "Rendered " << scenario.name << " (" << scenario.description
@@ -3125,8 +3327,7 @@ static bool handleArgs(int argc, char *argv[], int &exitCode) {
     return true;
   }
 
-  const Scenario scenarios[] = {idleScenario(), typicalScenario(),
-                                fullStackScenario()};
+  const auto scenarios = allScenarios();
   bool ok = true;
   for (const auto &scenario : scenarios)
     ok = renderScenario(scenario, outDir) && ok;
@@ -3148,20 +3349,27 @@ namespace cpuprofile {
 static std::unique_ptr<juce::AudioProcessor> makeProcessor() {
   auto p = std::make_unique<BreadbinProcessor>();
   juce::AudioProcessor::BusesLayout layout;
+  layout.inputBuses.add(juce::AudioChannelSet::stereo());
   layout.outputBuses.add(juce::AudioChannelSet::stereo());
   p->setBusesLayout(layout);
   return p;
 }
 
-static void applyScenario(juce::AudioProcessor &processor,
-                          juce::AudioBuffer<float> &buffer,
+static void setupScenario(juce::AudioProcessor &processor,
+                          juce::AudioBuffer<float> &,
                           const abrender::Scenario &scenario) {
   auto &p = static_cast<BreadbinProcessor &>(processor);
   scenario.setup(p);
-  buffer.clear();
-  juce::MidiBuffer midi;
-  scenario.midiForBlock(midi, 0, buffer.getNumSamples());
-  p.processBlock(buffer, midi);
+}
+
+static void prepareScenarioBlock(juce::AudioProcessor &, juce::AudioBuffer<float> &buffer,
+                                 juce::MidiBuffer &midi, int64_t blockIndex,
+                                 const abrender::Scenario &scenario) {
+  int64_t blockStart = blockIndex * abrender::kRenderBlockSize;
+  if (scenario.loopForProfile && scenario.totalSamples() > 0)
+    blockStart %= scenario.totalSamples();
+  scenario.audioForBlock(buffer, blockStart, buffer.getNumSamples());
+  scenario.midiForBlock(midi, blockStart, buffer.getNumSamples());
 }
 
 static gm::tools::CpuProfileSpec makeSpec() {
@@ -3175,20 +3383,17 @@ static gm::tools::CpuProfileSpec makeSpec() {
   spec.getProfiler = [](juce::AudioProcessor &p) -> gm::CpuSectionProfiler & {
     return static_cast<BreadbinProcessor &>(p).getCpuProfiler();
   };
-  spec.scenarios = {
-      {"idle-default", "defaults, no MIDI",
-       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
-         applyScenario(p, b, abrender::idleScenario());
-       }},
-      {"typical-playing", "held C4 pulse voice",
-       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
-         applyScenario(p, b, abrender::typicalScenario());
-       }},
-      {"full-stack", "poly+para, LFOs, wavetable, mod matrix, FX",
-       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
-         applyScenario(p, b, abrender::fullStackScenario());
-       }},
-  };
+  for (const auto &scenario : abrender::allScenarios()) {
+    spec.scenarios.push_back(
+        {scenario.name, scenario.description,
+         [scenario](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
+           setupScenario(p, b, scenario);
+         },
+         [scenario](juce::AudioProcessor &p, juce::AudioBuffer<float> &b,
+                    juce::MidiBuffer &m, int64_t blockIndex) {
+           prepareScenarioBlock(p, b, m, blockIndex, scenario);
+         }});
+  }
   return spec;
 }
 
