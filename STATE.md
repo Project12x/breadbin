@@ -50,7 +50,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - State persistence (XML via APVTS) + full parameter automation
 - ASIO standalone support
 
-### In Progress / Recent (branch `polish/ui-2026-06-05`)
+### In Progress / Recent (branch `perf/breadbin-optimization-20260610`)
 - **C64 "Neon Synthwave" Reskin Phase A — DONE**: `BreadbinLookAndFeel` rebuilt on `gm::ui`
   synthwave renderers (glowing knobs, CRT scopes, glass panels, glow headers, cached backdrop).
   `gm::ui::ScaledEditor` promoted from local `src/ScaledEditor.h`; `gm::ReverbSC` replaces
@@ -79,6 +79,11 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   `gm::SilenceGate` from `ghostmoon-oss`. Release profile: idle-default 1818 us -> 24.5 us
   per 512-sample block; typical-playing 1822 us -> 1650 us; full-stack 4068 us -> 2987 us.
   WAV A/B passed automatically for idle, typical-playing, and full-stack.
+- **CPU full matrix baseline — PINNED**: the performance harness now covers S1 idle,
+  S2 typical polyphony, S3 honest worst case, S4 decay-to-silence, and S5 processed input
+  sweep/pink burst. Matrix references are under `releases/ab/4c07888/`; baseline JSON is
+  `releases/cpu_baseline_matrix_2026-06-10.json`. S3 remains over budget at 13412.6 us
+  per 512-sample block, dominated by `SIDRender` at 13285.25 us.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -106,15 +111,20 @@ Run: `ctest --test-dir build -C Release`
 
 Release CPU artifacts:
 
-| Scenario | baseline wall | after T1 wall | baseline top section | after T1 top section |
-|----------|--------------:|--------------:|----------------------|---------------------|
-| idle-default | 1818 us | 24.5 us | SIDRender 1787 us | Limiter 12.6 us |
-| typical-playing | 1822 us | 1650 us | SIDRender 1782 us | SIDRender 1614 us |
-| full-stack | 4068 us | 2987 us | SIDRender 3946 us | SIDRender 2897 us |
+| Scenario | matrix wall | top section |
+|----------|------------:|-------------|
+| s1-idle-default | 24.8 us | Limiter 12.8 us; SIDRender 0.10 us |
+| s2-typical-playing | 5646.8 us | SIDRender 5589.98 us |
+| s3-worst-case | 13412.6 us | SIDRender 13285.25 us |
+| s4-decay-to-silence | 1886.2 us | SIDRender 1807.72 us |
+| s5-input-sweep | 1732.2 us | SIDRender 1633.08 us |
+| s5-input-pink-burst | 1543.5 us | SIDRender 1455.43 us |
 
 Artifacts: `releases/cpu_baseline_2026-06-10.json`,
 `releases/cpu_after_t1_2026-06-10.json`, `releases/ab/88fa9f6fbf6c/`, and
-`releases/ab/t1_2026-06-10/`.
+`releases/ab/t1_2026-06-10/` for the initial T1 pass; full matrix references
+and baseline are `releases/ab/4c07888/` and
+`releases/cpu_baseline_matrix_2026-06-10.json`.
 
 ## Directory Structure
 

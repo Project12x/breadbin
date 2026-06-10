@@ -1,19 +1,28 @@
 # Optimization Targets - pinned 2026-06-10
 
-*Derived from the first Breadbin profiling pass: section tables
-(`BreadbinIntegrationTests.exe --cpu-profile`, Release, 3 scenarios). Baseline
-artifacts: `releases/cpu_baseline_2026-06-10.json` and
-`releases/ab/88fa9f6fbf6c/*.wav`. T1 artifact:
-`releases/cpu_after_t1_2026-06-10.json`. ETW drill-down was attempted, but
+*Derived from Breadbin Release section profiling. The first pass used the
+Moonglow-style three-scenario harness and landed T1. The current full
+S1-S5 matrix baseline for the remaining targets is
+`releases/cpu_baseline_matrix_2026-06-10.json`, with deterministic WAV
+references under `releases/ab/4c07888/`. ETW drill-down was attempted, but
 collection requires an elevated Administrator shell; no function-level
 acceptance criterion is marked landed until that pass is captured.*
 
-The sequence is in progress on branch `polish/ui-2026-06-05`. Breadbin consumes
+The sequence is in progress on branch `perf/breadbin-optimization-20260610`.
+Breadbin consumes
 the GPL-compatible `ghostmoon-oss` slice at
 `C:\Users\estee\Desktop\My Stuff\Code\Antigravity\ghostmoongpl`; fixes should
 land there first when the primitive is shared. The current first-order hotspot is
 plugin-level reSIDfp clocking, so the first behavioral target lands in Breadbin
 around SID render activity gating rather than in JUCE or vendored reSIDfp.
+
+Phase -1 branch setup:
+
+- Breadbin: `perf/breadbin-optimization-20260610`
+- `ghostmoongpl`: `perf/breadbin-optimization-20260610`
+- full ghostmoon worktree:
+  `C:\Users\estee\Desktop\My Stuff\Code\Antigravity\ghostmoon-worktrees\breadbin-optimization-20260610`
+  on `perf/breadbin-optimization-20260610`
 
 ## Reference and Reuse Record
 
@@ -24,7 +33,32 @@ around SID render activity gating rather than in JUCE or vendored reSIDfp.
 
 No JUCE or vendored reSIDfp source was modified.
 
-## Baseline Section Profile
+## Full S1-S5 Matrix Baseline
+
+Reference render commit: `4c07888` (`test: expand performance scenario matrix`).
+Artifacts: `releases/ab/4c07888/*.wav` and
+`releases/cpu_baseline_matrix_2026-06-10.json`.
+
+| Scenario | purpose | wall avg | wall max note | top section |
+|---|---|---:|---:|---:|
+| S1 `s1-idle-default` | idle/always-on defaults | 24.8 us | below budget | `Limiter` 12.8 us; `SIDRender` 0.10 us |
+| S2 `s2-typical-playing` | moderate 4-voice polyphony | 5646.8 us | `SIDRender` max 35600 us | `SIDRender` 5589.98 us |
+| S3 `s3-worst-case` | max poly+para, modulation, all FX | 13412.6 us | `SIDRender` max 58603.7 us | `SIDRender` 13285.25 us |
+| S4 `s4-decay-to-silence` | dense burst then long release | 1886.2 us | below budget | `SIDRender` 1807.72 us |
+| S5 `s5-input-sweep` | external input log sweep through FX | 1732.2 us | below budget | `SIDRender` 1633.08 us |
+| S5 `s5-input-pink-burst` | external input pink burst + silence | 1543.5 us | below budget | `SIDRender` 1455.43 us |
+
+S3 exceeds the 512-sample block budget at 48 kHz: 13.41 ms average versus a
+10.67 ms budget. `SIDRender` is 99.1% of measured section time, so the next
+target remains SID render activity rather than FX or safety-chain work.
+
+## GPU Lane
+
+Phase 1b GPU profiling is not applicable for this pass. Breadbin has no
+WebGPU/Dawn-rendered visual path; the plugin UI is JUCE-rendered and this
+optimization sequence is DSP CPU-bound.
+
+## Initial Three-Scenario Baseline
 
 | Scenario | wall avg | % of 10.67 ms budget | top section |
 |---|---:|---:|---:|
@@ -112,10 +146,12 @@ phase after long idle.
 
 ## T2 - Inactive poly SID voice gating - **planned after T1**
 
-**Evidence:** `full-stack` spends 3946 us in `SIDRender` while exercising
-polyphonic and paraphonic voice modes. This is roughly 2.2x the mono scenarios,
-consistent with per-poly-voice SID pairs being clocked even after voices have
-finished audibly contributing.
+**Evidence:** the full matrix S3 worst case spends 13285.25 us in `SIDRender`
+with an average wall time of 13412.6 us, exceeding the 10666.7 us block budget.
+S2 typical playing also spends 5589.98 us in `SIDRender`. S4 and both S5 input
+scenarios show 1455-1808 us of `SIDRender` even after sources are disabled or
+voices are not intentionally contributing, so the waste is still concentrated in
+SID clocking rather than FX.
 
 **Planned fix:** after T1 proves the output-energy gate policy, extend the same
 principle to inactive poly voices: gate only on each voice pair's rendered output
@@ -132,7 +168,11 @@ voice stealing interact with allocation state.
 
 **Acceptance criteria:**
 
-- `full-stack` wall average drops by at least 20% after T1's baseline.
+- S3 `s3-worst-case` wall average drops below the 10.67 ms block budget or, if
+  active max-poly SID emulation proves to be the irreducible cost, the target doc
+  explicitly marks that portion as non-target sound cost with measured evidence.
+- S4 and S5 `SIDRender` averages drop by at least 40% when the relevant SID path
+  is audibly silent or disabled.
 - Mono `typical-playing` remains within 5%.
 - WAV A/B policy from Phase 4 passes or flags only explainable note-tail pairs.
 
@@ -165,7 +205,9 @@ Breadbin's sound and release safety story.
 
 ## Verification Plan
 
-1. Keep Phase 0 WAVs under `releases/ab/88fa9f6fbf6c/` as the ground truth.
+1. Keep Phase 0 WAVs under `releases/ab/4c07888/` as the full-matrix ground
+   truth for remaining targets. The earlier 3-scenario T1 references remain
+   under `releases/ab/88fa9f6fbf6c/`.
 2. Build Release before every profile; never use Debug profile numbers.
 3. Run `BreadbinIntegrationTests.exe --cpu-profile --json releases\cpu_after_<date>.json`.
 4. Re-render the same WAV scenario set at HEAD with identical settings.

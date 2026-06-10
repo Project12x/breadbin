@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Headless performance profiling and A/B render harness**: `BreadbinIntegrationTests` now supports
   `--cpu-profile --json <path>` section attribution and `--render-ab --out-dir <dir>` deterministic
-  WAV rendering for idle, typical-playing, and full-stack scenarios. Baseline artifacts are kept under
-  `releases/cpu_baseline_2026-06-10.json` and `releases/ab/88fa9f6fbf6c/`.
+  WAV rendering for S1 idle, S2 typical playing, S3 worst case, S4 decay-to-silence, and S5 processed
+  external-input sweep/pink-burst scenarios. Initial T1 artifacts are kept under
+  `releases/cpu_baseline_2026-06-10.json` and `releases/ab/88fa9f6fbf6c/`; the full-matrix baseline is
+  `releases/cpu_baseline_matrix_2026-06-10.json` with references under `releases/ab/4c07888/`.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
