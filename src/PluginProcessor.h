@@ -3,7 +3,9 @@
 #include "DigiSampler.h"
 #include "SIDEngine.h"
 #include "SidFilePlayer.h"
+#include <ghostmoon/CpuSectionProfiler.h>
 #include <ghostmoon/ReverbSC.h>
+#include <ghostmoon/SilenceGate.h>
 #include <algorithm>
 #include <array>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -608,6 +610,32 @@ public:
     return cpuLoadPercent.load(std::memory_order_relaxed);
   }
 
+  // Headless per-section CPU attribution. Disabled unless the test harness
+  // enables it, so Release plugin cost is one relaxed load per boundary.
+  gm::CpuSectionProfiler &getCpuProfiler() { return cpuProfiler; }
+  struct CpuSections {
+    int paramsTransport = -1;
+    int deferredUpdates = -1;
+    int voiceSettings = -1;
+    int midi = -1;
+    int arpeggiator = -1;
+    int wavetable = -1;
+    int glide = -1;
+    int lfo = -1;
+    int modulation = -1;
+    int polyMod = -1;
+    int sidRender = -1;
+    int sidFile = -1;
+    int chorus = -1;
+    int delay = -1;
+    int reverb = -1;
+    int safetyFilters = -1;
+    int limiter = -1;
+    int noiseGate = -1;
+    int analysis = -1;
+  };
+  const CpuSections &getCpuSections() const { return cpuSections; }
+
   // Runtime voice-state accessors (used by integration diagnostics/tests)
   bool isVoiceActiveRuntime(int voiceIndex) const {
     return (voiceIndex >= 0 && voiceIndex < 6) ? voices[voiceIndex].active
@@ -867,6 +895,12 @@ private:
   void mixSidFilePlayer(juce::AudioBuffer<float> &buffer);
   void processFXChain(juce::AudioBuffer<float> &buffer);
   void applySafetyChain(juce::AudioBuffer<float> &buffer);
+  bool hasActiveMonoSidSource(bool digiPlaying,
+                              const float *inputLeft) const;
+  bool shouldSkipMonoSidRender(juce::AudioBuffer<float> &buffer,
+                               bool sourceActive,
+                               float targetLeftVG,
+                               float targetRightVG);
 
   // Arpeggiator
   bool arpEnabled = false;
@@ -938,6 +972,10 @@ private:
   float smoothedRightVoiceGain = 1.0f;
   bool sustainActive = false;
 
+  gm::SilenceGate sidRenderSilenceGate;
+  float sidRenderTailPeak = 0.0f;
+  bool sidRenderWasSkipping = false;
+
   // Noise gate state (per-channel envelope follower)
   struct NoiseGateState {
     float envelope = 0.0f;
@@ -955,6 +993,9 @@ private:
     int holdSamples = 0;
   };
   GateCoeffCache gateCache;
+
+  gm::CpuSectionProfiler cpuProfiler;
+  CpuSections cpuSections;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BreadbinProcessor)
 };

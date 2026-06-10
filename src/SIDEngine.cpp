@@ -1,5 +1,6 @@
 #include "SIDEngine.h"
 #include "SID.h"
+#include <algorithm>
 #include <cmath>
 
 SIDEngine::SIDEngine() {
@@ -388,6 +389,16 @@ void SIDEngine::unmuteVoices() {
   for (int v = 0; v < 3; ++v) {
     updateVoiceRegisters(v);
   }
+}
+
+void SIDEngine::resetRuntimeSilenceState() {
+  sampleBufferSize = 0;
+  sampleBufferPos = 0;
+  std::fill(std::begin(sampleBuffer), std::end(sampleBuffer), 0.0f);
+  clockAccumulator = 0.0;
+  dcEstimate = 0.0f;
+  dcFastSamplesLeft = 0;
+  setExternalInput(0.0f);
 }
 
 void SIDEngine::writeRegister(uint8_t reg, uint8_t value) {

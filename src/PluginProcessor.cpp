@@ -26,6 +26,26 @@ BreadbinProcessor::BreadbinProcessor()
 
   // Initialize MIDI mappings
   midiMappings.fill(ControlParam::None);
+
+  cpuSections.paramsTransport = cpuProfiler.registerSection("Params/Transport");
+  cpuSections.deferredUpdates = cpuProfiler.registerSection("DeferredUpdates");
+  cpuSections.voiceSettings = cpuProfiler.registerSection("VoiceSettings");
+  cpuSections.midi = cpuProfiler.registerSection("MIDI");
+  cpuSections.arpeggiator = cpuProfiler.registerSection("Arpeggiator");
+  cpuSections.wavetable = cpuProfiler.registerSection("Wavetable");
+  cpuSections.glide = cpuProfiler.registerSection("Glide");
+  cpuSections.lfo = cpuProfiler.registerSection("LFO");
+  cpuSections.modulation = cpuProfiler.registerSection("Modulation");
+  cpuSections.polyMod = cpuProfiler.registerSection("PolyMod");
+  cpuSections.sidRender = cpuProfiler.registerSection("SIDRender");
+  cpuSections.sidFile = cpuProfiler.registerSection("SIDFile");
+  cpuSections.chorus = cpuProfiler.registerSection("Chorus");
+  cpuSections.delay = cpuProfiler.registerSection("Delay");
+  cpuSections.reverb = cpuProfiler.registerSection("Reverb");
+  cpuSections.safetyFilters = cpuProfiler.registerSection("SafetyFilters");
+  cpuSections.limiter = cpuProfiler.registerSection("Limiter");
+  cpuSections.noiseGate = cpuProfiler.registerSection("NoiseGate");
+  cpuSections.analysis = cpuProfiler.registerSection("Analysis");
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
@@ -51,6 +71,11 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   hostSampleRate = sampleRate;
   sidLeft.prepare(sampleRate);
   sidRight.prepare(sampleRate);
+  sidRenderSilenceGate.prepare(sampleRate, samplesPerBlock);
+  sidRenderSilenceGate.setThreshold(1.0e-5f);
+  sidRenderSilenceGate.setHoldBlocks(8);
+  sidRenderTailPeak = 0.0f;
+  sidRenderWasSkipping = false;
 
   // Prepare all poly voice SID engines
   for (auto &pv : polyVoices) {
@@ -115,6 +140,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                      juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
   const auto cpuTimerStart = juce::Time::getHighResolutionTicks();
+
+  cpuProfiler.beginSection(cpuSections.paramsTransport);
 
   // Add messages from virtual keyboard (standalone mode)
   midiCollector.removeNextBlockOfMessages(midiMessages, buffer.getNumSamples());
@@ -216,6 +243,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     lastArpNote = -1;
   }
 
+  cpuProfiler.endSection(cpuSections.paramsTransport);
+  cpuProfiler.beginSection(cpuSections.deferredUpdates);
+
   // Detect chip model / clock mode changes — set dirty flags, defer the heavy
   // reinit to a non-RT context (handled via timerCallback or prepareToPlay).
   auto newLeftModel =
@@ -258,6 +288,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     }
   }
 
+  cpuProfiler.endSection(cpuSections.deferredUpdates);
+  cpuProfiler.beginSection(cpuSections.voiceSettings);
+
   // Sync voice settings from APVTS (skips SID writes if unchanged)
   for (int v = 0; v < 6; ++v) {
     applyVoiceSettings(v);
@@ -274,23 +307,32 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         applySettingsToPolyVoice(pi);
   }
 
+  cpuProfiler.endSection(cpuSections.voiceSettings);
+  cpuProfiler.beginSection(cpuSections.midi);
+
   // Handle MIDI
   for (const auto metadata : midiMessages) {
     handleMidiEvent(metadata.getMessage());
   }
+  cpuProfiler.endSection(cpuSections.midi);
 
   // Process arpeggiator (disabled while chord memory is active)
   const int numSamples = buffer.getNumSamples();
+  cpuProfiler.beginSection(cpuSections.arpeggiator);
   if (!chordMemory.enabled && arpEnabled && arpSeqCount > 0) {
     processArpeggiator(numSamples);
   }
+  cpuProfiler.endSection(cpuSections.arpeggiator);
 
   // Process wavetable step sequencer (after arp, before LFO)
+  cpuProfiler.beginSection(cpuSections.wavetable);
   if (wavetable.enabled) {
     processWavetable(numSamples);
   }
+  cpuProfiler.endSection(cpuSections.wavetable);
 
   // Process glide/portamento
+  cpuProfiler.beginSection(cpuSections.glide);
   if (glideTimeMs > 0.0f) {
     double glideTimeSec = glideTimeMs / 1000.0;
     double samplesPerGlide = hostSampleRate * glideTimeSec;
@@ -331,13 +373,17 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   }
+  cpuProfiler.endSection(cpuSections.glide);
 
   // Process LFO modulation
+  cpuProfiler.beginSection(cpuSections.lfo);
   if (lfo.enabled)
     tickLFO(lfo, lfoRng, numSamples);
   if (lfo2.enabled)
     tickLFO(lfo2, lfo2Rng, numSamples);
+  cpuProfiler.endSection(cpuSections.lfo);
 
+  cpuProfiler.beginSection(cpuSections.modulation);
   // PWM Sweep phase (triangle oscillator, block-rate)
   if (pwmSweepEnablePtr->load() > 0.5f) {
     float sweepRate = pwmSweepRatePtr->load();
@@ -367,11 +413,13 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Mod matrix (additional routing from any source to any dest)
   applyModMatrix();
+  cpuProfiler.endSection(cpuSections.modulation);
 
   // Poly modulation: propagate global modulation state to all active poly voices.
   // LFO/mod matrix/PWM sweep have already computed their values and written to
   // the mono SIDs (sidLeft/sidRight). We extract the effective offsets and apply
   // them to each poly voice's SID pair for PW, pitch, and filter cutoff.
+  cpuProfiler.beginSection(cpuSections.polyMod);
   if (isPolyActive()) {
     // Compute global PW modulation offset
     float val1 = lfo.enabled ? lfo.currentValue : 0.0f;
@@ -460,24 +508,75 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   }
+  cpuProfiler.endSection(cpuSections.polyMod);
 
+  cpuProfiler.beginSection(cpuSections.sidRender);
   generateAudio(buffer);
+  cpuProfiler.endSection(cpuSections.sidRender);
+  cpuProfiler.beginSection(cpuSections.sidFile);
   mixSidFilePlayer(buffer);
+  cpuProfiler.endSection(cpuSections.sidFile);
   processFXChain(buffer);
   applySafetyChain(buffer);
 
   // Measure CPU load: time spent / time available
+  cpuProfiler.beginSection(cpuSections.analysis);
   const auto cpuTimerEnd = juce::Time::getHighResolutionTicks();
   const double elapsed =
       juce::Time::highResolutionTicksToSeconds(cpuTimerEnd - cpuTimerStart);
   const double budget = static_cast<double>(numSamples) / getSampleRate();
   cpuLoadPercent.store(static_cast<float>(elapsed / budget * 100.0),
                        std::memory_order_relaxed);
+  cpuProfiler.endSection(cpuSections.analysis);
 }
 
 // ==========================================================================
 // processBlock subsystems (extracted for readability)
 // ==========================================================================
+
+bool BreadbinProcessor::hasActiveMonoSidSource(bool digiPlaying,
+                                               const float *inputLeft) const {
+  if (digiPlaying)
+    return true;
+
+  if (extInputEnabled && inputLeft != nullptr && extInputLevel > 0.0f)
+    return true;
+
+  for (const auto &voice : voices)
+    if (voice.active)
+      return true;
+
+  for (const auto &paraVoice : paraVoices)
+    if (paraVoice.midiNote >= 0)
+      return true;
+
+  return false;
+}
+
+bool BreadbinProcessor::shouldSkipMonoSidRender(
+    juce::AudioBuffer<float> &buffer, bool sourceActive, float targetLeftVG,
+    float targetRightVG) {
+  const float sourcePeak = sourceActive ? 1.0f : 0.0f;
+  const bool skip = sidRenderSilenceGate.update(sourcePeak, sidRenderTailPeak);
+
+  if (!skip) {
+    sidRenderWasSkipping = false;
+    return false;
+  }
+
+  if (!sidRenderWasSkipping) {
+    sidLeft.resetRuntimeSilenceState();
+    sidRight.resetRuntimeSilenceState();
+    sidRenderTailPeak = 0.0f;
+  }
+
+  sidRenderWasSkipping = true;
+  smoothedMasterVol = masterVolume;
+  smoothedLeftVoiceGain = targetLeftVG;
+  smoothedRightVoiceGain = targetRightVG;
+  buffer.clear();
+  return true;
+}
 
 void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
   const int numSamples = buffer.getNumSamples();
@@ -523,6 +622,10 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
   int digiBitDepth = static_cast<int>(digiBitDepthPtr->load()) == 1 ? 8 : 4;
 
   if (isPolyActive()) {
+    sidRenderSilenceGate.reset();
+    sidRenderTailPeak = 0.0f;
+    sidRenderWasSkipping = false;
+
     // === POLY SAMPLE GENERATION ===
     int activePolyIdx[MAX_POLY];
     int activePolyCount = 0;
@@ -593,12 +696,16 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
     }
   } else {
     // === MONO/PARAPHONIC SAMPLE GENERATION ===
-    float digiGain = (digiEnabled && digiSampler.isPlaying()) ? 3.0f : 1.0f;
+    bool digiPlaying = digiEnabled && digiSampler.isPlaying();
+    float digiGain = digiPlaying ? 3.0f : 1.0f;
+    const bool sourceActive = hasActiveMonoSidSource(digiPlaying, inputLeft);
+    if (shouldSkipMonoSidRender(buffer, sourceActive, targetLeftVG,
+                                targetRightVG))
+      return;
 
     sidLeft.setVolume(15);
     sidRight.setVolume(15);
 
-    bool digiPlaying = digiEnabled && digiSampler.isPlaying();
     if (digiPlaying && leftVoiceCount == 0) {
       sidLeft.muteVoices();
     } else {
@@ -610,6 +717,7 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
       sidRight.unmuteVoices();
     }
 
+    float blockPeak = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
       smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
       smoothedLeftVoiceGain += gainSmoothCoeff * (targetLeftVG - smoothedLeftVoiceGain);
@@ -654,7 +762,11 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
       leftChannel[i] = outL;
       if (rightChannel)
         rightChannel[i] = outR;
+
+      blockPeak = std::max(blockPeak, std::abs(outL));
+      blockPeak = std::max(blockPeak, std::abs(outR));
     }
+    sidRenderTailPeak = blockPeak;
   }
 }
 
@@ -704,6 +816,7 @@ void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
   const int numSamples = buffer.getNumSamples();
 
   // Chorus
+  cpuProfiler.beginSection(cpuSections.chorus);
   if (chorusEnablePtr->load() > 0.5f) {
     chorus.setRate(chorusRatePtr->load());
     chorus.setDepth(chorusDepthPtr->load());
@@ -715,8 +828,10 @@ void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
     juce::dsp::ProcessContextReplacing<float> chorusCtx(chorusBlock);
     chorus.process(chorusCtx);
   }
+  cpuProfiler.endSection(cpuSections.chorus);
 
   // Stereo delay
+  cpuProfiler.beginSection(cpuSections.delay);
   if (delayEnablePtr->load() > 0.5f) {
     float delayTimeLMs = delayTimeLPtr->load();
     float delayTimeRMs = delayTimeRPtr->load();
@@ -747,8 +862,10 @@ void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
         right[i] = dryR * (1.0f - mix) + wetR * mix;
     }
   }
+  cpuProfiler.endSection(cpuSections.delay);
 
   // Reverb
+  cpuProfiler.beginSection(cpuSections.reverb);
   if (reverbEnablePtr->load() > 0.5f) {
     reverb.setFeedback(reverbDecayPtr->load());
     reverb.setLPFreq(reverbDampingPtr->load());
@@ -767,19 +884,25 @@ void BreadbinProcessor::processFXChain(juce::AudioBuffer<float> &buffer) {
         right[i] = outR;
     }
   }
+  cpuProfiler.endSection(cpuSections.reverb);
 }
 
 void BreadbinProcessor::applySafetyChain(juce::AudioBuffer<float> &buffer) {
   const int numSamples = buffer.getNumSamples();
 
   // DC blocker, ultrasonic filter, limiter
+  cpuProfiler.beginSection(cpuSections.safetyFilters);
   juce::dsp::AudioBlock<float> block(buffer);
   juce::dsp::ProcessContextReplacing<float> context(block);
   subsonicFilter.process(context);
   ultrasonicFilter.process(context);
+  cpuProfiler.endSection(cpuSections.safetyFilters);
+  cpuProfiler.beginSection(cpuSections.limiter);
   safetyLimiter.process(context);
+  cpuProfiler.endSection(cpuSections.limiter);
 
   // Envelope-following noise gate with attack/hold/release smoothing
+  cpuProfiler.beginSection(cpuSections.noiseGate);
   const float gateThreshold =
       noiseGateThresholdPtr->load(std::memory_order_relaxed);
   if (gateThreshold > 0.0001f) {
@@ -834,6 +957,7 @@ void BreadbinProcessor::applySafetyChain(juce::AudioBuffer<float> &buffer) {
       }
     }
   }
+  cpuProfiler.endSection(cpuSections.noiseGate);
 }
 
 void BreadbinProcessor::handleMidiEvent(const juce::MidiMessage &msg) {

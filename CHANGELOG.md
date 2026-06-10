@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Headless performance profiling and A/B render harness**: `BreadbinIntegrationTests` now supports
+  `--cpu-profile --json <path>` section attribution and `--render-ab --out-dir <dir>` deterministic
+  WAV rendering for idle, typical-playing, and full-stack scenarios. Baseline artifacts are kept under
+  `releases/cpu_baseline_2026-06-10.json` and `releases/ab/88fa9f6fbf6c/`.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
@@ -100,6 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Idle SID render CPU**: added a `gm::SilenceGate`-backed skip around fully silent
+  mono/paraphonic SID rendering. Release-profile `idle-default` wall time dropped from 1818 us to
+  24.5 us per 512-sample block; `SIDRender` dropped from 1787 us to 0.09 us. WAV A/B passed for
+  idle, typical-playing, and full-stack references with diff RMS at or below -74.49 dBFS.
 - **SID Player Snapshot**: `snapshotSidPlayerToAPVTS()` was writing to nonexistent APVTS parameter
   IDs (`leftCutoff`, etc.) and silently no-opping. Now writes filter cutoff/resonance/mode directly
   to both SID engines, so snapshotting a loaded `.SID` tune updates the filter controls.

@@ -47,6 +47,9 @@ set(GHOSTMOON_OSS_DIR "C:/Users/estee/Desktop/My Stuff/Code/Antigravity/ghostmoo
     CACHE PATH "Path to the ghostmoon-oss repo")
 add_subdirectory("${GHOSTMOON_OSS_DIR}" "${CMAKE_BINARY_DIR}/ghostmoon_oss-build")
 
+set(GHOSTMOON_TOOLS_INCLUDE_DIR "C:/Users/estee/Desktop/My Stuff/Code/Antigravity/ghostmoon/tools/include"
+    CACHE PATH "Path to ghostmoon profiling/test tool headers")
+
 # Collect reSIDfp source files
 set(RESIDFP_DIR "${libsidplayfp_SOURCE_DIR}/src/builders/residfp-builder/residfp")
 file(GLOB RESIDFP_SOURCES
@@ -156,6 +159,7 @@ target_include_directories(Breadbin PRIVATE
     ${libsidplayfp_SOURCE_DIR}/src/builders/residfp-builder
     ${RESIDFP_DIR}
     ${RESIDFP_DIR}/resample
+    ${GHOSTMOON_TOOLS_INCLUDE_DIR}
     src
 )
 

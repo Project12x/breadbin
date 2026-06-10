@@ -1,6 +1,6 @@
 # Project State
 
-**Last Updated**: 2026-06-07
+**Last Updated**: 2026-06-10
 
 ## Current Status: Beta
 
@@ -73,6 +73,12 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 - **Phase D motion design — SPEC WRITTEN, NOT IMPLEMENTED**: design spec at
   `docs/superpowers/specs/2026-06-07-c64-reskin-phase-d-motion-design.md` covers blinking C64
   cursor, opt-in animated mod rings (default OFF), and subtle scope scanline drift. Parked/pending.
+- **CPU profiling pass T1 — LANDED**: headless `--cpu-profile` section attribution and
+  `--render-ab` deterministic WAV references are wired into `BreadbinIntegrationTests`.
+  Fully silent mono/paraphonic SID rendering now skips after output energy decays, using
+  `gm::SilenceGate` from `ghostmoon-oss`. Release profile: idle-default 1818 us -> 24.5 us
+  per 512-sample block; typical-playing 1822 us -> 1650 us; full-stack 4068 us -> 2987 us.
+  WAV A/B passed automatically for idle, typical-playing, and full-stack.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -95,6 +101,20 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 | BreadbinIntegrationTests | 409 | Pass |
 
 Run: `ctest --test-dir build -C Release`
+
+## Performance Baseline
+
+Release CPU artifacts:
+
+| Scenario | baseline wall | after T1 wall | baseline top section | after T1 top section |
+|----------|--------------:|--------------:|----------------------|---------------------|
+| idle-default | 1818 us | 24.5 us | SIDRender 1787 us | Limiter 12.6 us |
+| typical-playing | 1822 us | 1650 us | SIDRender 1782 us | SIDRender 1614 us |
+| full-stack | 4068 us | 2987 us | SIDRender 3946 us | SIDRender 2897 us |
+
+Artifacts: `releases/cpu_baseline_2026-06-10.json`,
+`releases/cpu_after_t1_2026-06-10.json`, `releases/ab/88fa9f6fbf6c/`, and
+`releases/ab/t1_2026-06-10/`.
 
 ## Directory Structure
 

@@ -9,10 +9,18 @@
 #include <ghostmoon/ui/synthwave/Controls.h>
 #include <ghostmoon/ui/synthwave/Chrome.h>
 #include <ghostmoon/ui/synthwave/Scope.h>
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <limits>
 #include <memory>
+#include <string>
 #include <vector>
 
 // ============================================================================
@@ -2861,11 +2869,344 @@ void testReverbSCDecayRange() {
   drawScopeBackground(g, r); drawScopeTrace(g, p, theme::cyan);
 }
 
+// ============================================================================
+// Phase 0 deterministic reference renders (--render-ab --out-dir <dir>)
+// ============================================================================
+
+namespace abrender {
+
+static constexpr double kRenderSampleRate = 48000.0;
+static constexpr int kRenderBlockSize = 512;
+static constexpr int kRenderChannels = 2;
+
+static void writeU16(std::ofstream &out, uint16_t v) {
+  const char bytes[2] = {static_cast<char>(v & 0xff),
+                         static_cast<char>((v >> 8) & 0xff)};
+  out.write(bytes, sizeof(bytes));
+}
+
+static void writeU32(std::ofstream &out, uint32_t v) {
+  const char bytes[4] = {static_cast<char>(v & 0xff),
+                         static_cast<char>((v >> 8) & 0xff),
+                         static_cast<char>((v >> 16) & 0xff),
+                         static_cast<char>((v >> 24) & 0xff)};
+  out.write(bytes, sizeof(bytes));
+}
+
+static bool writeWav16(const std::filesystem::path &path,
+                       const std::vector<float> &interleaved,
+                       int sampleRate, int channels) {
+  const auto frames = interleaved.size() / static_cast<size_t>(channels);
+  const auto dataBytes = frames * static_cast<size_t>(channels) * sizeof(int16_t);
+  if (dataBytes > static_cast<size_t>(std::numeric_limits<uint32_t>::max()))
+    return false;
+
+  std::ofstream out(path, std::ios::binary);
+  if (!out)
+    return false;
+
+  out.write("RIFF", 4);
+  writeU32(out, static_cast<uint32_t>(36 + dataBytes));
+  out.write("WAVE", 4);
+  out.write("fmt ", 4);
+  writeU32(out, 16);
+  writeU16(out, 1);
+  writeU16(out, static_cast<uint16_t>(channels));
+  writeU32(out, static_cast<uint32_t>(sampleRate));
+  writeU32(out, static_cast<uint32_t>(sampleRate * channels * sizeof(int16_t)));
+  writeU16(out, static_cast<uint16_t>(channels * sizeof(int16_t)));
+  writeU16(out, 16);
+  out.write("data", 4);
+  writeU32(out, static_cast<uint32_t>(dataBytes));
+
+  for (float s : interleaved) {
+    const float clean = std::isfinite(s) ? s : 0.0f;
+    const float clipped = std::clamp(clean, -1.0f, 1.0f);
+    const auto pcm = static_cast<int16_t>(std::lrint(clipped * 32767.0f));
+    writeU16(out, static_cast<uint16_t>(pcm));
+  }
+
+  return static_cast<bool>(out);
+}
+
+static void setParamReal(BreadbinProcessor &p, const char *id, float realValue) {
+  if (auto *param = p.apvts.getParameter(id))
+    param->setValueNotifyingHost(param->convertTo0to1(realValue));
+}
+
+static void addMidiAt(juce::MidiBuffer &midi, int64_t blockStart,
+                      int blockSamples, int64_t eventSample,
+                      const juce::MidiMessage &message) {
+  if (eventSample >= blockStart && eventSample < blockStart + blockSamples)
+    midi.addEvent(message, static_cast<int>(eventSample - blockStart));
+}
+
+struct Scenario {
+  const char *name;
+  const char *description;
+  double seconds;
+  std::function<void(BreadbinProcessor &)> setup;
+  std::function<void(juce::MidiBuffer &, int64_t, int)> midiForBlock;
+};
+
+static Scenario idleScenario() {
+  return {"idle-default", "defaults, no MIDI", 10.0,
+          [](BreadbinProcessor &) {},
+          [](juce::MidiBuffer &, int64_t, int) {}};
+}
+
+static Scenario typicalScenario() {
+  return {"typical-playing", "held C4 pulse voice, release tail", 12.0,
+          [](BreadbinProcessor &p) {
+            setParamReal(p, "masterVol", 0.8f);
+            setParamReal(p, "dualMode", 0.0f);
+            setParamReal(p, "voiceMode", 0.0f);
+            setParamReal(p, "leftDetune", -3.0f);
+            setParamReal(p, "rightDetune", 4.0f);
+          },
+          [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
+            addMidiAt(midi, blockStart, blockSamples, 0,
+                      juce::MidiMessage::noteOn(1, 60, (juce::uint8)104));
+            addMidiAt(midi, blockStart, blockSamples,
+                      static_cast<int64_t>(8.0 * kRenderSampleRate),
+                      juce::MidiMessage::noteOff(1, 60));
+          }};
+}
+
+static Scenario fullStackScenario() {
+  return {"full-stack", "poly+para, LFOs, wavetable, mod matrix, FX", 14.0,
+          [](BreadbinProcessor &p) {
+            setParamReal(p, "masterVol", 0.72f);
+            setParamReal(p, "dualMode", 1.0f);
+            setParamReal(p, "voiceMode", 3.0f);
+            setParamReal(p, "polyMaxNotes", 6.0f);
+            setParamReal(p, "paraSpread", 16.0f);
+            setParamReal(p, "glide", 35.0f);
+
+            setParamReal(p, "lfoEnable", 1.0f);
+            setParamReal(p, "lfoWave", 4.0f);
+            setParamReal(p, "lfoRate", 2.25f);
+            setParamReal(p, "lfoDepthFilt", 0.42f);
+            setParamReal(p, "lfoDepthPW", 0.28f);
+            setParamReal(p, "lfoDepthPitch", 0.10f);
+
+            setParamReal(p, "lfo2Enable", 1.0f);
+            setParamReal(p, "lfo2Wave", 3.0f);
+            setParamReal(p, "lfo2Rate", 4.0f);
+            setParamReal(p, "lfo2DepthFilt", 0.20f);
+            setParamReal(p, "lfo2DepthPW", 0.32f);
+            setParamReal(p, "lfo2DepthPitch", 0.08f);
+
+            setParamReal(p, "pwmSweepEnable", 1.0f);
+            setParamReal(p, "pwmSweepRate", 3.0f);
+            setParamReal(p, "pwmSweepDepth", 0.36f);
+
+            setParamReal(p, "filterEnvEnable", 1.0f);
+            setParamReal(p, "filterEnvAttack", 0.012f);
+            setParamReal(p, "filterEnvDecay", 0.24f);
+            setParamReal(p, "filterEnvSustain", 0.58f);
+            setParamReal(p, "filterEnvRelease", 0.45f);
+            setParamReal(p, "filterEnvAmount", 0.62f);
+
+            setParamReal(p, "wtEnable", 1.0f);
+            setParamReal(p, "wtNumSteps", 4.0f);
+            setParamReal(p, "wtRate", 9.0f);
+            setParamReal(p, "wtLoop", 1.0f);
+            const int waves[4] = {2, 1, 0, 3};
+            const int pitches[4] = {0, 7, -5, 12};
+            const int pws[4] = {2048, 1024, 3000, 1700};
+            for (int i = 0; i < 4; ++i) {
+              const auto prefix = juce::String("wt_s") + juce::String(i) + "_";
+              setParamReal(p, (prefix + "wave").toRawUTF8(), static_cast<float>(waves[i]));
+              setParamReal(p, (prefix + "pitch").toRawUTF8(), static_cast<float>(pitches[i]));
+              setParamReal(p, (prefix + "pw").toRawUTF8(), static_cast<float>(pws[i]));
+            }
+
+            setParamReal(p, "mod0_src", 1.0f);
+            setParamReal(p, "mod0_dst", 1.0f);
+            setParamReal(p, "mod0_amt", 0.82f);
+            setParamReal(p, "mod1_src", 2.0f);
+            setParamReal(p, "mod1_dst", 2.0f);
+            setParamReal(p, "mod1_amt", 0.32f);
+
+            setParamReal(p, "chorusEnable", 1.0f);
+            setParamReal(p, "chorusRate", 1.8f);
+            setParamReal(p, "chorusDepth", 0.58f);
+            setParamReal(p, "chorusMix", 0.45f);
+            setParamReal(p, "delayEnable", 1.0f);
+            setParamReal(p, "delayTimeL", 315.0f);
+            setParamReal(p, "delayTimeR", 470.0f);
+            setParamReal(p, "delayFeedback", 0.42f);
+            setParamReal(p, "delayMix", 0.34f);
+            setParamReal(p, "reverbEnable", 1.0f);
+            setParamReal(p, "reverbDecay", 0.78f);
+            setParamReal(p, "reverbDamping", 8800.0f);
+            setParamReal(p, "reverbMix", 0.30f);
+
+            setParamReal(p, "arpEnable", 1.0f);
+            setParamReal(p, "arpPattern", 2.0f);
+            setParamReal(p, "arpRate", 12.0f);
+            setParamReal(p, "arpOctaves", 2.0f);
+          },
+          [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
+            const int64_t off = static_cast<int64_t>(9.0 * kRenderSampleRate);
+            const int notes[] = {48, 55, 60, 64, 67};
+            for (int i = 0; i < 5; ++i) {
+              addMidiAt(midi, blockStart, blockSamples, i * 24,
+                        juce::MidiMessage::noteOn(1, notes[i], (juce::uint8)(92 + i * 5)));
+              addMidiAt(midi, blockStart, blockSamples, off + i * 24,
+                        juce::MidiMessage::noteOff(1, notes[i]));
+            }
+          }};
+}
+
+static bool renderScenario(const Scenario &scenario,
+                           const std::filesystem::path &outDir) {
+  auto p = createTestProcessor(kRenderSampleRate, kRenderBlockSize);
+  scenario.setup(*p);
+
+  const int totalSamples =
+      static_cast<int>(std::llround(scenario.seconds * kRenderSampleRate));
+  std::vector<float> interleaved;
+  interleaved.reserve(static_cast<size_t>(totalSamples) * kRenderChannels);
+
+  bool clean = true;
+  int rendered = 0;
+  while (rendered < totalSamples) {
+    const int n = std::min(kRenderBlockSize, totalSamples - rendered);
+    juce::AudioBuffer<float> buffer(kRenderChannels, n);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    scenario.midiForBlock(midi, rendered, n);
+    p->processBlock(buffer, midi);
+
+    for (int i = 0; i < n; ++i) {
+      for (int ch = 0; ch < kRenderChannels; ++ch) {
+        const float s = buffer.getSample(ch, i);
+        clean = clean && std::isfinite(s);
+        interleaved.push_back(s);
+      }
+    }
+    rendered += n;
+  }
+
+  const auto path = outDir / (std::string(scenario.name) + ".wav");
+  if (!writeWav16(path, interleaved, static_cast<int>(kRenderSampleRate),
+                  kRenderChannels)) {
+    std::cerr << "Failed to write " << path.string() << "\n";
+    return false;
+  }
+
+  std::cout << "Rendered " << scenario.name << " (" << scenario.description
+            << ") -> " << path.string() << (clean ? "\n" : " [NaN/Inf sanitized]\n");
+  return clean;
+}
+
+static bool handleArgs(int argc, char *argv[], int &exitCode) {
+  bool wantsRender = false;
+  std::filesystem::path outDir = "releases/ab/latest";
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--render-ab")
+      wantsRender = true;
+    else if (arg == "--out-dir" && i + 1 < argc)
+      outDir = argv[++i];
+  }
+
+  if (!wantsRender)
+    return false;
+
+  std::error_code ec;
+  std::filesystem::create_directories(outDir, ec);
+  if (ec) {
+    std::cerr << "Could not create output directory " << outDir.string()
+              << ": " << ec.message() << "\n";
+    exitCode = 1;
+    return true;
+  }
+
+  const Scenario scenarios[] = {idleScenario(), typicalScenario(),
+                                fullStackScenario()};
+  bool ok = true;
+  for (const auto &scenario : scenarios)
+    ok = renderScenario(scenario, outDir) && ok;
+
+  exitCode = ok ? 0 : 1;
+  return true;
+}
+
+} // namespace abrender
+
+// ============================================================================
+// CPU attribution harness (--cpu-profile [--json <path>])
+// ============================================================================
+
+#include <ghostmoon_tools/CpuProfileHarness.h>
+
+namespace cpuprofile {
+
+static std::unique_ptr<juce::AudioProcessor> makeProcessor() {
+  auto p = std::make_unique<BreadbinProcessor>();
+  juce::AudioProcessor::BusesLayout layout;
+  layout.outputBuses.add(juce::AudioChannelSet::stereo());
+  p->setBusesLayout(layout);
+  return p;
+}
+
+static void applyScenario(juce::AudioProcessor &processor,
+                          juce::AudioBuffer<float> &buffer,
+                          const abrender::Scenario &scenario) {
+  auto &p = static_cast<BreadbinProcessor &>(processor);
+  scenario.setup(p);
+  buffer.clear();
+  juce::MidiBuffer midi;
+  scenario.midiForBlock(midi, 0, buffer.getNumSamples());
+  p.processBlock(buffer, midi);
+}
+
+static gm::tools::CpuProfileSpec makeSpec() {
+  gm::tools::CpuProfileSpec spec;
+  spec.pluginName = "Breadbin";
+  spec.sampleRate = abrender::kRenderSampleRate;
+  spec.blockSize = abrender::kRenderBlockSize;
+  spec.warmupBlocks = 200;
+  spec.measureBlocks = 2000;
+  spec.makeProcessor = makeProcessor;
+  spec.getProfiler = [](juce::AudioProcessor &p) -> gm::CpuSectionProfiler & {
+    return static_cast<BreadbinProcessor &>(p).getCpuProfiler();
+  };
+  spec.scenarios = {
+      {"idle-default", "defaults, no MIDI",
+       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
+         applyScenario(p, b, abrender::idleScenario());
+       }},
+      {"typical-playing", "held C4 pulse voice",
+       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
+         applyScenario(p, b, abrender::typicalScenario());
+       }},
+      {"full-stack", "poly+para, LFOs, wavetable, mod matrix, FX",
+       [](juce::AudioProcessor &p, juce::AudioBuffer<float> &b) {
+         applyScenario(p, b, abrender::fullStackScenario());
+       }},
+  };
+  return spec;
+}
+
+} // namespace cpuprofile
+
 // Main
 // ============================================================================
 
-int main() {
+int main(int argc, char *argv[]) {
   juce::ScopedJuceInitialiser_GUI init;
+  {
+    int exitCode = 0;
+    if (abrender::handleArgs(argc, argv, exitCode))
+      return exitCode;
+    if (gm::tools::handleCpuProfileArgs(argc, argv, cpuprofile::makeSpec(),
+                                        exitCode))
+      return exitCode;
+  }
 
   std::printf("=== Breadbin Integration Test Suite ===\n\n");
 

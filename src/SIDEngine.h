@@ -80,6 +80,10 @@ public:
   void muteVoices();
   void unmuteVoices();
 
+  // Clear wrapper-side buffers after a long silent skip. This does not reset
+  // reSIDfp oscillator/filter state, so the next note keeps normal chip state.
+  void resetRuntimeSilenceState();
+
 private:
   std::unique_ptr<reSIDfp::SID> sid;
 
