@@ -8,12 +8,14 @@
 #include <ghostmoon/SilenceGate.h>
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <map>
 #include <mutex>
 #include <random>
+#include <string>
 #include <vector>
 
 class BreadbinProcessor : public juce::AudioProcessor {
@@ -613,6 +615,8 @@ public:
   // Headless per-section CPU attribution. Disabled unless the test harness
   // enables it, so Release plugin cost is one relaxed load per boundary.
   gm::CpuSectionProfiler &getCpuProfiler() { return cpuProfiler; }
+  void resetCpuAuditCounters();
+  std::string getCpuAuditCountersJson(int measuredBlocks) const;
   struct CpuSections {
     int paramsTransport = -1;
     int deferredUpdates = -1;
@@ -994,6 +998,12 @@ private:
   };
   GateCoeffCache gateCache;
 
+  struct CpuAuditCounters {
+    uint64_t blocks = 0;
+    uint64_t activePolyVoices = 0;
+    uint64_t activePolyNoteSlots = 0;
+  };
+  CpuAuditCounters cpuAuditCounters;
   gm::CpuSectionProfiler cpuProfiler;
   CpuSections cpuSections;
 

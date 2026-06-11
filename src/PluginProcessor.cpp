@@ -1,6 +1,28 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <sstream>
+
+namespace {
+static void addSidCounters(SIDEngine::PerfCounters &dst,
+                           const SIDEngine::PerfCounters &src) {
+  dst.setFrequencyCalls += src.setFrequencyCalls;
+  dst.setFrequencySame += src.setFrequencySame;
+  dst.setPulseWidthCalls += src.setPulseWidthCalls;
+  dst.setPulseWidthSame += src.setPulseWidthSame;
+  dst.setFilterCutoffCalls += src.setFilterCutoffCalls;
+  dst.setFilterCutoffSame += src.setFilterCutoffSame;
+  dst.setFilterResonanceCalls += src.setFilterResonanceCalls;
+  dst.setFilterResonanceSame += src.setFilterResonanceSame;
+  dst.setFilterModeCalls += src.setFilterModeCalls;
+  dst.setFilterModeSame += src.setFilterModeSame;
+  dst.setFilterVoicesCalls += src.setFilterVoicesCalls;
+  dst.setFilterVoicesSame += src.setFilterVoicesSame;
+  dst.writeRegisterCalls += src.writeRegisterCalls;
+  dst.writeRegisterSame += src.writeRegisterSame;
+}
+} // namespace
+
 BreadbinProcessor::BreadbinProcessor()
     : juce::AudioProcessor(
           juce::AudioProcessor::BusesProperties()
@@ -49,6 +71,57 @@ BreadbinProcessor::BreadbinProcessor()
 }
 
 BreadbinProcessor::~BreadbinProcessor() = default;
+
+void BreadbinProcessor::resetCpuAuditCounters() {
+  cpuAuditCounters = {};
+  sidLeft.resetPerfCounters();
+  sidRight.resetPerfCounters();
+  sidLeft.setPerfCountersEnabled(true);
+  sidRight.setPerfCountersEnabled(true);
+  for (auto &pv : polyVoices) {
+    pv.sidLeft->resetPerfCounters();
+    pv.sidRight->resetPerfCounters();
+    pv.sidLeft->setPerfCountersEnabled(true);
+    pv.sidRight->setPerfCountersEnabled(true);
+  }
+}
+
+std::string
+BreadbinProcessor::getCpuAuditCountersJson(int measuredBlocks) const {
+  SIDEngine::PerfCounters total;
+  addSidCounters(total, sidLeft.getPerfCounters());
+  addSidCounters(total, sidRight.getPerfCounters());
+  for (const auto &pv : polyVoices) {
+    addSidCounters(total, pv.sidLeft->getPerfCounters());
+    addSidCounters(total, pv.sidRight->getPerfCounters());
+  }
+
+  const auto denom =
+      measuredBlocks > 0 ? static_cast<double>(measuredBlocks) : 1.0;
+  std::ostringstream json;
+  json << "{"
+       << "\"blocks\":" << cpuAuditCounters.blocks
+       << ",\"activePolyVoicesAvg\":"
+       << (cpuAuditCounters.activePolyVoices / denom)
+       << ",\"activePolyNoteSlotsAvg\":"
+       << (cpuAuditCounters.activePolyNoteSlots / denom)
+       << ",\"setFrequencyCalls\":" << total.setFrequencyCalls
+       << ",\"setFrequencySame\":" << total.setFrequencySame
+       << ",\"setPulseWidthCalls\":" << total.setPulseWidthCalls
+       << ",\"setPulseWidthSame\":" << total.setPulseWidthSame
+       << ",\"setFilterCutoffCalls\":" << total.setFilterCutoffCalls
+       << ",\"setFilterCutoffSame\":" << total.setFilterCutoffSame
+       << ",\"setFilterResonanceCalls\":" << total.setFilterResonanceCalls
+       << ",\"setFilterResonanceSame\":" << total.setFilterResonanceSame
+       << ",\"setFilterModeCalls\":" << total.setFilterModeCalls
+       << ",\"setFilterModeSame\":" << total.setFilterModeSame
+       << ",\"setFilterVoicesCalls\":" << total.setFilterVoicesCalls
+       << ",\"setFilterVoicesSame\":" << total.setFilterVoicesSame
+       << ",\"writeRegisterCalls\":" << total.writeRegisterCalls
+       << ",\"writeRegisterSame\":" << total.writeRegisterSame
+       << "}";
+  return json.str();
+}
 
 bool BreadbinProcessor::isBusesLayoutSupported(
     const BusesLayout &layouts) const {
@@ -169,6 +242,19 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   voiceMode = static_cast<VoiceMode>(
       juce::jlimit(0, 3, static_cast<int>(voiceModePtr->load())));
   polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
+  if (cpuProfiler.isEnabled()) {
+    ++cpuAuditCounters.blocks;
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      const auto &pv = polyVoices[pi];
+      if (pv.active || pv.releasing) {
+        ++cpuAuditCounters.activePolyVoices;
+        cpuAuditCounters.activePolyNoteSlots +=
+            (voiceMode == VoiceMode::PolyPara)
+                ? static_cast<uint64_t>(pv.paraCount)
+                : 1u;
+      }
+    }
+  }
   bool digiEnabled = digiEnablePtr->load() > 0.5f;
   digiSampler.setRootNote(static_cast<int>(digiRootNotePtr->load()));
   digiSampler.setLooping(digiLoopPtr->load() > 0.5f);
