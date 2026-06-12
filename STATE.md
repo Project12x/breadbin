@@ -108,6 +108,13 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   `s3-worst-case` for listening (`diff RMS -30.66 dBFS`, centroid delta 1.131%):
   `releases/ab/exact_hoists_2026-06-11/s3-worst-case.wav` vs
   `releases/ab/poly_release_gate_2026-06-12/s3-worst-case.wav`.
+- **ECO Poly SID Budget — PLANNED**:
+  design and implementation plan written for explicit Manual ECO behavior:
+  `docs/superpowers/specs/2026-06-12-eco-poly-sid-budget-design.md` and
+  `docs/superpowers/plans/2026-06-12-eco-poly-sid-budget.md`. The planned Hybrid mode keeps one
+  stereo anchor note and clocks added poly notes on alternating single SID engines (`N + 1` SID
+  engines instead of current Ultra `2N`). ECO Off must preserve current behavior; Auto ECO is later
+  roadmap work after Manual ECO and listening validation.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing

@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `clock()` calls after their own rendered output tail falls below the shared `gm::SilenceGate`
   threshold, while preserving allocation/voice-stealing state. S3 worst-case A/B is flagged for
   listening before merge (`diff RMS -30.66 dBFS`, centroid delta 1.131%).
+- **ECO Poly SID Budget plan**: documented the Manual ECO design for Hybrid/Ultra/Max ECO poly
+  rendering, including a Settings popup, stereo-anchor policy, ECO-off preservation requirements,
+  and future Auto ECO roadmap.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for

@@ -182,6 +182,11 @@
 
 ## Phase 10: Performance & Sequencer
 
+- [ ] Manual ECO performance mode with Settings popup
+- [ ] Hybrid Poly SID Budget: one stereo anchor note, added notes alternate L/R SID engines
+- [ ] Max ECO Poly SID Budget: one SID engine per poly note
+- [ ] reSIDfp fork/API optimization path for lower per-engine SIDRender cost
+- [ ] Auto ECO Budget with visible status, thresholds, and hysteresis
 - [ ] More arp patterns (programmable user patterns)
 - [ ] Arp MIDI output (DAW records arpeggiated notes)
 - [ ] Arp hold/latch mode
@@ -203,6 +208,7 @@
 
 | Date | Feature | Resolution | Commit |
 |------|---------|------------|--------|
+| 2026-06-12 | ECO Poly SID Budget | Planned Manual ECO with Hybrid/Ultra/Max ECO budget modes, Settings popup, explicit stereo-anchor policy, and Auto ECO as future work | pending |
 | 2026-06-05 | UI scaling (in progress) | `ScaledEditor` transform-based DPI scaling + 75–150% selector persisted per machine; docs synced to current state | pending |
 | 2026-04-21 | ReverbSC MIT swap | Replaced proprietary ghostmoon ReverbSC link with bundled local MIT copy, removed proprietary dependency | `23f76f3` |
 | 2026-03-03 | UI polish pass | Conditional repaints, paraphonic voice hints, FX bypass dimming, mod matrix activity indicators | `8b5e1f0` |

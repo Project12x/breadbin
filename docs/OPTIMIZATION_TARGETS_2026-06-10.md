@@ -340,6 +340,45 @@ Flagged pair for user listening before merge:
 and the flagged S3 pair is audibly acceptable to the user. Revert or retune if
 the listen check finds tail truncation, clicks, or unacceptable tone loss.
 
+## T3b - Manual ECO Hybrid poly SID budget - **planned**
+
+**Evidence:** after the T3 candidate, S3 worst case is technically under the
+512-sample block budget but still close: wall average 9264.5 us, `SIDRender`
+9150.75 us, 86.85% of budget at 48 kHz / 512. Musician-feel discussion also
+showed that the typical path is comfortable, but worst case is not a fast-feel
+latency target. The largest remaining musical lever is reducing dense-poly SID
+engine count without hiding the dual-SID identity of the patch.
+
+**Planned fix:** add explicit Manual ECO settings with a `Poly SID Budget`.
+Hybrid keeps one stereo anchor note as a full L/R SID pair, while added poly
+notes clock one SID engine each and alternate L/R character. Current behavior
+becomes `Ultra` and remains the ECO-off/default path. `Max ECO` is planned as a
+later one-SID-per-note option. The full design is
+`docs/superpowers/specs/2026-06-12-eco-poly-sid-budget-design.md`; the
+implementation plan is
+`docs/superpowers/plans/2026-06-12-eco-poly-sid-budget.md`.
+
+**Landing area:** Breadbin plugin code and UI. No shared-code requirement for
+the first slice because this is product-specific voice allocation/render policy.
+The later reSIDfp fork/API path remains a separate shared or vendored-fork
+decision.
+
+**Effort:** high. This intentionally changes ECO-on poly render behavior and
+touches allocation, modulation sync, poly render mixing, UI, presets/state, and
+profiling scenarios.
+
+**Acceptance criteria:**
+- ECO Off preserves current Ultra behavior in tests and WAV A/B.
+- ECO Hybrid has a visible Settings control and status text; no hidden automatic
+  behavior switching.
+- S3 or an equivalent dense-poly ECO scenario targets wall average below
+  6500 us at 48 kHz / 512; actual results must be documented even if the target
+  is missed.
+- ECO Hybrid render gets its own WAV references and listening flags; it is not
+  treated as a behavior-preserving replacement for Ultra.
+- Existing Ultra/current behavior remains available for patches that rely on
+  full dual-SID-per-note stereo spread.
+
 ## T4 - Safety-chain micro-costs - **defer**
 
 **Evidence:** the whole safety chain is small compared with SID render cost:
