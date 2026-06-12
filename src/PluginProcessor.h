@@ -125,6 +125,14 @@ public:
     int paraCount = 0;
   };
   static constexpr int MAX_POLY = 12;
+  struct PolyVoiceRoleDebug {
+    int midiNote = -1;
+    uint32_t startSample = 0;
+    bool active = false;
+    bool releasing = false;
+    PolySidRenderRole role = PolySidRenderRole::Pair;
+  };
+  std::array<PolyVoiceRoleDebug, MAX_POLY> getPolyVoiceRoleDebug() const;
 
   // Wavetable step sequencer
   struct WavetableStep {

@@ -130,6 +130,17 @@ BreadbinProcessor::getCpuAuditCountersJson(int measuredBlocks) const {
   return json.str();
 }
 
+std::array<BreadbinProcessor::PolyVoiceRoleDebug, BreadbinProcessor::MAX_POLY>
+BreadbinProcessor::getPolyVoiceRoleDebug() const {
+  std::array<PolyVoiceRoleDebug, MAX_POLY> out{};
+  for (int i = 0; i < MAX_POLY; ++i) {
+    const auto &pv = polyVoices[i];
+    out[i] = {pv.midiNote, pv.startSample, pv.active, pv.releasing,
+              pv.sidRenderRole};
+  }
+  return out;
+}
+
 bool BreadbinProcessor::isBusesLayoutSupported(
     const BusesLayout &layouts) const {
   // Output must be stereo
@@ -453,14 +464,20 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       for (int pi = 0; pi < polyMaxNotes; ++pi) {
         auto &pv = polyVoices[pi];
         if (!pv.active || !pv.isGliding) continue;
+        const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                             pv.sidRenderRole == PolySidRenderRole::LeftMono;
+        const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                              pv.sidRenderRole == PolySidRenderRole::RightMono;
         if (std::abs(pv.currentHz - pv.targetHz) < 0.1) {
           pv.currentHz = pv.targetHz;
           pv.isGliding = false;
         } else {
           pv.currentHz += (pv.targetHz - pv.currentHz) * glideRate;
           for (int v = 0; v < 3; ++v) {
-            pv.sidLeft->setFrequency(v, pv.currentHz);
-            pv.sidRight->setFrequency(v, pv.currentHz);
+            if (useLeft)
+              pv.sidLeft->setFrequency(v, pv.currentHz);
+            if (useRight)
+              pv.sidRight->setFrequency(v, pv.currentHz);
           }
         }
       }
@@ -570,6 +587,10 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (!pv.active && !pv.releasing) continue;
+      const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                           pv.sidRenderRole == PolySidRenderRole::LeftMono;
+      const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                            pv.sidRenderRole == PolySidRenderRole::RightMono;
 
       // Per-voice filter envelope
       if (filterEnvOn)
@@ -582,15 +603,19 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           0, 2047, baseFilterCutoffLeft + filterModOffset + perVoiceEnvOffset);
       int rightCutoff = juce::jlimit(
           0, 2047, baseFilterCutoffRight + filterModOffset + perVoiceEnvOffset);
-      pv.sidLeft->setFilterCutoff(leftCutoff);
-      pv.sidRight->setFilterCutoff(rightCutoff);
+      if (useLeft)
+        pv.sidLeft->setFilterCutoff(leftCutoff);
+      if (useRight)
+        pv.sidRight->setFilterCutoff(rightCutoff);
 
       // Apply PW modulation to all voices on this poly pair
       for (int v = 0; v < 3; ++v) {
         int basePWL = wtActive ? wtStep.pulseWidth : voiceSettings[v].pulseWidth;
-        pv.sidLeft->setPulseWidth(v, std::clamp(basePWL + pwMod, 0, 4095));
+        if (useLeft)
+          pv.sidLeft->setPulseWidth(v, std::clamp(basePWL + pwMod, 0, 4095));
         int basePWR = wtActive ? wtStep.pulseWidth : voiceSettings[v + 3].pulseWidth;
-        pv.sidRight->setPulseWidth(v, std::clamp(basePWR + pwMod, 0, 4095));
+        if (useRight)
+          pv.sidRight->setPulseWidth(v, std::clamp(basePWR + pwMod, 0, 4095));
       }
 
       // Apply pitch modulation + pitch bend to all voices
@@ -606,18 +631,18 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
             double hz = 440.0 * std::pow(2.0,
                 (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0);
             double modHz = hz * pitchMultiplier * bendMultiplier;
-            if (voiceSettings[v].enabled)
+            if (useLeft && voiceSettings[v].enabled)
               pv.sidLeft->setFrequency(v, modHz * cachedDetuneL);
-            if (voiceSettings[v + 3].enabled)
+            if (useRight && voiceSettings[v + 3].enabled)
               pv.sidRight->setFrequency(v, modHz * cachedDetuneR);
           }
         }
       } else {
         double modHz = pv.currentHz * pitchMultiplier * bendMultiplier;
         for (int v = 0; v < 3; ++v) {
-          if (voiceSettings[v].enabled)
+          if (useLeft && voiceSettings[v].enabled)
             pv.sidLeft->setFrequency(v, modHz * cachedDetuneL);
-          if (voiceSettings[v + 3].enabled)
+          if (useRight && voiceSettings[v + 3].enabled)
             pv.sidRight->setFrequency(v, modHz * cachedDetuneR);
         }
       }
@@ -815,12 +840,23 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
           continue;
         }
 
-        float sL = pv.sidLeft->clock();
-        float sR = pv.sidRight->clock();
-
-        float fade = pv.fadeGain;
-        const float voiceL = sL * fade;
-        const float voiceR = sR * fade;
+        float voiceL = 0.0f;
+        float voiceR = 0.0f;
+        switch (pv.sidRenderRole) {
+        case PolySidRenderRole::Pair: {
+          const float sL = pv.sidLeft->clock();
+          const float sR = pv.sidRight->clock();
+          voiceL = sL * pv.fadeGain;
+          voiceR = sR * pv.fadeGain;
+          break;
+        }
+        case PolySidRenderRole::LeftMono:
+          voiceL = pv.sidLeft->clock() * pv.fadeGain;
+          break;
+        case PolySidRenderRole::RightMono:
+          voiceR = pv.sidRight->clock() * pv.fadeGain;
+          break;
+        }
         outL += voiceL * leftGainL * smoothedLeftVoiceGain
               + voiceR * rightGainL * smoothedRightVoiceGain;
         outR += voiceL * leftGainR * smoothedLeftVoiceGain
@@ -1621,21 +1657,29 @@ void BreadbinProcessor::updateAllVoiceFrequencies() {
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (!pv.active && !pv.releasing) continue;
+      const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                           pv.sidRenderRole == PolySidRenderRole::LeftMono;
+      const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                            pv.sidRenderRole == PolySidRenderRole::RightMono;
       if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
         // PolyPara: each SID voice has its own note
         for (int v = 0; v < 3; ++v) {
           if (pv.paraNote[v] >= 0) {
             double hz = 440.0 * std::pow(2.0,
                 (static_cast<double>(pv.paraNote[v]) - 69.0) / 12.0) * bendMult;
-            pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
-            pv.sidRight->setFrequency(v, hz * cachedDetuneR);
+            if (useLeft)
+              pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
+            if (useRight)
+              pv.sidRight->setFrequency(v, hz * cachedDetuneR);
           }
         }
       } else {
         double hz = pv.currentHz * bendMult;
         for (int v = 0; v < 3; ++v) {
-          pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
-          pv.sidRight->setFrequency(v, hz * cachedDetuneR);
+          if (useLeft)
+            pv.sidLeft->setFrequency(v, hz * cachedDetuneL);
+          if (useRight)
+            pv.sidRight->setFrequency(v, hz * cachedDetuneR);
         }
       }
     }
@@ -1936,6 +1980,7 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
+  rebalancePolyRenderRoles();
 
   // Calculate frequency
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
@@ -1945,14 +1990,23 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   // Apply current voice settings and filter state to this poly voice
   applySettingsToPolyVoice(idx);
 
-  // Trigger all enabled voices on both SIDs
-  for (int v = 0; v < 3; ++v) {
-    if (voiceSettings[v].enabled)
-      pv.sidLeft->noteOn(v, midiNote, velocity, leftDetuneCents);
+  const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                       pv.sidRenderRole == PolySidRenderRole::LeftMono;
+  const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                        pv.sidRenderRole == PolySidRenderRole::RightMono;
+
+  // Trigger enabled voices only on the rendered SID side(s).
+  if (useLeft) {
+    for (int v = 0; v < 3; ++v) {
+      if (voiceSettings[v].enabled)
+        pv.sidLeft->noteOn(v, midiNote, velocity, leftDetuneCents);
+    }
   }
-  for (int v = 0; v < 3; ++v) {
-    if (voiceSettings[v + 3].enabled)
-      pv.sidRight->noteOn(v, midiNote, velocity, rightDetuneCents);
+  if (useRight) {
+    for (int v = 0; v < 3; ++v) {
+      if (voiceSettings[v + 3].enabled)
+        pv.sidRight->noteOn(v, midiNote, velocity, rightDetuneCents);
+    }
   }
 }
 
@@ -2211,10 +2265,14 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
       pv.sidLeft->setSync(slot, false);
       pv.sidRight->setRingMod(slot, false);
       pv.sidRight->setSync(slot, false);
+      const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                           pv.sidRenderRole == PolySidRenderRole::LeftMono;
+      const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                            pv.sidRenderRole == PolySidRenderRole::RightMono;
       // Trigger on this specific SID voice slot
-      if (voiceSettings[slot].enabled)
+      if (useLeft && voiceSettings[slot].enabled)
         pv.sidLeft->noteOn(slot, midiNote, velocity, leftDetuneCents);
-      if (voiceSettings[slot + 3].enabled)
+      if (useRight && voiceSettings[slot + 3].enabled)
         pv.sidRight->noteOn(slot, midiNote, velocity, rightDetuneCents);
       return;
     }
@@ -2252,6 +2310,7 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
+  rebalancePolyRenderRoles();
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
   pv.currentHz = pv.targetHz;
   pv.isGliding = false;
@@ -2267,10 +2326,15 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
 
   applySettingsToPolyVoice(idx);
 
-  // Trigger only voice 0 (first para slot)
-  if (voiceSettings[0].enabled)
+  const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                       pv.sidRenderRole == PolySidRenderRole::LeftMono;
+  const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
+                        pv.sidRenderRole == PolySidRenderRole::RightMono;
+
+  // Trigger only voice 0 (first para slot) on the rendered SID side(s).
+  if (useLeft && voiceSettings[0].enabled)
     pv.sidLeft->noteOn(0, midiNote, velocity, leftDetuneCents);
-  if (voiceSettings[3].enabled)
+  if (useRight && voiceSettings[3].enabled)
     pv.sidRight->noteOn(0, midiNote, velocity, rightDetuneCents);
 }
 

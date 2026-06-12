@@ -2776,6 +2776,46 @@ static void assertEcoRoleCounters(BreadbinProcessor &p, uint64_t expectedPair,
               rightMessage.c_str());
 }
 
+static void assertHybridPairBelongsToAnchor(
+    const BreadbinProcessor &p, BreadbinProcessor::PolyStereoAnchor anchor,
+    const char *context) {
+  const auto voices = p.getPolyVoiceRoleDebug();
+  int expectedNote = -1;
+  uint32_t expectedStart = 0;
+  bool foundActive = false;
+  int pairNote = -1;
+  int pairCount = 0;
+
+  for (const auto &voice : voices) {
+    if (!voice.active && !voice.releasing)
+      continue;
+
+    if (!foundActive ||
+        (anchor == BreadbinProcessor::PolyStereoAnchor::Oldest &&
+         voice.startSample < expectedStart) ||
+        (anchor == BreadbinProcessor::PolyStereoAnchor::Newest &&
+         voice.startSample > expectedStart)) {
+      expectedNote = voice.midiNote;
+      expectedStart = voice.startSample;
+      foundActive = true;
+    }
+
+    if (voice.role == BreadbinProcessor::PolySidRenderRole::Pair) {
+      pairNote = voice.midiNote;
+      ++pairCount;
+    }
+  }
+
+  const std::string activeMessage =
+      std::string(context) + ": has active/releasing voice";
+  const std::string countMessage = std::string(context) + ": exactly one Pair";
+  const std::string ownerMessage =
+      std::string(context) + ": Pair belongs to anchor voice";
+  ASSERT_TRUE(foundActive, activeMessage.c_str());
+  ASSERT_TRUE(pairCount == 1, countMessage.c_str());
+  ASSERT_TRUE(pairNote == expectedNote, ownerMessage.c_str());
+}
+
 void testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice() {
   std::printf("--- Poly release skips silent SID render without freeing voice ---\n");
   auto p = createTestProcessor();
@@ -3150,6 +3190,9 @@ void testEcoHybridOldestReusesReleasingPairSlotPreservingPair() {
   processBlock(*p, 512, &firstNotes);
   assertEcoRoleCounters(*p, 1, 1, 0,
                         "Initial Hybrid/Oldest two-note assignment");
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Oldest,
+      "Initial Hybrid/Oldest two-note assignment");
 
   juce::MidiBuffer releaseAndReuse;
   releaseAndReuse.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
@@ -3158,6 +3201,9 @@ void testEcoHybridOldestReusesReleasingPairSlotPreservingPair() {
 
   assertEcoRoleCounters(*p, 1, 1, 0,
                         "Hybrid/Oldest releasing Pair slot reuse");
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Oldest,
+      "Hybrid/Oldest releasing Pair slot reuse");
 }
 
 void testEcoHybridOldestStealsPairSlotPreservingPair() {
@@ -3179,6 +3225,9 @@ void testEcoHybridOldestStealsPairSlotPreservingPair() {
 
   assertEcoRoleCounters(*p, 1, 1, 0,
                         "Hybrid/Oldest stolen Pair slot replacement");
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Oldest,
+      "Hybrid/Oldest stolen Pair slot replacement");
 }
 
 void testEcoMaxEcoAssignsAlternatingMonoRoles() {
@@ -3238,9 +3287,39 @@ void testEcoHybridNewestKeepsOnePairForNewestAnchor() {
   midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
   processBlock(*p, 512, &midi);
 
-  // Audit counters expose aggregate roles, not note-to-role identity.
   assertEcoRoleCounters(*p, 1, 1, 1,
                         "Hybrid/Newest three-note assignment");
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Newest,
+      "Hybrid/Newest three-note assignment");
+}
+
+void testEcoHybridReducesPolySidClockWork() {
+  std::printf("--- ECO Hybrid reduces poly SID clock work ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  p->resetCpuAuditCounters();
+  for (int i = 0; i < 8; ++i)
+    processBlock(*p);
+  const auto json = p->getCpuAuditCountersJson(8);
+  ASSERT_TRUE(extractJsonCounter(json, "polyPairVoiceBlocks") == 8,
+              "One pair role per block for three-note Hybrid");
+  ASSERT_TRUE(extractJsonCounter(json, "polyLeftMonoVoiceBlocks") == 8,
+              "One left mono role per block for three-note Hybrid");
+  ASSERT_TRUE(extractJsonCounter(json, "polyRightMonoVoiceBlocks") == 8,
+              "One right mono role per block for three-note Hybrid");
 }
 
 void testEcoRoleChangeRebalancesHeldPolyVoices() {
@@ -3826,6 +3905,7 @@ int main(int argc, char *argv[]) {
   abrender::testEcoMaxEcoAssignsAlternatingMonoRoles();
   abrender::testEcoUltraAssignsAllPairRoles();
   abrender::testEcoHybridNewestKeepsOnePairForNewestAnchor();
+  abrender::testEcoHybridReducesPolySidClockWork();
   abrender::testEcoRoleChangeRebalancesHeldPolyVoices();
 
   // State persistence
