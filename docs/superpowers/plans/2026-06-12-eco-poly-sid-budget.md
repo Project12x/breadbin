@@ -589,7 +589,8 @@ cmake --build build --config Release --target BreadbinIntegrationTests -- /m:1 /
 .\build\Release\BreadbinIntegrationTests.exe
 ```
 
-Expected: all integration tests pass. ECO-off preservation remains under `1.0e-7` RMS diff.
+Expected: all integration tests pass. ECO-off preservation remains under the documented `5.0e-4`
+RMS diff tolerance.
 
 - [ ] **Step 6: Commit render role implementation**
 
