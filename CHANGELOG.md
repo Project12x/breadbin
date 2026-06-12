@@ -116,6 +116,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mono/paraphonic SID rendering. Release-profile `idle-default` wall time dropped from 1818 us to
   24.5 us per 512-sample block; `SIDRender` dropped from 1787 us to 0.09 us. WAV A/B passed for
   idle, typical-playing, and full-stack references with diff RMS at or below -74.49 dBFS.
+- **Exact pitch-ratio hoists**: moved block-constant pitch-bend/modulation `std::pow`
+  calculations out of active-voice loops without changing polyphony, SID register ordering, or
+  digi `$D418` writes. S3 `PolyMod` measured 4.24 us -> 3.92 us and `Modulation` 1.61 us ->
+  1.49 us; full S1-S6 WAV A/B passed automatically against `releases/ab/1931533/`.
 - **SID Player Snapshot**: `snapshotSidPlayerToAPVTS()` was writing to nonexistent APVTS parameter
   IDs (`leftCutoff`, etc.) and silently no-opping. Now writes filter cutoff/resonance/mode directly
   to both SID engines, so snapshotting a loaded `.SID` tune updates the filter controls.

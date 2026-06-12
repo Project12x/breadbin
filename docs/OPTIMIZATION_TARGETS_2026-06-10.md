@@ -172,6 +172,55 @@ phase after long idle.
 - No output goes silent while a source is active; no NaN/Inf/click evidence. Met
   by integration coverage plus A/B metrics.
 
+## T1b - Exact pitch-ratio hoists outside SID clocking - **landed**
+
+**Evidence:** after T1, the dominant cost is still active/releasing SID clocking,
+but S3 also spends measurable time in non-gating block-rate work:
+`PolyMod` 4.24 us and `Modulation` 1.61 us in
+`releases/cpu_pre_no_behavior_2026-06-11.json`. These sections are small, so
+the target is limited to exact arithmetic cleanup outside the SID state machine.
+
+**Result:** hoisted block-constant pitch-bend and pitch-modulation
+`std::pow(2, semitones / 12)` calculations out of active-voice loops. The same
+double formula feeds the same `setFrequency` calls in the same order. No
+polyphony allocation, voice activity, gating, SID register sequencing, digi
+`$D418` writes, or reset semantics changed.
+
+**Landing area:** Breadbin `PluginProcessor.cpp`. Shared Ghostmoon was checked:
+full `ghostmoon` has broader tuning helpers, but the GPL-compatible slice does
+not currently expose a small exact helper. A shared approximation/LUT was not
+used because that would be a tone-touching change.
+
+**Effort:** low. The expected win is small and section-local; `SIDRender`
+remains the real bottleneck.
+
+**Before/after:** `releases/cpu_pre_no_behavior_2026-06-11.json` ->
+`releases/cpu_after_exact_hoists_2026-06-11.json`.
+
+| Scenario | wall before | wall after | `Modulation` before -> after | `PolyMod` before -> after |
+|---|---:|---:|---:|---:|
+| S2 `s2-typical-playing` | 3.76e+03 us | 3.81e+03 us | 0.68 -> 0.65 us | 1.07 -> 1.16 us |
+| S3 `s3-worst-case` | 9.96e+03 us | 1.01e+04 us | 1.61 -> 1.49 us | 4.24 -> 3.92 us |
+
+The S3 section-local win is measurable (`PolyMod` -7.5%, `Modulation` -7.5%),
+but total wall time is dominated by run-to-run `SIDRender` variance. This does
+not satisfy the main T2 optimization goal.
+
+**WAV A/B:** rendered to `releases/ab/exact_hoists_2026-06-11/` and compared
+against the S1-S6 pre-T2 references in `releases/ab/1931533/`.
+
+| Scenario | diff peak | diff RMS | output RMS delta | centroid delta | result |
+|---|---:|---:|---:|---:|---|
+| S1 idle | -71.22 dBFS | -103.03 dBFS | -0.0012 dB | 0.033% | pass |
+| S2 typical | -55.04 dBFS | -76.71 dBFS | +0.0001 dB | 0.004% | pass |
+| S3 worst | -65.70 dBFS | -84.88 dBFS | +0.0011 dB | 0.005% | pass |
+| S4 decay | -49.48 dBFS | -86.10 dBFS | +0.0004 dB | 0.012% | pass |
+| S5 sweep | -69.48 dBFS | -85.22 dBFS | +0.0004 dB | 0.000% | pass |
+| S5 pink burst | -67.39 dBFS | -88.22 dBFS | +0.0006 dB | 0.000% | pass |
+| S6 digi 4-bit | -55.04 dBFS | -73.02 dBFS | +0.0056 dB | 0.010% | pass |
+
+S5 input WAVs are bit-identical. Flagged pairs for listening: none.
+
 ## T2 - Same-value SID register/write guards - **planned next**
 
 **Evidence:** the preserve-tone audit counters show repeated no-op SID writes in
@@ -186,9 +235,11 @@ silence. The pinned timing baseline remains `SIDRender` dominated: S2
 **Planned fix:** add behavior-preserving same-value guards around SID wrapper
 setter and register write paths so unchanged values do not re-enter reSIDfp.
 Keep the first implementation narrow and measured: no voice-count reduction, no
-quality mode, no silence gate expansion. If the guard helper can be expressed as
-a reusable primitive, land it in `ghostmoongpl` and full `ghostmoon` first, then
-consume it in Breadbin.
+quality mode, no silence gate expansion. This requires explicit approval before
+implementation because reSIDfp updates internal bus TTL/sync side effects even
+for same-value writes. If the guard helper can be expressed as a reusable
+primitive, land it in `ghostmoongpl` and full `ghostmoon` first, then consume it
+in Breadbin.
 
 **Landing area:** likely Breadbin `SIDEngine` wrapper first; promote any generic
 guard primitive to `ghostmoongpl`/full `ghostmoon` before plugin consumption.
@@ -259,8 +310,9 @@ Breadbin's sound and release safety story.
   instrument's core sound, not waste.
 - `Reverb`, `Chorus`, and `Delay` in `full-stack`. Together they are under 2%
   of measured section time and are only meaningful when enabled.
-- Per-block parameter sync, LFO, modulation, arpeggiator, and wavetable sections.
-  Each is below 8 us in the worst scenario, and most are below 3 us.
+- Further per-block parameter sync, LFO, modulation, arpeggiator, and wavetable
+  work after T1b. Each remaining section is small; revisit only if ETW or a new
+  section table shows a concrete issue.
 - JUCE, libsidplayfp, and reSIDfp source modifications.
 
 ## Verification Plan

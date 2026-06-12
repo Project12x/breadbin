@@ -95,6 +95,11 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   `s6-digi-4bit`, a deterministic 4-bit `$D418` playback case. The profile probe measured
   S6 at 1074.1 us wall avg, 1049.87 us `SIDRender`, and 1738066/1760554 same-value register
   writes.
+- **Exact pitch-ratio hoists — LANDED**:
+  block-constant pitch-bend/modulation `std::pow` ratios are hoisted out of active-voice loops
+  without changing SID call order, polyphony behavior, register sequencing, or digi `$D418`
+  writes. S3 section-local profile moved `PolyMod` 4.24 us -> 3.92 us and `Modulation`
+  1.61 us -> 1.49 us; full S1-S6 WAV A/B passed automatically with no flagged pairs.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -139,6 +144,9 @@ and baseline are `releases/ab/4c07888/` and
 are pinned at `releases/cpu_audit_counters_2026-06-10.json`; use that artifact
 for no-op ratios, not as a replacement timing baseline. Pre-T2 A/B references
 including deterministic digi playback are under `releases/ab/1931533/`.
+The exact-hoist pass is captured in
+`releases/cpu_after_exact_hoists_2026-06-11.json` and
+`releases/ab/exact_hoists_2026-06-11/`.
 
 ## Directory Structure
 

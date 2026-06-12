@@ -540,6 +540,8 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     // Process per-voice filter envelope and apply all modulation to poly voices
     bool filterEnvOn = filterEnvEnablePtr->load() > 0.5f;
     float filterEnvAmt = filterEnvOn ? filterEnvAmountPtr->load() : 0.0f;
+    double bendMultiplier = 1.0;
+    bool bendMultiplierReady = false;
 
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
@@ -568,8 +570,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
 
       // Apply pitch modulation + pitch bend to all voices
-      double bendSemitones = pitchBendValue * pitchBendRange;
-      double bendMultiplier = std::pow(2.0, bendSemitones / 12.0);
+      if (!bendMultiplierReady) {
+        double bendSemitones = pitchBendValue * pitchBendRange;
+        bendMultiplier = std::pow(2.0, bendSemitones / 12.0);
+        bendMultiplierReady = true;
+      }
       if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
         // PolyPara: each SID voice has its own note frequency
         for (int v = 0; v < 3; ++v) {
@@ -2724,11 +2729,12 @@ void BreadbinProcessor::applyModMatrix() {
   // Apply pitch mod (semitones)
   if (pitchMod != 0.0f) {
     float semitoneMod = pitchMod * 2.0f; // ±2 semitones at full depth
+    double pitchMultiplier = std::pow(2.0, semitoneMod / 12.0);
     for (int v = 0; v < 6; ++v) {
       if (voices[v].active) {
         double baseHz =
             voices[v].isGliding ? voices[v].currentHz : voices[v].targetHz;
-        double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+        double modHz = baseHz * pitchMultiplier;
         SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
         sid.setFrequency(v % 3, modHz);
       }
@@ -2895,13 +2901,14 @@ void BreadbinProcessor::applyLFOModulation() {
   if (wtActive)
     semitoneMod += static_cast<float>(wtStep.pitchOffset);
   if (anyVoiceActive) {
+    double pitchMultiplier = std::pow(2.0, semitoneMod / 12.0);
     for (int v = 0; v < 6; ++v) {
       if (!voices[v].active)
         continue;
       // Use currentHz which includes sync/ring-mod offset from triggerNote.
       // targetHz is always the base note without offset.
       double baseHz = voices[v].currentHz;
-      double modHz = baseHz * std::pow(2.0, semitoneMod / 12.0);
+      double modHz = baseHz * pitchMultiplier;
       SIDEngine &sid = (v < 3) ? sidLeft : sidRight;
       sid.setFrequency(v % 3, modHz);
     }
