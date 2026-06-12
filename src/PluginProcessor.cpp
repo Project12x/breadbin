@@ -436,9 +436,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
 
   // Sync voice settings to active poly voices (waveform, ADSR, filter, etc.)
   if (isPolyActive()) {
-    for (int pi = 0; pi < polyMaxNotes; ++pi)
-      if (polyVoices[pi].active || polyVoices[pi].releasing)
-        applySettingsToPolyVoice(pi);
+    for (int pi = 0; pi < polyMaxNotes; ++pi) {
+      const auto &pv = polyVoices[pi];
+      if (pv.active || pv.releasing)
+        applySettingsToPolyVoice(pi, usesLeft(pv.sidRenderRole),
+                                 usesRight(pv.sidRenderRole));
+    }
   }
 
   cpuProfiler.endSection(cpuSections.voiceSettings);
@@ -1985,7 +1988,7 @@ void BreadbinProcessor::syncPromotedPolyRenderSides(
     if (!gainedLeft && !gainedRight)
       continue;
 
-    applySettingsToPolyVoice(i);
+    applySettingsToPolyVoice(i, gainedLeft, gainedRight);
 
     if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
       for (int slot = 0; slot < 3; ++slot) {
@@ -2050,13 +2053,11 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.currentHz = pv.targetHz;
   pv.isGliding = false;
 
-  // Apply current voice settings and filter state to this poly voice
-  applySettingsToPolyVoice(idx);
-
   const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
                        pv.sidRenderRole == PolySidRenderRole::LeftMono;
   const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
                         pv.sidRenderRole == PolySidRenderRole::RightMono;
+  applySettingsToPolyVoice(idx, useLeft, useRight);
 
   // Trigger enabled voices only on the rendered SID side(s).
   if (useLeft) {
@@ -2389,12 +2390,11 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
     pv.paraVelocity[i] = 0;
   }
 
-  applySettingsToPolyVoice(idx);
-
   const bool useLeft = pv.sidRenderRole == PolySidRenderRole::Pair ||
                        pv.sidRenderRole == PolySidRenderRole::LeftMono;
   const bool useRight = pv.sidRenderRole == PolySidRenderRole::Pair ||
                         pv.sidRenderRole == PolySidRenderRole::RightMono;
+  applySettingsToPolyVoice(idx, useLeft, useRight);
 
   // Trigger only voice 0 (first para slot) on the rendered SID side(s).
   if (useLeft && voiceSettings[0].enabled)
@@ -2456,7 +2456,8 @@ void BreadbinProcessor::polyParaAllNotesOff() {
   }
 }
 
-void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
+void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx, bool applyLeft,
+                                                 bool applyRight) {
   auto &pv = polyVoices[polyIdx];
 
   // In PolyPara mode, each voice plays an independent note — ring mod
@@ -2464,48 +2465,58 @@ void BreadbinProcessor::applySettingsToPolyVoice(int polyIdx) {
   bool isPolyPara = (voiceMode == VoiceMode::PolyPara);
 
   // Apply L SID voice settings (voices 0-2)
-  for (int v = 0; v < 3; ++v) {
-    auto &vs = voiceSettings[v];
-    pv.sidLeft->setWaveform(v, vs.waveform);
-    pv.sidLeft->setPulseWidth(v, vs.pulseWidth);
-    pv.sidLeft->setAttack(v, vs.attack);
-    pv.sidLeft->setDecay(v, vs.decay);
-    pv.sidLeft->setSustain(v, vs.sustain);
-    pv.sidLeft->setRelease(v, vs.release);
-    pv.sidLeft->setRingMod(v, isPolyPara ? false : vs.ringMod);
-    pv.sidLeft->setSync(v, isPolyPara ? false : vs.sync);
+  if (applyLeft) {
+    for (int v = 0; v < 3; ++v) {
+      auto &vs = voiceSettings[v];
+      pv.sidLeft->setWaveform(v, vs.waveform);
+      pv.sidLeft->setPulseWidth(v, vs.pulseWidth);
+      pv.sidLeft->setAttack(v, vs.attack);
+      pv.sidLeft->setDecay(v, vs.decay);
+      pv.sidLeft->setSustain(v, vs.sustain);
+      pv.sidLeft->setRelease(v, vs.release);
+      pv.sidLeft->setRingMod(v, isPolyPara ? false : vs.ringMod);
+      pv.sidLeft->setSync(v, isPolyPara ? false : vs.sync);
+    }
+    pv.sidLeft->setFilterVoices(voiceSettings[0].filterEnabled,
+                                voiceSettings[1].filterEnabled,
+                                voiceSettings[2].filterEnabled);
   }
-  pv.sidLeft->setFilterVoices(voiceSettings[0].filterEnabled,
-                               voiceSettings[1].filterEnabled,
-                               voiceSettings[2].filterEnabled);
 
   // Apply R SID voice settings (voices 3-5)
-  for (int v = 0; v < 3; ++v) {
-    auto &vs = voiceSettings[v + 3];
-    pv.sidRight->setWaveform(v, vs.waveform);
-    pv.sidRight->setPulseWidth(v, vs.pulseWidth);
-    pv.sidRight->setAttack(v, vs.attack);
-    pv.sidRight->setDecay(v, vs.decay);
-    pv.sidRight->setSustain(v, vs.sustain);
-    pv.sidRight->setRelease(v, vs.release);
-    pv.sidRight->setRingMod(v, isPolyPara ? false : vs.ringMod);
-    pv.sidRight->setSync(v, isPolyPara ? false : vs.sync);
+  if (applyRight) {
+    for (int v = 0; v < 3; ++v) {
+      auto &vs = voiceSettings[v + 3];
+      pv.sidRight->setWaveform(v, vs.waveform);
+      pv.sidRight->setPulseWidth(v, vs.pulseWidth);
+      pv.sidRight->setAttack(v, vs.attack);
+      pv.sidRight->setDecay(v, vs.decay);
+      pv.sidRight->setSustain(v, vs.sustain);
+      pv.sidRight->setRelease(v, vs.release);
+      pv.sidRight->setRingMod(v, isPolyPara ? false : vs.ringMod);
+      pv.sidRight->setSync(v, isPolyPara ? false : vs.sync);
+    }
+    pv.sidRight->setFilterVoices(voiceSettings[3].filterEnabled,
+                                 voiceSettings[4].filterEnabled,
+                                 voiceSettings[5].filterEnabled);
   }
-  pv.sidRight->setFilterVoices(voiceSettings[3].filterEnabled,
-                                voiceSettings[4].filterEnabled,
-                                voiceSettings[5].filterEnabled);
 
   // Volume always max (output gain applied post-mix)
-  pv.sidLeft->setVolume(15);
-  pv.sidRight->setVolume(15);
+  if (applyLeft)
+    pv.sidLeft->setVolume(15);
+  if (applyRight)
+    pv.sidRight->setVolume(15);
 
   // Filter mode and base cutoff/resonance
-  pv.sidLeft->setFilterMode(filterLPLeft, filterBPLeft, filterHPLeft);
-  pv.sidRight->setFilterMode(filterLPRight, filterBPRight, filterHPRight);
-  pv.sidLeft->setFilterCutoff(baseFilterCutoffLeft);
-  pv.sidRight->setFilterCutoff(baseFilterCutoffRight);
-  pv.sidLeft->setFilterResonance(baseFilterResLeft);
-  pv.sidRight->setFilterResonance(baseFilterResRight);
+  if (applyLeft) {
+    pv.sidLeft->setFilterMode(filterLPLeft, filterBPLeft, filterHPLeft);
+    pv.sidLeft->setFilterCutoff(baseFilterCutoffLeft);
+    pv.sidLeft->setFilterResonance(baseFilterResLeft);
+  }
+  if (applyRight) {
+    pv.sidRight->setFilterMode(filterLPRight, filterBPRight, filterHPRight);
+    pv.sidRight->setFilterCutoff(baseFilterCutoffRight);
+    pv.sidRight->setFilterResonance(baseFilterResRight);
+  }
 }
 
 void BreadbinProcessor::processPolyFilterEnvelope(int polyIdx, int numSamples) {

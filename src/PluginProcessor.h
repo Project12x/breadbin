@@ -531,7 +531,7 @@ private:
   void polyNoteOn(int midiNote, int velocity);
   void polyNoteOff(int midiNote);
   void polyAllNotesOff();
-  void applySettingsToPolyVoice(int polyIdx);
+  void applySettingsToPolyVoice(int polyIdx, bool applyLeft, bool applyRight);
   void processPolyFilterEnvelope(int polyIdx, int numSamples);
 
   // Paraphonic voice management (mono SIDs)

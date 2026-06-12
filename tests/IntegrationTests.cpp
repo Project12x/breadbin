@@ -3413,6 +3413,32 @@ void testEcoHybridReducesPolySidClockWork() {
               "One right mono role per block for three-note Hybrid");
 }
 
+void testEcoHybridReducesUnusedSideSettingsWork() {
+  std::printf("--- ECO Hybrid reduces unused-side settings work ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  p->resetCpuAuditCounters();
+  processBlock(*p);
+  const auto json = p->getCpuAuditCountersJson(1);
+  const auto pwCalls = extractJsonCounter(json, "setPulseWidthCalls");
+  std::printf("  Hybrid three-note setPulseWidthCalls/block: %llu\n",
+              static_cast<unsigned long long>(pwCalls));
+  ASSERT_TRUE(pwCalls == 24,
+              "Hybrid settings and modulation only touch rendered SID sides");
+}
+
 void testEcoRoleChangeRebalancesHeldPolyVoices() {
   std::printf("--- ECO role change rebalances held poly voices ---\n");
   auto p = createTestProcessor();
@@ -3999,6 +4025,7 @@ int main(int argc, char *argv[]) {
   abrender::testEcoUltraAssignsAllPairRoles();
   abrender::testEcoHybridNewestKeepsOnePairForNewestAnchor();
   abrender::testEcoHybridReducesPolySidClockWork();
+  abrender::testEcoHybridReducesUnusedSideSettingsWork();
   abrender::testEcoRoleChangeRebalancesHeldPolyVoices();
 
   // State persistence
