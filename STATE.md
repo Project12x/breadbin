@@ -90,6 +90,11 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   selected from this evidence before any quality or gating reduction. Its wall/section timings
   are run context only; `releases/cpu_baseline_matrix_2026-06-10.json` remains the pinned timing
   baseline until the next rebaseline.
+- **T2 digi A/B coverage — PINNED**:
+  `releases/ab/1931533/` expands the pre-T2 reference set to S1-S6 with
+  `s6-digi-4bit`, a deterministic 4-bit `$D418` playback case. The profile probe measured
+  S6 at 1074.1 us wall avg, 1049.87 us `SIDRender`, and 1738066/1760554 same-value register
+  writes.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -132,7 +137,8 @@ Artifacts: `releases/cpu_baseline_2026-06-10.json`,
 and baseline are `releases/ab/4c07888/` and
 `releases/cpu_baseline_matrix_2026-06-10.json`. Preserve-tone audit counters
 are pinned at `releases/cpu_audit_counters_2026-06-10.json`; use that artifact
-for no-op ratios, not as a replacement timing baseline.
+for no-op ratios, not as a replacement timing baseline. Pre-T2 A/B references
+including deterministic digi playback are under `releases/ab/1931533/`.
 
 ## Directory Structure
 

@@ -37,7 +37,9 @@ No JUCE or vendored reSIDfp source was modified.
 
 Reference render commit: `4c07888` (`test: expand performance scenario matrix`).
 Artifacts: `releases/ab/4c07888/*.wav` and
-`releases/cpu_baseline_matrix_2026-06-10.json`.
+`releases/cpu_baseline_matrix_2026-06-10.json`. T2 adds a deterministic
+S6 digi `$D418` playback scenario; its pre-optimization S1-S6 reference set is
+`releases/ab/1931533/`.
 
 | Scenario | purpose | wall avg | wall max note | top section |
 |---|---|---:|---:|---:|
@@ -203,6 +205,8 @@ profiling plus WAV A/B even though the intended output should be unchanged.
   `SIDRender` drop in S2 and a smaller but positive S3 drop.
 - S1, S4, and both S5 scenarios do not regress by more than 5% and do not gain
   reproducible max spikes.
+- S6 `s6-digi-4bit` remains audible, does not lose `$D418` volume transitions,
+  and passes WAV A/B against `releases/ab/1931533/s6-digi-4bit.wav`.
 - Full Release tests remain green; mutation coverage remains adequate.
 - Full Phase 4 WAV A/B passes automatically or flags only explainable pairs.
 
@@ -261,9 +265,11 @@ Breadbin's sound and release safety story.
 
 ## Verification Plan
 
-1. Keep Phase 0 WAVs under `releases/ab/4c07888/` as the full-matrix ground
-   truth for remaining targets. The earlier 3-scenario T1 references remain
-   under `releases/ab/88fa9f6fbf6c/`.
+1. Keep Phase 0 WAVs under `releases/ab/4c07888/` as the full S1-S5 matrix
+   ground truth. For T2, use the expanded S1-S6 reference set under
+   `releases/ab/1931533/`, which adds deterministic 4-bit digi `$D418`
+   playback. The earlier 3-scenario T1 references remain under
+   `releases/ab/88fa9f6fbf6c/`.
 2. Build Release before every profile; never use Debug profile numbers.
 3. Run `BreadbinIntegrationTests.exe --cpu-profile --json releases\cpu_after_<date>.json`.
 4. Re-render the same WAV scenario set at HEAD with identical settings.

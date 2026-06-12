@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Preserve-tone CPU audit counters**: the headless CPU profile JSON now includes SID wrapper
   setter and register-write counters so no-op work can be targeted before any quality or gating
   changes.
+- **Digi performance A/B scenario**: the deterministic render/profile matrix now includes
+  `s6-digi-4bit`, a generated 4-bit `$D418` playback case used to protect DigiSampler output
+  while optimizing same-value SID register writes.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
