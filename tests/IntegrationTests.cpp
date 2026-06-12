@@ -3081,6 +3081,9 @@ void testEcoOffPreservesUltraPolyRender() {
   const auto explicitUltraIgnored = render(true);
   const double diff = rmsDiff(defaultRender, explicitUltraIgnored);
   std::printf("  ECO-off default vs explicit Ultra RMS diff: %.9g\n", diff);
+  ASSERT_TRUE(defaultRender.getRMSLevel(0, 0, defaultRender.getNumSamples()) >
+                  1.0e-8f,
+              "ECO-off preservation render produces non-silent output");
   ASSERT_TRUE(diff < 5.0e-4,
               "ECO off ignores polySidBudget and preserves current Ultra render");
 }
