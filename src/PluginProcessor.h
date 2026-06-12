@@ -25,6 +25,10 @@ public:
 
   // Voice allocation modes
   enum class VoiceMode { Mono = 0, Paraphonic = 1, Polyphonic = 2, PolyPara = 3 };
+  enum class EcoMode { Off = 0, Manual = 1 };
+  enum class PolySidBudget { Hybrid = 0, Ultra = 1, MaxEco = 2 };
+  enum class PolyStereoAnchor { Oldest = 0, Newest = 1 };
+  enum class PolySidRenderRole { Pair = 0, LeftMono = 1, RightMono = 2 };
 
   // Paraphonic per-voice state
   struct ParaVoiceState {
@@ -114,6 +118,7 @@ public:
     gm::SilenceGate sidRenderGate;   // gates released voices after output tail is silent
     float sidRenderTailPeak = 0.0f;
     bool sidRenderWasSkipping = false;
+    PolySidRenderRole sidRenderRole = PolySidRenderRole::Pair;
     // Poly+Para: per-SID-voice note tracking
     int paraNote[3] = {-1, -1, -1};
     int paraVelocity[3] = {0, 0, 0};
@@ -464,7 +469,13 @@ private:
 
   // Voice mode state
   VoiceMode voiceMode = VoiceMode::Mono;
+  EcoMode ecoMode = EcoMode::Off;
+  PolySidBudget polySidBudget = PolySidBudget::Hybrid;
+  PolyStereoAnchor polyStereoAnchor = PolyStereoAnchor::Oldest;
   std::atomic<float> *voiceModePtr = nullptr;
+  std::atomic<float> *ecoModePtr = nullptr;
+  std::atomic<float> *polySidBudgetPtr = nullptr;
+  std::atomic<float> *polyStereoAnchorPtr = nullptr;
 
   // Poly voice pool (pre-allocated, activated on demand)
   std::array<PolyVoice, MAX_POLY> polyVoices;

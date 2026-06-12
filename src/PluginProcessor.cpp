@@ -248,6 +248,12 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
   voiceMode = static_cast<VoiceMode>(
       juce::jlimit(0, 3, static_cast<int>(voiceModePtr->load())));
+  ecoMode = static_cast<EcoMode>(
+      juce::jlimit(0, 1, static_cast<int>(ecoModePtr->load())));
+  polySidBudget = static_cast<PolySidBudget>(
+      juce::jlimit(0, 2, static_cast<int>(polySidBudgetPtr->load())));
+  polyStereoAnchor = static_cast<PolyStereoAnchor>(
+      juce::jlimit(0, 1, static_cast<int>(polyStereoAnchorPtr->load())));
   polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
   if (cpuProfiler.isEnabled()) {
     ++cpuAuditCounters.blocks;
@@ -3643,6 +3649,15 @@ BreadbinProcessor::createParameterLayout() {
       juce::StringArray{"Mono", "Para", "Poly", "Poly+Para"}, 0));
   layout.add(std::make_unique<juce::AudioParameterInt>(
       juce::ParameterID{"polyMaxNotes", 1}, "Poly Max Notes", 1, 8, 4));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"ecoMode", 1}, "ECO Mode",
+      juce::StringArray{"Off", "Manual"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"polySidBudget", 1}, "Poly SID Budget",
+      juce::StringArray{"Hybrid", "Ultra", "Max ECO"}, 0));
+  layout.add(std::make_unique<juce::AudioParameterChoice>(
+      juce::ParameterID{"polyStereoAnchor", 1}, "Poly Stereo Anchor",
+      juce::StringArray{"Oldest", "Newest"}, 0));
   layout.add(std::make_unique<juce::AudioParameterFloat>(
       juce::ParameterID{"paraSpread", 1}, "Para Spread", 0.0f, 50.0f, 0.0f));
   layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -3896,6 +3911,9 @@ void BreadbinProcessor::initializeParameterPointers() {
   digiBitDepthPtr = apvts.getRawParameterValue("digiBitDepth");
   voiceModePtr = apvts.getRawParameterValue("voiceMode");
   polyMaxNotesPtr = apvts.getRawParameterValue("polyMaxNotes");
+  ecoModePtr = apvts.getRawParameterValue("ecoMode");
+  polySidBudgetPtr = apvts.getRawParameterValue("polySidBudget");
+  polyStereoAnchorPtr = apvts.getRawParameterValue("polyStereoAnchor");
   paraSpreadPtr = apvts.getRawParameterValue("paraSpread");
   paraFilterRetrigPtr = apvts.getRawParameterValue("paraFilterRetrig");
   leftPanPtr = apvts.getRawParameterValue("leftPan");

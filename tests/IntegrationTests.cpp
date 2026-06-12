@@ -330,6 +330,24 @@ void testAPVTSDefaultValues() {
   ASSERT_NEAR(val("v0_sustain"), 15.0f, 0.1f, "v0_sustain defaults to 15");
 }
 
+void testEcoPerformanceParamsExistAndDefaultSafe() {
+  std::printf("--- ECO performance params exist and default safe ---\n");
+  auto p = createTestProcessor();
+
+  auto *eco = p->apvts.getParameter("ecoMode");
+  auto *budget = p->apvts.getParameter("polySidBudget");
+  auto *anchor = p->apvts.getParameter("polyStereoAnchor");
+
+  ASSERT_TRUE(eco != nullptr, "ecoMode parameter exists");
+  ASSERT_TRUE(budget != nullptr, "polySidBudget parameter exists");
+  ASSERT_TRUE(anchor != nullptr, "polyStereoAnchor parameter exists");
+  ASSERT_TRUE(eco->getValue() == 0.0f, "ECO mode defaults to Off");
+  ASSERT_TRUE(static_cast<int>(budget->convertFrom0to1(budget->getValue())) == 0,
+              "Poly SID budget defaults to Hybrid for ECO");
+  ASSERT_TRUE(static_cast<int>(anchor->convertFrom0to1(anchor->getValue())) == 0,
+              "Stereo anchor defaults to Oldest");
+}
+
 // ============================================================================
 // State Persistence Tests
 // ============================================================================
@@ -3534,6 +3552,7 @@ int main(int argc, char *argv[]) {
   // APVTS parameter tests
   testAPVTSParameters();
   testAPVTSDefaultValues();
+  testEcoPerformanceParamsExistAndDefaultSafe();
 
   // State persistence
   testSaveRestoreState();
