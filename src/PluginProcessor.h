@@ -525,6 +525,9 @@ private:
   PolySidRenderRole chooseNewPolyRenderRoleForSlot(int targetIdx) const noexcept;
   void demoteExistingPolyPairForNewestAnchor() noexcept;
   void rebalancePolyRenderRoles() noexcept;
+  using PolyRoleSnapshot = std::array<PolySidRenderRole, MAX_POLY>;
+  PolyRoleSnapshot snapshotPolyRenderRoles() const noexcept;
+  void syncPromotedPolyRenderSides(const PolyRoleSnapshot &oldRoles);
   void polyNoteOn(int midiNote, int velocity);
   void polyNoteOff(int midiNote);
   void polyAllNotesOff();

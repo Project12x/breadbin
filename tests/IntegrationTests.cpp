@@ -3243,6 +3243,84 @@ void testEcoHybridOldestStealsPairSlotPreservingPair() {
       "Hybrid/Oldest stolen Pair slot replacement");
 }
 
+void testEcoHybridOldestStealPromotesPairRightSideAudio() {
+  std::printf("--- ECO Hybrid/Oldest promoted Pair renders right side ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 2.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  for (int i = 0; i < 64; ++i) {
+    processBlock(*p);
+  }
+
+  float maxRightRms = 0.0f;
+  for (int i = 0; i < 8; ++i) {
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer empty;
+    p->processBlock(buffer, empty);
+    maxRightRms = std::max(maxRightRms, buffer.getRMSLevel(1, 0, 512));
+  }
+
+  std::printf("  promoted Pair right-channel max RMS: %.9g\n", maxRightRms);
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Oldest,
+      "Hybrid/Oldest promoted Pair right-channel render");
+  ASSERT_TRUE(maxRightRms > 1.0e-4f,
+              "Promoted Pair voice renders non-silent right SID audio");
+}
+
+void testEcoHybridOldestPolyParaPromotesPairRightSideAudio() {
+  std::printf("--- ECO Hybrid/Oldest PolyPara promoted Pair renders right side ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 3.0f);
+  setParamReal(*p, "polyMaxNotes", 2.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  const int notes[] = {60, 62, 64, 65, 67, 69, 71};
+  for (int i = 0; i < 7; ++i)
+    midi.addEvent(juce::MidiMessage::noteOn(
+                      1, notes[i], static_cast<juce::uint8>(100)),
+                  i * 32);
+  processBlock(*p, 512, &midi);
+
+  for (int i = 0; i < 64; ++i)
+    processBlock(*p);
+
+  float maxRightRms = 0.0f;
+  for (int i = 0; i < 8; ++i) {
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer empty;
+    p->processBlock(buffer, empty);
+    maxRightRms = std::max(maxRightRms, buffer.getRMSLevel(1, 0, 512));
+  }
+
+  std::printf("  promoted PolyPara Pair right-channel max RMS: %.9g\n",
+              maxRightRms);
+  assertHybridPairBelongsToAnchor(
+      *p, BreadbinProcessor::PolyStereoAnchor::Oldest,
+      "Hybrid/Oldest PolyPara promoted Pair right-channel render");
+  ASSERT_TRUE(maxRightRms > 1.0e-4f,
+              "Promoted PolyPara Pair voice renders non-silent right SID audio");
+}
+
 void testEcoMaxEcoAssignsAlternatingMonoRoles() {
   std::printf("--- ECO Max ECO assigns alternating mono roles ---\n");
   auto p = createTestProcessor();
@@ -3915,6 +3993,8 @@ int main(int argc, char *argv[]) {
   abrender::testEcoHybridAssignsOnePairAndAlternatingMonoRoles();
   abrender::testEcoHybridOldestReusesReleasingPairSlotPreservingPair();
   abrender::testEcoHybridOldestStealsPairSlotPreservingPair();
+  abrender::testEcoHybridOldestStealPromotesPairRightSideAudio();
+  abrender::testEcoHybridOldestPolyParaPromotesPairRightSideAudio();
   abrender::testEcoMaxEcoAssignsAlternatingMonoRoles();
   abrender::testEcoUltraAssignsAllPairRoles();
   abrender::testEcoHybridNewestKeepsOnePairForNewestAnchor();

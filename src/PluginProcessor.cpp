@@ -21,6 +21,16 @@ static void addSidCounters(SIDEngine::PerfCounters &dst,
   dst.writeRegisterCalls += src.writeRegisterCalls;
   dst.writeRegisterSame += src.writeRegisterSame;
 }
+
+static bool usesLeft(BreadbinProcessor::PolySidRenderRole role) {
+  return role == BreadbinProcessor::PolySidRenderRole::Pair ||
+         role == BreadbinProcessor::PolySidRenderRole::LeftMono;
+}
+
+static bool usesRight(BreadbinProcessor::PolySidRenderRole role) {
+  return role == BreadbinProcessor::PolySidRenderRole::Pair ||
+         role == BreadbinProcessor::PolySidRenderRole::RightMono;
+}
 } // namespace
 
 BreadbinProcessor::BreadbinProcessor()
@@ -275,8 +285,11 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       juce::jlimit(0, 1, static_cast<int>(polyStereoAnchorPtr->load())));
   polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
   if (oldEcoMode != ecoMode || oldPolySidBudget != polySidBudget ||
-      oldPolyStereoAnchor != polyStereoAnchor)
+      oldPolyStereoAnchor != polyStereoAnchor) {
+    const auto oldRoles = snapshotPolyRenderRoles();
     rebalancePolyRenderRoles();
+    syncPromotedPolyRenderSides(oldRoles);
+  }
   if (cpuProfiler.isEnabled()) {
     ++cpuAuditCounters.blocks;
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
@@ -1948,6 +1961,54 @@ void BreadbinProcessor::rebalancePolyRenderRoles() noexcept {
   }
 }
 
+BreadbinProcessor::PolyRoleSnapshot
+BreadbinProcessor::snapshotPolyRenderRoles() const noexcept {
+  PolyRoleSnapshot roles{};
+  for (int i = 0; i < MAX_POLY; ++i)
+    roles[i] = polyVoices[i].sidRenderRole;
+  return roles;
+}
+
+void BreadbinProcessor::syncPromotedPolyRenderSides(
+    const PolyRoleSnapshot &oldRoles) {
+  if (!isPolyActive())
+    return;
+
+  for (int i = 0; i < polyMaxNotes; ++i) {
+    auto &pv = polyVoices[i];
+    if (!pv.active || pv.releasing)
+      continue;
+
+    const bool gainedLeft = !usesLeft(oldRoles[i]) && usesLeft(pv.sidRenderRole);
+    const bool gainedRight =
+        !usesRight(oldRoles[i]) && usesRight(pv.sidRenderRole);
+    if (!gainedLeft && !gainedRight)
+      continue;
+
+    applySettingsToPolyVoice(i);
+
+    if (voiceMode == VoiceMode::PolyPara && pv.paraCount > 0) {
+      for (int slot = 0; slot < 3; ++slot) {
+        if (pv.paraNote[slot] < 0)
+          continue;
+        if (gainedLeft && voiceSettings[slot].enabled)
+          pv.sidLeft->noteOn(slot, pv.paraNote[slot], pv.paraVelocity[slot],
+                             leftDetuneCents);
+        if (gainedRight && voiceSettings[slot + 3].enabled)
+          pv.sidRight->noteOn(slot, pv.paraNote[slot], pv.paraVelocity[slot],
+                              rightDetuneCents);
+      }
+    } else if (pv.midiNote >= 0) {
+      for (int v = 0; v < 3; ++v) {
+        if (gainedLeft && voiceSettings[v].enabled)
+          pv.sidLeft->noteOn(v, pv.midiNote, pv.velocity, leftDetuneCents);
+        if (gainedRight && voiceSettings[v + 3].enabled)
+          pv.sidRight->noteOn(v, pv.midiNote, pv.velocity, rightDetuneCents);
+      }
+    }
+  }
+}
+
 void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   demoteExistingPolyPairForNewestAnchor();
 
@@ -1980,7 +2041,9 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
+  const auto oldRoles = snapshotPolyRenderRoles();
   rebalancePolyRenderRoles();
+  syncPromotedPolyRenderSides(oldRoles);
 
   // Calculate frequency
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
@@ -2310,7 +2373,9 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
+  const auto oldRoles = snapshotPolyRenderRoles();
   rebalancePolyRenderRoles();
+  syncPromotedPolyRenderSides(oldRoles);
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);
   pv.currentHz = pv.targetHz;
   pv.isGliding = false;
