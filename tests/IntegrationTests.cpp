@@ -3094,6 +3094,34 @@ void testEcoOffPreservesUltraPolyRender() {
               "ECO off ignores explicit Max ECO polySidBudget and preserves current render");
 }
 
+void testEcoHybridAssignsOnePairAndAlternatingMonoRoles() {
+  std::printf("--- ECO Hybrid assigns one pair and alternating mono roles ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  p->resetCpuAuditCounters();
+  processBlock(*p);
+  const auto json = p->getCpuAuditCountersJson(1);
+  ASSERT_TRUE(extractJsonCounter(json, "polyPairVoiceBlocks") == 1,
+              "Hybrid clocks one stereo pair voice block");
+  ASSERT_TRUE(extractJsonCounter(json, "polyLeftMonoVoiceBlocks") == 1,
+              "Hybrid assigns one added note to left mono");
+  ASSERT_TRUE(extractJsonCounter(json, "polyRightMonoVoiceBlocks") == 1,
+              "Hybrid assigns one added note to right mono");
+}
+
 static void addMidiAt(juce::MidiBuffer &midi, int64_t blockStart,
                       int blockSamples, int64_t eventSample,
                       const juce::MidiMessage &message) {
@@ -3645,6 +3673,7 @@ int main(int argc, char *argv[]) {
   testAPVTSDefaultValues();
   testEcoPerformanceParamsExistAndDefaultSafe();
   abrender::testEcoOffPreservesUltraPolyRender();
+  abrender::testEcoHybridAssignsOnePairAndAlternatingMonoRoles();
 
   // State persistence
   testSaveRestoreState();

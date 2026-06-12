@@ -513,6 +513,9 @@ private:
   void normalizePolyNoteCounters();
   int findFreePolyVoice() const;
   int findStealablePolyVoice() const;
+  bool isEcoPolyBudgetActive() const noexcept;
+  PolySidRenderRole chooseNewPolyRenderRole() const noexcept;
+  void demoteExistingPolyPairForNewestAnchor() noexcept;
   void polyNoteOn(int midiNote, int velocity);
   void polyNoteOff(int midiNote);
   void polyAllNotesOff();
@@ -1017,6 +1020,9 @@ private:
     uint64_t activePolyVoices = 0;
     uint64_t activePolyNoteSlots = 0;
     uint64_t polySidRenderSkipBlocks = 0;
+    uint64_t polyPairVoiceBlocks = 0;
+    uint64_t polyLeftMonoVoiceBlocks = 0;
+    uint64_t polyRightMonoVoiceBlocks = 0;
   };
   CpuAuditCounters cpuAuditCounters;
   gm::CpuSectionProfiler cpuProfiler;

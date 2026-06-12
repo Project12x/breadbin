@@ -107,6 +107,11 @@ BreadbinProcessor::getCpuAuditCountersJson(int measuredBlocks) const {
        << (cpuAuditCounters.activePolyNoteSlots / denom)
        << ",\"polySidRenderSkipBlocks\":"
        << cpuAuditCounters.polySidRenderSkipBlocks
+       << ",\"polyPairVoiceBlocks\":" << cpuAuditCounters.polyPairVoiceBlocks
+       << ",\"polyLeftMonoVoiceBlocks\":"
+       << cpuAuditCounters.polyLeftMonoVoiceBlocks
+       << ",\"polyRightMonoVoiceBlocks\":"
+       << cpuAuditCounters.polyRightMonoVoiceBlocks
        << ",\"setFrequencyCalls\":" << total.setFrequencyCalls
        << ",\"setFrequencySame\":" << total.setFrequencySame
        << ",\"setPulseWidthCalls\":" << total.setPulseWidthCalls
@@ -767,6 +772,24 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
       }
     }
 
+    for (int ai = 0; ai < activePolyCount; ++ai) {
+      if (skipPolySid[ai])
+        continue;
+
+      auto &pv = polyVoices[activePolyIdx[ai]];
+      switch (pv.sidRenderRole) {
+      case PolySidRenderRole::Pair:
+        ++cpuAuditCounters.polyPairVoiceBlocks;
+        break;
+      case PolySidRenderRole::LeftMono:
+        ++cpuAuditCounters.polyLeftMonoVoiceBlocks;
+        break;
+      case PolySidRenderRole::RightMono:
+        ++cpuAuditCounters.polyRightMonoVoiceBlocks;
+        break;
+      }
+    }
+
     for (int i = 0; i < numSamples; ++i) {
       smoothedPolyNorm += gainSmoothCoeff * (targetPolyNorm - smoothedPolyNorm);
       smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
@@ -831,6 +854,7 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
         pv.fadeGain = 0.0f;
         pv.midiNote = -1;
         pv.filterEnv = FilterEnvelopeState{};
+        pv.sidRenderRole = PolySidRenderRole::Pair;
         pv.sidRenderGate.reset();
         pv.sidRenderTailPeak = 0.0f;
         pv.sidRenderWasSkipping = false;
@@ -1771,7 +1795,64 @@ int BreadbinProcessor::findStealablePolyVoice() const {
   return oldest;
 }
 
+bool BreadbinProcessor::isEcoPolyBudgetActive() const noexcept {
+  return ecoMode == EcoMode::Manual && isPolyActive();
+}
+
+BreadbinProcessor::PolySidRenderRole
+BreadbinProcessor::chooseNewPolyRenderRole() const noexcept {
+  if (!isEcoPolyBudgetActive() || polySidBudget == PolySidBudget::Ultra)
+    return PolySidRenderRole::Pair;
+
+  if (polySidBudget == PolySidBudget::MaxEco) {
+    int monoCount = 0;
+    for (int i = 0; i < polyMaxNotes; ++i)
+      if (polyVoices[i].active || polyVoices[i].releasing)
+        ++monoCount;
+    return (monoCount % 2 == 0) ? PolySidRenderRole::LeftMono
+                                : PolySidRenderRole::RightMono;
+  }
+
+  bool hasPair = false;
+  int monoCount = 0;
+  for (int i = 0; i < polyMaxNotes; ++i) {
+    const auto &pv = polyVoices[i];
+    if (!pv.active && !pv.releasing)
+      continue;
+    if (pv.sidRenderRole == PolySidRenderRole::Pair)
+      hasPair = true;
+    else
+      ++monoCount;
+  }
+  if (!hasPair || polyStereoAnchor == PolyStereoAnchor::Newest)
+    return PolySidRenderRole::Pair;
+  return (monoCount % 2 == 0) ? PolySidRenderRole::LeftMono
+                              : PolySidRenderRole::RightMono;
+}
+
+void BreadbinProcessor::demoteExistingPolyPairForNewestAnchor() noexcept {
+  if (!isEcoPolyBudgetActive() || polySidBudget != PolySidBudget::Hybrid ||
+      polyStereoAnchor != PolyStereoAnchor::Newest)
+    return;
+
+  int monoCount = 0;
+  for (int i = 0; i < polyMaxNotes; ++i) {
+    auto &pv = polyVoices[i];
+    if (!pv.active && !pv.releasing)
+      continue;
+    if (pv.sidRenderRole == PolySidRenderRole::Pair) {
+      pv.sidRenderRole = (monoCount % 2 == 0) ? PolySidRenderRole::LeftMono
+                                              : PolySidRenderRole::RightMono;
+      ++monoCount;
+    } else {
+      ++monoCount;
+    }
+  }
+}
+
 void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
+  demoteExistingPolyPairForNewestAnchor();
+
   int idx = findFreePolyVoice();
   if (idx < 0)
     idx = findStealablePolyVoice();
@@ -1779,6 +1860,7 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
     return;
 
   auto &pv = polyVoices[idx];
+  const auto newRole = chooseNewPolyRenderRole();
 
   // If stealing, release the old note first
   if (pv.active || pv.releasing) {
@@ -1794,6 +1876,7 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.releasing = false;
   pv.fadingOut = false;
   pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
+  pv.sidRenderRole = newRole;
   pv.sidRenderGate.reset();
   pv.sidRenderTailPeak = 0.0f;
   pv.sidRenderWasSkipping = false;
@@ -1858,6 +1941,7 @@ void BreadbinProcessor::polyAllNotesOff() {
       pv.releasing = false;
       pv.midiNote = -1;
       pv.filterEnv = FilterEnvelopeState{};
+      pv.sidRenderRole = PolySidRenderRole::Pair;
       pv.sidRenderGate.reset();
       pv.sidRenderTailPeak = 0.0f;
       pv.sidRenderWasSkipping = false;
@@ -2083,6 +2167,8 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   }
 
   // 2. No free slots — allocate a new poly voice
+  demoteExistingPolyPairForNewestAnchor();
+
   int idx = findFreePolyVoice();
   if (idx < 0)
     idx = findStealablePolyVoice();
@@ -2090,6 +2176,7 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
     return;
 
   auto &pv = polyVoices[idx];
+  const auto newRole = chooseNewPolyRenderRole();
 
   // If stealing, release the old note first
   if (pv.active || pv.releasing) {
@@ -2105,6 +2192,7 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   pv.releasing = false;
   pv.fadingOut = false;
   pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
+  pv.sidRenderRole = newRole;
   pv.sidRenderGate.reset();
   pv.sidRenderTailPeak = 0.0f;
   pv.sidRenderWasSkipping = false;
@@ -2180,6 +2268,7 @@ void BreadbinProcessor::polyParaAllNotesOff() {
       pv.releasing = false;
       pv.midiNote = -1;
       pv.filterEnv = FilterEnvelopeState{};
+      pv.sidRenderRole = PolySidRenderRole::Pair;
     }
   }
 }
