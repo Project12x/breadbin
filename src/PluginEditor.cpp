@@ -1040,6 +1040,146 @@ void DigiSamplerPanel::updateInfoLabels() {
 
 // ========== END DIGI SAMPLER PANEL ==========
 
+// ========== SETTINGS PANEL ==========
+
+SettingsPanel::SettingsPanel(BreadbinProcessor &proc) : processor(proc) {
+  setSize(panelWidth, panelHeight);
+
+  auto setupLabel = [this](juce::Label &label, const juce::String &text) {
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, juce::Colour(0xFF8A8A9A));
+    label.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(label);
+  };
+
+  auto setupCombo = [this](juce::ComboBox &box, const juce::String &tooltip) {
+    box.setTooltip(tooltip);
+    box.getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
+    addAndMakeVisible(box);
+  };
+
+  setupLabel(ecoModeLabel, "ECO MODE");
+  ecoModeSelector.addItem("Off", 1);
+  ecoModeSelector.addItem("Manual", 2);
+  ecoModeSelector.setSelectedId(choiceIdFromParam("ecoMode", 1),
+                                juce::dontSendNotification);
+  setupCombo(ecoModeSelector,
+             "Off preserves current rendering. Manual enables ECO poly budget choices.");
+
+  setupLabel(polySidBudgetLabel, "POLY SID BUDGET");
+  polySidBudgetSelector.addItem("Hybrid", 1);
+  polySidBudgetSelector.addItem("Ultra", 2);
+  polySidBudgetSelector.addItem("Max ECO", 3);
+  polySidBudgetSelector.setSelectedId(choiceIdFromParam("polySidBudget", 1),
+                                      juce::dontSendNotification);
+  setupCombo(polySidBudgetSelector,
+             "Manual ECO poly rendering budget.");
+
+  setupLabel(polyStereoAnchorLabel, "STEREO ANCHOR");
+  polyStereoAnchorSelector.addItem("Oldest", 1);
+  polyStereoAnchorSelector.addItem("Newest", 2);
+  polyStereoAnchorSelector.setSelectedId(
+      choiceIdFromParam("polyStereoAnchor", 1), juce::dontSendNotification);
+  setupCombo(polyStereoAnchorSelector,
+             "Which hybrid ECO note keeps the stereo SID pair.");
+
+  statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFE8E8F0));
+  statusLabel.setColour(juce::Label::backgroundColourId,
+                        juce::Colours::black.withAlpha(0.35f));
+  statusLabel.setJustificationType(juce::Justification::centredLeft);
+  addAndMakeVisible(statusLabel);
+
+  ecoModeAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "ecoMode", ecoModeSelector);
+  polySidBudgetAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "polySidBudget", polySidBudgetSelector);
+  polyStereoAnchorAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+          processor.apvts, "polyStereoAnchor", polyStereoAnchorSelector);
+
+  ecoModeSelector.onChange = [this]() { updateStatusText(); };
+  polySidBudgetSelector.onChange = [this]() { updateStatusText(); };
+  updateStatusText();
+}
+
+void SettingsPanel::resized() {
+  const auto bounds = getLocalBounds().reduced(14, 12);
+  const int labelW = 118;
+  const int rowH = 30;
+  const int gap = 10;
+  int y = bounds.getY() + 14;
+
+  auto placeRow = [&](juce::Label &label, juce::ComboBox &box) {
+    label.setBounds(bounds.getX() + 12, y, labelW, rowH);
+    box.setBounds(bounds.getX() + labelW + 20, y + 2,
+                  bounds.getWidth() - labelW - 32, rowH - 4);
+    y += rowH + gap;
+  };
+
+  placeRow(ecoModeLabel, ecoModeSelector);
+  placeRow(polySidBudgetLabel, polySidBudgetSelector);
+  placeRow(polyStereoAnchorLabel, polyStereoAnchorSelector);
+  statusLabel.setBounds(bounds.getX() + 12, y + 6, bounds.getWidth() - 24, 48);
+
+  buildPopupCaches(*this, gridCache, scanCache);
+}
+
+void SettingsPanel::paint(juce::Graphics &g) {
+  drawPopupGlass(g, getLocalBounds().toFloat(),
+                 BreadbinLookAndFeel::accentOf(*this), gridCache, scanCache);
+
+  drawInsetCard(g, juce::Rectangle<float>(
+                       14.0f, 22.0f, static_cast<float>(panelWidth - 28), 122.0f));
+  drawInsetCard(g, juce::Rectangle<float>(
+                       14.0f, 154.0f, static_cast<float>(panelWidth - 28), 52.0f));
+
+  g.setColour(BreadbinLookAndFeel::accentOf(*this));
+  g.setFont(panelBoldFont.withHeight(11.0f));
+  g.drawText("PERFORMANCE SETTINGS", 26, 8, panelWidth - 52, 16,
+             juce::Justification::centredLeft);
+}
+
+void SettingsPanel::refreshFonts(const juce::Font &pro,
+                                 const juce::Font &bold,
+                                 const juce::Font &mono) {
+  panelProFont = pro;
+  panelBoldFont = bold;
+  panelMonoFont = mono;
+  ecoModeLabel.setFont(panelBoldFont.withHeight(10.0f));
+  polySidBudgetLabel.setFont(panelBoldFont.withHeight(10.0f));
+  polyStereoAnchorLabel.setFont(panelBoldFont.withHeight(10.0f));
+  statusLabel.setFont(panelMonoFont.withHeight(10.0f));
+}
+
+int SettingsPanel::choiceIdFromParam(const juce::String &paramId,
+                                     int fallbackId) const {
+  if (auto *value = processor.apvts.getRawParameterValue(paramId))
+    return juce::jmax(1, juce::roundToInt(value->load()) + 1);
+  return fallbackId;
+}
+
+void SettingsPanel::updateStatusText() {
+  const int ecoModeId = ecoModeSelector.getSelectedId();
+  const int budgetId = polySidBudgetSelector.getSelectedId();
+
+  juce::String text;
+  if (ecoModeId <= 1) {
+    text = "ECO Off: current Ultra poly rendering is unchanged.";
+  } else if (budgetId == 1) {
+    text = "ECO Hybrid: one stereo anchor, added notes alternate SID engines.";
+  } else if (budgetId == 3) {
+    text = "Max ECO: each poly note uses one SID engine.";
+  } else {
+    text = "Manual Ultra: current 2-SID-per-note poly rendering is unchanged.";
+  }
+
+  statusLabel.setText(text, juce::dontSendNotification);
+}
+
+// ========== END SETTINGS PANEL ==========
+
 BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
     : gm::ui::ScaledEditor(p, 1000, 800), processor(p),
       keyboard(keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard) {
@@ -3080,6 +3220,35 @@ void BreadbinEditor::showDigiPopup() {
   digiWindow = window;
 }
 
+void BreadbinEditor::showSettingsPopup() {
+  if (settingsWindow != nullptr) {
+    if (!settingsWindow->isVisible()) {
+      settingsWindow.deleteAndZero();
+    } else {
+      settingsWindow->toFront(true);
+      return;
+    }
+  }
+
+  auto *panel = new SettingsPanel(processor);
+  panel->setLookAndFeel(&customLookAndFeel);
+  panel->getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
+  panel->refreshFonts(proFont, boldFont, monoFont);
+
+  auto *window =
+      new NonModalPopup("Settings", juce::Colour(30, 30, 35), true);
+  window->getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
+  window->setContentOwned(panel, true);
+  window->setUsingNativeTitleBar(false);
+  window->setDropShadowEnabled(true);
+  window->setResizable(false, false);
+  window->setLookAndFeel(&customLookAndFeel);
+  window->centreAroundComponent(this, window->getWidth(), window->getHeight());
+  window->setVisible(true);
+  window->addToDesktop();
+  settingsWindow = window;
+}
+
 void BreadbinEditor::setupControls() {
   setupGlobalControls();
   setupFXControls();
@@ -3788,6 +3957,17 @@ void BreadbinEditor::setupPopupButtons() {
                        juce::Colours::cyan);
   digiButton.onClick = [this]() { showDigiPopup(); };
   addAndMakeVisible(digiButton);
+
+  // Settings
+  settingsButton.setTooltip("Performance and plugin settings");
+  settingsButton.setColour(juce::TextButton::buttonColourId,
+                           juce::Colour(70, 55, 40));
+  settingsButton.setColour(juce::TextButton::textColourOnId,
+                           juce::Colours::orange);
+  settingsButton.setColour(juce::TextButton::textColourOffId,
+                           juce::Colours::orange);
+  settingsButton.onClick = [this]() { showSettingsPopup(); };
+  addAndMakeVisible(settingsButton);
 
   digiEnableToggle.setTooltip("Enable/disable digi sampler");
   digiEnableToggle.setColour(juce::ToggleButton::textColourId,
@@ -4902,11 +5082,13 @@ void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> fxArea,
   mainRow.removeFromRight(pad);
 
   const int btnH = 20;
+  auto settingsBtnBounds = mainRow.removeFromRight(68); mainRow.removeFromRight(pad);
   auto digiBtnBounds  = mainRow.removeFromRight(56); mainRow.removeFromRight(pad);
   auto sidBtnBounds   = mainRow.removeFromRight(75); mainRow.removeFromRight(pad);
   auto chordBtnBounds = mainRow.removeFromRight(62); mainRow.removeFromRight(pad);
   auto wtBtnBounds    = mainRow.removeFromRight(80); mainRow.removeFromRight(pad);
   auto modBtnBounds   = mainRow.removeFromRight(86);
+  settingsButton.setBounds(centreV(settingsBtnBounds, btnH));
   digiButton.setBounds(centreV(digiBtnBounds, btnH));
   sidPlayerButton.setBounds(centreV(sidBtnBounds, btnH));
   chordMemoryButton.setBounds(centreV(chordBtnBounds, btnH));

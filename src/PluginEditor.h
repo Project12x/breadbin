@@ -742,6 +742,44 @@ private:
   void updateInfoLabels();
 };
 
+// Performance and plugin settings popup panel
+class SettingsPanel : public juce::Component {
+public:
+  SettingsPanel(BreadbinProcessor &proc);
+  ~SettingsPanel() override { setLookAndFeel(nullptr); }
+  void resized() override;
+  void paint(juce::Graphics &g) override;
+  void refreshFonts(const juce::Font &pro, const juce::Font &bold,
+                    const juce::Font &mono);
+  static constexpr int panelWidth = 430;
+  static constexpr int panelHeight = 220;
+
+private:
+  BreadbinProcessor &processor;
+  juce::Font panelProFont{juce::FontOptions(12.0f)};
+  juce::Font panelBoldFont{juce::FontOptions(12.0f)};
+  juce::Font panelMonoFont{juce::FontOptions(12.0f)};
+  juce::Image gridCache, scanCache;
+
+  juce::ComboBox ecoModeSelector;
+  juce::Label ecoModeLabel;
+  juce::ComboBox polySidBudgetSelector;
+  juce::Label polySidBudgetLabel;
+  juce::ComboBox polyStereoAnchorSelector;
+  juce::Label polyStereoAnchorLabel;
+  juce::Label statusLabel;
+
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      ecoModeAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      polySidBudgetAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+      polyStereoAnchorAttachment;
+
+  int choiceIdFromParam(const juce::String &paramId, int fallbackId) const;
+  void updateStatusText();
+};
+
 // Interactive filter frequency response display for SID filter sections
 class FilterDisplay : public juce::Component {
 public:
@@ -1286,6 +1324,11 @@ private:
   juce::Component::SafePointer<juce::DialogWindow> sidPlayerWindow;
   void showSidPlayerPopup();
 
+  // ========== SETTINGS ==========
+  juce::TextButton settingsButton{"Settings"};
+  juce::Component::SafePointer<juce::DialogWindow> settingsWindow;
+  void showSettingsPopup();
+
   // ========== MODULATION METERS ==========
   ModulationMeter cutoffMeterL, cutoffMeterR;
   ModulationMeter pwMeter;
@@ -1324,7 +1367,7 @@ private:
   void setupControls();
   void setupGlobalControls();  // Mode, presets, master vol, ext in, clock
   void setupFXControls();      // Chorus, delay, reverb, filter envelope
-  void setupPopupButtons();    // Wavetable, mod matrix, chord, SID player, digi, overlays
+  void setupPopupButtons();    // Wavetable, mod matrix, chord, SID player, digi, settings, overlays
   void setupSidPanel(bool isLeft);
   void setupVoiceEditor();
   void selectVoice(int voice);
