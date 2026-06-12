@@ -3051,14 +3051,14 @@ static double rmsDiff(const juce::AudioBuffer<float> &a,
 void testEcoOffPreservesUltraPolyRender() {
   std::printf("--- ECO off preserves ultra poly render ---\n");
 
-  auto render = [](bool explicitlyUltra) {
+  auto render = [](bool explicitlyMaxEco) {
     auto p = createTestProcessor();
     warmUp(*p);
     setParamReal(*p, "voiceMode", 2.0f);
     setParamReal(*p, "polyMaxNotes", 4.0f);
     setParamReal(*p, "ecoMode", 0.0f);
-    if (explicitlyUltra)
-      setParamReal(*p, "polySidBudget", 1.0f);
+    if (explicitlyMaxEco)
+      setParamReal(*p, "polySidBudget", 2.0f);
     warmUp(*p);
 
     juce::AudioBuffer<float> out(2, 512 * 24);
@@ -3078,14 +3078,20 @@ void testEcoOffPreservesUltraPolyRender() {
   };
 
   const auto defaultRender = render(false);
-  const auto explicitUltraIgnored = render(true);
-  const double diff = rmsDiff(defaultRender, explicitUltraIgnored);
-  std::printf("  ECO-off default vs explicit Ultra RMS diff: %.9g\n", diff);
-  ASSERT_TRUE(defaultRender.getRMSLevel(0, 0, defaultRender.getNumSamples()) >
-                  1.0e-8f,
-              "ECO-off preservation render produces non-silent output");
+  const auto explicitMaxEcoIgnored = render(true);
+  const double defaultRms =
+      defaultRender.getRMSLevel(0, 0, defaultRender.getNumSamples());
+  const double maxEcoRms =
+      explicitMaxEcoIgnored.getRMSLevel(0, 0, explicitMaxEcoIgnored.getNumSamples());
+  const double diff = rmsDiff(defaultRender, explicitMaxEcoIgnored);
+  std::printf("  ECO-off default RMS: %.9g explicit Max ECO RMS: %.9g diff: %.9g\n",
+              defaultRms, maxEcoRms, diff);
+  ASSERT_TRUE(defaultRms > 1.0e-4f,
+              "ECO-off default preservation render produces non-silent output");
+  ASSERT_TRUE(maxEcoRms > 1.0e-4f,
+              "ECO-off explicit Max ECO preservation render produces non-silent output");
   ASSERT_TRUE(diff < 5.0e-4,
-              "ECO off ignores polySidBudget and preserves current Ultra render");
+              "ECO off ignores explicit Max ECO polySidBudget and preserves current render");
 }
 
 static void addMidiAt(juce::MidiBuffer &midi, int64_t blockStart,
