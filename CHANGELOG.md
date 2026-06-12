@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Digi performance A/B scenario**: the deterministic render/profile matrix now includes
   `s6-digi-4bit`, a generated 4-bit `$D418` playback case used to protect DigiSampler output
   while optimizing same-value SID register writes.
+- **Poly release SID render gate candidate**: released poly voices can skip their paired reSIDfp
+  `clock()` calls after their own rendered output tail falls below the shared `gm::SilenceGate`
+  threshold, while preserving allocation/voice-stealing state. S3 worst-case A/B is flagged for
+  listening before merge (`diff RMS -30.66 dBFS`, centroid delta 1.131%).
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for

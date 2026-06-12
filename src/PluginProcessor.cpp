@@ -105,6 +105,8 @@ BreadbinProcessor::getCpuAuditCountersJson(int measuredBlocks) const {
        << (cpuAuditCounters.activePolyVoices / denom)
        << ",\"activePolyNoteSlotsAvg\":"
        << (cpuAuditCounters.activePolyNoteSlots / denom)
+       << ",\"polySidRenderSkipBlocks\":"
+       << cpuAuditCounters.polySidRenderSkipBlocks
        << ",\"setFrequencyCalls\":" << total.setFrequencyCalls
        << ",\"setFrequencySame\":" << total.setFrequencySame
        << ",\"setPulseWidthCalls\":" << total.setPulseWidthCalls
@@ -154,6 +156,11 @@ void BreadbinProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   for (auto &pv : polyVoices) {
     pv.sidLeft->prepare(sampleRate);
     pv.sidRight->prepare(sampleRate);
+    pv.sidRenderGate.prepare(sampleRate, samplesPerBlock);
+    pv.sidRenderGate.setThreshold(1.0e-2f);
+    pv.sidRenderGate.setHoldBlocks(8);
+    pv.sidRenderTailPeak = 0.0f;
+    pv.sidRenderWasSkipping = false;
     pv.sidLeft->setChipModel(chipModelLeft);
     pv.sidRight->setChipModel(chipModelRight);
     pv.sidLeft->setClockMode(clockMode);
@@ -719,6 +726,8 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
 
     // === POLY SAMPLE GENERATION ===
     int activePolyIdx[MAX_POLY];
+    bool skipPolySid[MAX_POLY] = {};
+    float polyTailPeak[MAX_POLY] = {};
     int activePolyCount = 0;
     int activeCount = 0;
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
@@ -734,6 +743,24 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
         ? 1.0f / std::sqrt(static_cast<float>(activeCount))
         : 1.0f;
 
+    for (int ai = 0; ai < activePolyCount; ++ai) {
+      auto &pv = polyVoices[activePolyIdx[ai]];
+      if (!pv.releasing) {
+        pv.sidRenderGate.reset();
+        pv.sidRenderWasSkipping = false;
+        continue;
+      }
+
+      skipPolySid[ai] = pv.sidRenderGate.update(0.0f, pv.sidRenderTailPeak);
+      if (skipPolySid[ai]) {
+        pv.sidRenderWasSkipping = true;
+        pv.sidRenderTailPeak = 0.0f;
+        ++cpuAuditCounters.polySidRenderSkipBlocks;
+      } else {
+        pv.sidRenderWasSkipping = false;
+      }
+    }
+
     for (int i = 0; i < numSamples; ++i) {
       smoothedPolyNorm += gainSmoothCoeff * (targetPolyNorm - smoothedPolyNorm);
       smoothedMasterVol += gainSmoothCoeff * (masterVolume - smoothedMasterVol);
@@ -746,16 +773,25 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
       for (int ai = 0; ai < activePolyCount; ++ai) {
         auto &pv = polyVoices[activePolyIdx[ai]];
         float fadeTarget = pv.fadingOut ? 0.0f : 1.0f;
+
         pv.fadeGain += gainSmoothCoeff * (fadeTarget - pv.fadeGain);
+
+        if (skipPolySid[ai]) {
+          continue;
+        }
 
         float sL = pv.sidLeft->clock();
         float sR = pv.sidRight->clock();
 
         float fade = pv.fadeGain;
-        outL += (sL * leftGainL * smoothedLeftVoiceGain
-              +  sR * rightGainL * smoothedRightVoiceGain) * fade;
-        outR += (sL * leftGainR * smoothedLeftVoiceGain
-              +  sR * rightGainR * smoothedRightVoiceGain) * fade;
+        const float voiceL = sL * fade;
+        const float voiceR = sR * fade;
+        outL += voiceL * leftGainL * smoothedLeftVoiceGain
+              + voiceR * rightGainL * smoothedRightVoiceGain;
+        outR += voiceL * leftGainR * smoothedLeftVoiceGain
+              + voiceR * rightGainR * smoothedRightVoiceGain;
+        polyTailPeak[ai] = std::max(
+            polyTailPeak[ai], std::max(std::abs(voiceL), std::abs(voiceR)));
       }
 
       outL *= smoothedPolyNorm * smoothedMasterVol;
@@ -767,6 +803,12 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
     }
 
     // Release detection: begin fade-out before ADSR finishes
+    for (int ai = 0; ai < activePolyCount; ++ai) {
+      auto &pv = polyVoices[activePolyIdx[ai]];
+      if (!skipPolySid[ai])
+        pv.sidRenderTailPeak = polyTailPeak[ai];
+    }
+
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
       auto &pv = polyVoices[pi];
       if (pv.releasing && !pv.fadingOut) {
@@ -783,6 +825,9 @@ void BreadbinProcessor::generateAudio(juce::AudioBuffer<float> &buffer) {
         pv.fadeGain = 0.0f;
         pv.midiNote = -1;
         pv.filterEnv = FilterEnvelopeState{};
+        pv.sidRenderGate.reset();
+        pv.sidRenderTailPeak = 0.0f;
+        pv.sidRenderWasSkipping = false;
       }
     }
   } else {
@@ -1743,6 +1788,9 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   pv.releasing = false;
   pv.fadingOut = false;
   pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
+  pv.sidRenderGate.reset();
+  pv.sidRenderTailPeak = 0.0f;
+  pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
 
@@ -1804,6 +1852,9 @@ void BreadbinProcessor::polyAllNotesOff() {
       pv.releasing = false;
       pv.midiNote = -1;
       pv.filterEnv = FilterEnvelopeState{};
+      pv.sidRenderGate.reset();
+      pv.sidRenderTailPeak = 0.0f;
+      pv.sidRenderWasSkipping = false;
     }
   }
 }
@@ -2048,6 +2099,9 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
   pv.releasing = false;
   pv.fadingOut = false;
   pv.fadeGain = 0.0f; // ramps up per-sample to prevent DC offset pop
+  pv.sidRenderGate.reset();
+  pv.sidRenderTailPeak = 0.0f;
+  pv.sidRenderWasSkipping = false;
   pv.startSample = polyNoteCounter++;
   pv.filterEnv = FilterEnvelopeState{};
   pv.targetHz = 440.0 * std::pow(2.0, (static_cast<double>(midiNote) - 69.0) / 12.0);

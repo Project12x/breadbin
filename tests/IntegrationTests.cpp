@@ -2698,6 +2698,54 @@ void testPolyNoteOffReleasesCorrectVoice() {
               "Released voice freed after release timer");
 }
 
+static uint64_t extractJsonCounter(const std::string &json,
+                                   const std::string &key) {
+  const std::string needle = "\"" + key + "\":";
+  const auto pos = json.find(needle);
+  if (pos == std::string::npos)
+    return 0;
+  auto start = pos + needle.size();
+  while (start < json.size() && std::isspace(static_cast<unsigned char>(json[start])))
+    ++start;
+  auto end = start;
+  while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])))
+    ++end;
+  return end > start ? static_cast<uint64_t>(std::stoull(json.substr(start, end - start))) : 0;
+}
+
+void testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice() {
+  std::printf("--- Poly release skips silent SID render without freeing voice ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto *polyParam = p->apvts.getParameter("voiceMode");
+  polyParam->setValueNotifyingHost(polyParam->convertTo0to1(2.0f));
+  auto *releaseParam = p->apvts.getParameter("v0_release");
+  releaseParam->setValueNotifyingHost(releaseParam->convertTo0to1(12.0f));
+  warmUp(*p);
+
+  juce::MidiBuffer noteOn;
+  noteOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &noteOn);
+
+  juce::MidiBuffer noteOff;
+  noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &noteOff);
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 1,
+              "Released poly voice remains allocated while release timer runs");
+
+  p->resetCpuAuditCounters();
+  for (int i = 0; i < 205; ++i)
+    processBlock(*p);
+
+  const auto counters = p->getCpuAuditCountersJson(205);
+  const auto skipped = extractJsonCounter(counters, "polySidRenderSkipBlocks");
+  ASSERT_TRUE(p->getActivePolyVoiceCount() == 1,
+              "Silent released poly voice is not freed early by render gating");
+  ASSERT_TRUE(skipped > 0,
+              "Silent released poly voice skips SID rendering while retained for allocation semantics");
+}
+
 // ==================== PARAPHONIC + POLY+PARA TESTS ====================
 
 void testParaphonicSeparateNotes() {
@@ -3581,6 +3629,7 @@ int main(int argc, char *argv[]) {
   testPolyMonoUnaffectedWhenDisabled();
   testPolyVoiceStealing();
   testPolyNoteOffReleasesCorrectVoice();
+  testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice();
 
   // ==================== PARAPHONIC + POLY+PARA TESTS ====================
   testParaphonicSeparateNotes();

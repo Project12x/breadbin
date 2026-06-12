@@ -221,7 +221,7 @@ against the S1-S6 pre-T2 references in `releases/ab/1931533/`.
 
 S5 input WAVs are bit-identical. Flagged pairs for listening: none.
 
-## T2 - Same-value SID register/write guards - **planned next**
+## T2 - Same-value SID register/write guards - **investigated/rejected**
 
 **Evidence:** the preserve-tone audit counters show repeated no-op SID writes in
 active scenarios before any further gating. S2 typical playing has
@@ -261,31 +261,84 @@ profiling plus WAV A/B even though the intended output should be unchanged.
 - Full Release tests remain green; mutation coverage remains adequate.
 - Full Phase 4 WAV A/B passes automatically or flags only explainable pairs.
 
-## T3 - Inactive poly SID voice gating - **defer behind T2**
+**2026-06-12 result:** rejected for now. Three variants were measured and none
+met the acceptance criteria:
 
-**Evidence:** the full matrix S3 worst case spends 13285.25 us in `SIDRender`
-with an average wall time of 13412.6 us, exceeding the 10666.7 us block budget.
-S2 typical playing also spends 5589.98 us in `SIDRender`. S4 and both S5 input
-scenarios show 1455-1808 us of `SIDRender` even after sources are disabled or
-voices are not intentionally contributing, so the waste is still concentrated in
-SID clocking rather than FX. However, the preserve-tone audit now proves a
-lower-risk no-op write target first, so further gating waits until T2 is
-measured.
+| Variant | Artifact | Key result |
+|---|---|---|
+| `SIDEngine::writeRegister` same-value elision plus setter guards | `releases/cpu_after_t2_register_guards_2026-06-12.json`, rerun `releases/cpu_t2_rerun_2026-06-12.json` | same-value write counts dropped, but active `SIDRender` regressed heavily (`S2` 3770 -> 9195 us on rerun, `S3` 9990 -> 22451 us) |
+| setter-only guards preserving `SID::write()` when setters write | `releases/cpu_t2_setter_only_2026-06-12.json` | still regressed (`S2` 3770 -> 5097 us, `S3` 9990 -> 13553 us) |
+| wrapper block render / inline-call experiments outside register writes | `releases/cpu_after_sid_block_render_2026-06-12.json`, `releases/cpu_after_inline_sid_clock_2026-06-12.json` | did not beat the pinned exact-hoist baseline |
 
-**Planned fix:** after T2, consider extending the T1 output-energy policy to
-inactive poly voices: gate only on each voice pair's rendered output energy
-after note-off, preserve long tails, and reactivate on allocation or trigger.
-The established `gm::KsVoice` activity-gating pattern is the reference
-behavioral shape, but implementation should remain SID-specific unless a clean
-shared primitive emerges.
+Root cause evidence from upstream reSIDfp (`build/_deps/libsidplayfp-src/src/builders/residfp-builder/residfp/SID.cpp`):
+`SID::write()` refreshes bus TTL and calls `voiceSync(false)` even when the
+incoming register value is unchanged. Eliding those calls is therefore not a
+pure no-op at the chip-emulation boundary. Diagnostic WAVs for the broad guard
+were rendered to `releases/ab/t2_failed_diagnostic_2026-06-12/`; spot checks
+against `releases/ab/exact_hoists_2026-06-11/` were effectively identical
+(idle diff RMS -102.87 dBFS, decay -87.01 dBFS, sweep -85.25 dBFS), but CPU
+acceptance failed, so no source change landed.
 
-**Landing area:** Breadbin plugin code, with any generic helper considered for
-`ghostmoongpl`.
+T2 remains closed unless we deliberately design a reSIDfp-aware fork/API that
+preserves the required bus/voice-sync side effects while reducing redundant
+internal register work. That would be a separate behavior-adjacent target and
+needs approval before implementation.
 
-**Effort:** medium-high. More A/B risk than T1 because oscillator phase and
-voice stealing interact with allocation state.
+## T3 - Inactive poly SID voice gating - **candidate / flagged for listen**
 
-**Acceptance criteria:** to be re-pinned after T2 rebaseline.
+**Evidence:** after exact pitch-ratio hoists, S3 worst case still spends
+9990 us in `SIDRender` with 10100 us wall average, while the block budget is
+10666.7 us. S2 typical playing spends 3770 us in `SIDRender`. Preserve-tone
+counters also show S3 averaging 7.093 retained poly voices but only 1 active
+poly note slot, so release-retained poly SID pairs are the largest remaining
+measurable waste before changing reSIDfp internals.
+
+**Implemented candidate:** each poly voice owns a `gm::SilenceGate` that is
+updated from that voice pair's rendered post-fade output peak while the voice is
+`releasing`. When the gate is closed, the voice remains allocated and its
+`fadeGain` continues to advance, but the paired reSIDfp `clock()` calls are
+skipped until the slot is reused. Allocation, stealing, and active polyphony
+counts are unchanged; note-on/all-notes-off/free paths reset the gate state.
+
+**Landing area:** Breadbin plugin code using the existing shared
+`gm::SilenceGate` primitive.
+
+**Effort:** medium-high. This is behavior-adjacent because release-tail samples
+can change after output energy falls below the gate threshold.
+
+**CPU result:** final candidate profile
+`releases/cpu_after_poly_release_gate_2026-06-12.json` recorded
+`polySidRenderSkipBlocks=2695` in S3 and moved S3 wall/SIDRender
+10100/9990 us -> 9264.5/9150.75 us, bringing the scenario from 94.7% to 86.85%
+of the 512-sample block budget. S2/S4/S5/S6 were neutral to slower from run
+noise and added gate bookkeeping. Treat this as an S3-targeted headroom
+candidate, not a broad matrix win.
+
+**WAV A/B:** rendered to
+`releases/ab/poly_release_gate_2026-06-12/` against
+`releases/ab/exact_hoists_2026-06-11/`.
+
+| Scenario | Diff RMS | Peak diff | Output RMS delta | Centroid delta | Policy |
+|---|---:|---:|---:|---:|---|
+| S1 idle | -103.21 dBFS | -73.41 dBFS | +0.002 dB | 1.257% | pass |
+| S2 typical | -77.44 dBFS | -54.89 dBFS | -0.000 dB | 0.001% | pass |
+| S3 worst case | -30.66 dBFS | -12.26 dBFS | -0.018 dB | 1.131% | flagged |
+| S4 decay | -86.45 dBFS | -55.04 dBFS | -0.000 dB | 0.028% | pass |
+| S5 sweep | -85.36 dBFS | -69.48 dBFS | -0.000 dB | 0.075% | pass |
+| S5 pink burst | -88.36 dBFS | -67.39 dBFS | -0.001 dB | 0.002% | pass |
+| S6 digi | -74.02 dBFS | -57.05 dBFS | -0.001 dB | 0.024% | pass |
+
+S3 is explainable: the optimization intentionally stops clocking released poly
+SID pairs once their own output tail has fallen below the gate threshold, so
+the difference is concentrated in the worst-case release-heavy scenario. It is
+inside the policy's `-45` to `-25 dBFS` flagged band, not an automatic pass.
+Flagged pair for user listening before merge:
+`releases/ab/exact_hoists_2026-06-11/s3-worst-case.wav` vs
+`releases/ab/poly_release_gate_2026-06-12/s3-worst-case.wav`.
+
+**Acceptance criteria:** keep only if full Release verification remains green
+and the flagged S3 pair is audibly acceptable to the user. Revert or retune if
+the listen check finds tail truncation, clicks, or unacceptable tone loss.
 
 ## T4 - Safety-chain micro-costs - **defer**
 

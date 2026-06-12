@@ -1,6 +1,6 @@
 # Project State
 
-**Last Updated**: 2026-06-11
+**Last Updated**: 2026-06-12
 
 ## Current Status: Beta
 
@@ -100,6 +100,14 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   without changing SID call order, polyphony behavior, register sequencing, or digi `$D418`
   writes. S3 section-local profile moved `PolyMod` 4.24 us -> 3.92 us and `Modulation`
   1.61 us -> 1.49 us; full S1-S6 WAV A/B passed automatically with no flagged pairs.
+- **Poly release SID render gate — CANDIDATE, LISTEN FLAGGED**:
+  released poly voices now use `gm::SilenceGate` on their own rendered output tail to skip retained
+  reSIDfp `clock()` calls without freeing the voice slot or changing allocation/stealing state.
+  Candidate profile recorded `polySidRenderSkipBlocks=2695` in S3; final S3 SIDRender moved
+  9990 us -> 9150.75 us, while other scenarios were neutral/noisy. WAV A/B flags only
+  `s3-worst-case` for listening (`diff RMS -30.66 dBFS`, centroid delta 1.131%):
+  `releases/ab/exact_hoists_2026-06-11/s3-worst-case.wav` vs
+  `releases/ab/poly_release_gate_2026-06-12/s3-worst-case.wav`.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing

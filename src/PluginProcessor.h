@@ -111,6 +111,9 @@ public:
     // Per-voice fade envelope (prevents DC offset pops on activate/deactivate)
     float fadeGain = 0.0f;           // 0=silent, 1=full — smoothed per-sample
     bool fadingOut = false;          // true = ramping down to deactivation
+    gm::SilenceGate sidRenderGate;   // gates released voices after output tail is silent
+    float sidRenderTailPeak = 0.0f;
+    bool sidRenderWasSkipping = false;
     // Poly+Para: per-SID-voice note tracking
     int paraNote[3] = {-1, -1, -1};
     int paraVelocity[3] = {0, 0, 0};
@@ -1002,6 +1005,7 @@ private:
     uint64_t blocks = 0;
     uint64_t activePolyVoices = 0;
     uint64_t activePolyNoteSlots = 0;
+    uint64_t polySidRenderSkipBlocks = 0;
   };
   CpuAuditCounters cpuAuditCounters;
   gm::CpuSectionProfiler cpuProfiler;
