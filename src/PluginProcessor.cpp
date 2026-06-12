@@ -253,6 +253,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   pitchBendRange = static_cast<int>(pitchBendRangePtr->load());
   voiceMode = static_cast<VoiceMode>(
       juce::jlimit(0, 3, static_cast<int>(voiceModePtr->load())));
+  const auto oldEcoMode = ecoMode;
+  const auto oldPolySidBudget = polySidBudget;
+  const auto oldPolyStereoAnchor = polyStereoAnchor;
   ecoMode = static_cast<EcoMode>(
       juce::jlimit(0, 1, static_cast<int>(ecoModePtr->load())));
   polySidBudget = static_cast<PolySidBudget>(
@@ -260,6 +263,9 @@ void BreadbinProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   polyStereoAnchor = static_cast<PolyStereoAnchor>(
       juce::jlimit(0, 1, static_cast<int>(polyStereoAnchorPtr->load())));
   polyMaxNotes = juce::jlimit(1, MAX_POLY, static_cast<int>(polyMaxNotesPtr->load()));
+  if (oldEcoMode != ecoMode || oldPolySidBudget != polySidBudget ||
+      oldPolyStereoAnchor != polyStereoAnchor)
+    rebalancePolyRenderRoles();
   if (cpuProfiler.isEnabled()) {
     ++cpuAuditCounters.blocks;
     for (int pi = 0; pi < polyMaxNotes; ++pi) {
@@ -1800,14 +1806,14 @@ bool BreadbinProcessor::isEcoPolyBudgetActive() const noexcept {
 }
 
 BreadbinProcessor::PolySidRenderRole
-BreadbinProcessor::chooseNewPolyRenderRole() const noexcept {
+BreadbinProcessor::chooseNewPolyRenderRoleForSlot(int targetIdx) const noexcept {
   if (!isEcoPolyBudgetActive() || polySidBudget == PolySidBudget::Ultra)
     return PolySidRenderRole::Pair;
 
   if (polySidBudget == PolySidBudget::MaxEco) {
     int monoCount = 0;
     for (int i = 0; i < polyMaxNotes; ++i)
-      if (polyVoices[i].active || polyVoices[i].releasing)
+      if (i != targetIdx && (polyVoices[i].active || polyVoices[i].releasing))
         ++monoCount;
     return (monoCount % 2 == 0) ? PolySidRenderRole::LeftMono
                                 : PolySidRenderRole::RightMono;
@@ -1816,6 +1822,8 @@ BreadbinProcessor::chooseNewPolyRenderRole() const noexcept {
   bool hasPair = false;
   int monoCount = 0;
   for (int i = 0; i < polyMaxNotes; ++i) {
+    if (i == targetIdx)
+      continue;
     const auto &pv = polyVoices[i];
     if (!pv.active && !pv.releasing)
       continue;
@@ -1850,6 +1858,52 @@ void BreadbinProcessor::demoteExistingPolyPairForNewestAnchor() noexcept {
   }
 }
 
+void BreadbinProcessor::rebalancePolyRenderRoles() noexcept {
+  if (!isEcoPolyBudgetActive() || polySidBudget == PolySidBudget::Ultra) {
+    for (int i = 0; i < polyMaxNotes; ++i) {
+      auto &pv = polyVoices[i];
+      if (pv.active || pv.releasing)
+        pv.sidRenderRole = PolySidRenderRole::Pair;
+    }
+    return;
+  }
+
+  int pairIdx = -1;
+  if (polySidBudget == PolySidBudget::Hybrid) {
+    uint32_t selectedTime =
+        (polyStereoAnchor == PolyStereoAnchor::Oldest) ? UINT32_MAX : 0;
+    for (int i = 0; i < polyMaxNotes; ++i) {
+      const auto &pv = polyVoices[i];
+      if (!pv.active && !pv.releasing)
+        continue;
+      if (pairIdx < 0 ||
+          (polyStereoAnchor == PolyStereoAnchor::Oldest &&
+           pv.startSample < selectedTime) ||
+          (polyStereoAnchor == PolyStereoAnchor::Newest &&
+           pv.startSample >= selectedTime)) {
+        pairIdx = i;
+        selectedTime = pv.startSample;
+      }
+    }
+  }
+
+  int monoCount = 0;
+  for (int i = 0; i < polyMaxNotes; ++i) {
+    auto &pv = polyVoices[i];
+    if (!pv.active && !pv.releasing)
+      continue;
+
+    if (i == pairIdx) {
+      pv.sidRenderRole = PolySidRenderRole::Pair;
+      continue;
+    }
+
+    pv.sidRenderRole = (monoCount % 2 == 0) ? PolySidRenderRole::LeftMono
+                                            : PolySidRenderRole::RightMono;
+    ++monoCount;
+  }
+}
+
 void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
   demoteExistingPolyPairForNewestAnchor();
 
@@ -1860,7 +1914,7 @@ void BreadbinProcessor::polyNoteOn(int midiNote, int velocity) {
     return;
 
   auto &pv = polyVoices[idx];
-  const auto newRole = chooseNewPolyRenderRole();
+  const auto newRole = chooseNewPolyRenderRoleForSlot(idx);
 
   // If stealing, release the old note first
   if (pv.active || pv.releasing) {
@@ -2176,7 +2230,7 @@ void BreadbinProcessor::polyParaNoteOn(int midiNote, int velocity) {
     return;
 
   auto &pv = polyVoices[idx];
-  const auto newRole = chooseNewPolyRenderRole();
+  const auto newRole = chooseNewPolyRenderRoleForSlot(idx);
 
   // If stealing, release the old note first
   if (pv.active || pv.releasing) {

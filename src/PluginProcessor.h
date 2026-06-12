@@ -514,8 +514,9 @@ private:
   int findFreePolyVoice() const;
   int findStealablePolyVoice() const;
   bool isEcoPolyBudgetActive() const noexcept;
-  PolySidRenderRole chooseNewPolyRenderRole() const noexcept;
+  PolySidRenderRole chooseNewPolyRenderRoleForSlot(int targetIdx) const noexcept;
   void demoteExistingPolyPairForNewestAnchor() noexcept;
+  void rebalancePolyRenderRoles() noexcept;
   void polyNoteOn(int midiNote, int velocity);
   void polyNoteOff(int midiNote);
   void polyAllNotesOff();

@@ -2758,6 +2758,24 @@ static uint64_t extractJsonCounter(const std::string &json,
   return end > start ? static_cast<uint64_t>(std::stoull(json.substr(start, end - start))) : 0;
 }
 
+static void assertEcoRoleCounters(BreadbinProcessor &p, uint64_t expectedPair,
+                                  uint64_t expectedLeft,
+                                  uint64_t expectedRight,
+                                  const char *context) {
+  p.resetCpuAuditCounters();
+  processBlock(p);
+  const auto json = p.getCpuAuditCountersJson(1);
+  const std::string pairMessage = std::string(context) + ": Pair role count";
+  const std::string leftMessage = std::string(context) + ": LeftMono role count";
+  const std::string rightMessage = std::string(context) + ": RightMono role count";
+  ASSERT_TRUE(extractJsonCounter(json, "polyPairVoiceBlocks") == expectedPair,
+              pairMessage.c_str());
+  ASSERT_TRUE(extractJsonCounter(json, "polyLeftMonoVoiceBlocks") == expectedLeft,
+              leftMessage.c_str());
+  ASSERT_TRUE(extractJsonCounter(json, "polyRightMonoVoiceBlocks") == expectedRight,
+              rightMessage.c_str());
+}
+
 void testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice() {
   std::printf("--- Poly release skips silent SID render without freeing voice ---\n");
   auto p = createTestProcessor();
@@ -3111,15 +3129,144 @@ void testEcoHybridAssignsOnePairAndAlternatingMonoRoles() {
   midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
   processBlock(*p, 512, &midi);
 
-  p->resetCpuAuditCounters();
+  assertEcoRoleCounters(*p, 1, 1, 1,
+                        "Hybrid assigns one pair and alternating mono roles");
+}
+
+void testEcoHybridOldestReusesReleasingPairSlotPreservingPair() {
+  std::printf("--- ECO Hybrid/Oldest reuses releasing Pair slot preserving Pair ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 2.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer firstNotes;
+  firstNotes.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  firstNotes.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  processBlock(*p, 512, &firstNotes);
+  assertEcoRoleCounters(*p, 1, 1, 0,
+                        "Initial Hybrid/Oldest two-note assignment");
+
+  juce::MidiBuffer releaseAndReuse;
+  releaseAndReuse.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  releaseAndReuse.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 64);
+  processBlock(*p, 512, &releaseAndReuse);
+
+  assertEcoRoleCounters(*p, 1, 1, 0,
+                        "Hybrid/Oldest releasing Pair slot reuse");
+}
+
+void testEcoHybridOldestStealsPairSlotPreservingPair() {
+  std::printf("--- ECO Hybrid/Oldest steals Pair slot preserving Pair ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 2.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  assertEcoRoleCounters(*p, 1, 1, 0,
+                        "Hybrid/Oldest stolen Pair slot replacement");
+}
+
+void testEcoMaxEcoAssignsAlternatingMonoRoles() {
+  std::printf("--- ECO Max ECO assigns alternating mono roles ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 2.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  assertEcoRoleCounters(*p, 0, 2, 1,
+                        "Max ECO three-note mono assignment");
+}
+
+void testEcoUltraAssignsAllPairRoles() {
+  std::printf("--- ECO Ultra assigns all Pair roles ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 1.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  assertEcoRoleCounters(*p, 3, 0, 0,
+                        "Ultra three-note Pair assignment");
+}
+
+void testEcoHybridNewestKeepsOnePairForNewestAnchor() {
+  std::printf("--- ECO Hybrid/Newest keeps one Pair role ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 1.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  // Audit counters expose aggregate roles, not note-to-role identity.
+  assertEcoRoleCounters(*p, 1, 1, 1,
+                        "Hybrid/Newest three-note assignment");
+}
+
+void testEcoRoleChangeRebalancesHeldPolyVoices() {
+  std::printf("--- ECO role change rebalances held poly voices ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  setParamReal(*p, "voiceMode", 2.0f);
+  setParamReal(*p, "polyMaxNotes", 4.0f);
+  setParamReal(*p, "ecoMode", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+  assertEcoRoleCounters(*p, 3, 0, 0,
+                        "ECO-off held voices before role change");
+
+  setParamReal(*p, "ecoMode", 1.0f);
+  setParamReal(*p, "polySidBudget", 0.0f);
+  setParamReal(*p, "polyStereoAnchor", 0.0f);
   processBlock(*p);
-  const auto json = p->getCpuAuditCountersJson(1);
-  ASSERT_TRUE(extractJsonCounter(json, "polyPairVoiceBlocks") == 1,
-              "Hybrid clocks one stereo pair voice block");
-  ASSERT_TRUE(extractJsonCounter(json, "polyLeftMonoVoiceBlocks") == 1,
-              "Hybrid assigns one added note to left mono");
-  ASSERT_TRUE(extractJsonCounter(json, "polyRightMonoVoiceBlocks") == 1,
-              "Hybrid assigns one added note to right mono");
+
+  assertEcoRoleCounters(*p, 1, 1, 1,
+                        "Held voices after ECO Hybrid/Oldest role change");
 }
 
 static void addMidiAt(juce::MidiBuffer &midi, int64_t blockStart,
@@ -3674,6 +3821,12 @@ int main(int argc, char *argv[]) {
   testEcoPerformanceParamsExistAndDefaultSafe();
   abrender::testEcoOffPreservesUltraPolyRender();
   abrender::testEcoHybridAssignsOnePairAndAlternatingMonoRoles();
+  abrender::testEcoHybridOldestReusesReleasingPairSlotPreservingPair();
+  abrender::testEcoHybridOldestStealsPairSlotPreservingPair();
+  abrender::testEcoMaxEcoAssignsAlternatingMonoRoles();
+  abrender::testEcoUltraAssignsAllPairRoles();
+  abrender::testEcoHybridNewestKeepsOnePairForNewestAnchor();
+  abrender::testEcoRoleChangeRebalancesHeldPolyVoices();
 
   // State persistence
   testSaveRestoreState();
