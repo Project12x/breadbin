@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ECO Poly SID Budget plan**: documented the Manual ECO design for Hybrid/Ultra/Max ECO poly
   rendering, including a Settings popup, stereo-anchor policy, ECO-off preservation requirements,
   and future Auto ECO roadmap.
+- **Manual ECO performance Settings popup and Hybrid profiling**: added explicit ECO controls for
+  Ultra/current, Hybrid, and Max ECO poly SID budget behavior, then added the S7
+  `s7-eco-hybrid-poly` profile/render scenario. Release profiling measured S7 ECO Hybrid at
+  2842.3 us wall avg / 2743.91 us `SIDRender`, below the 6500 us dense-poly target. ECO Hybrid WAV
+  output is intentionally listen-flagged against Ultra, not treated as behavior-preserving. ECO-off
+  S3 is also flagged against `releases/ab/poly_release_gate_2026-06-12/` pending user listening or
+  baseline acceptance.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for

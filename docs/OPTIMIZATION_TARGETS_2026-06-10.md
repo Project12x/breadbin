@@ -340,7 +340,7 @@ Flagged pair for user listening before merge:
 and the flagged S3 pair is audibly acceptable to the user. Revert or retune if
 the listen check finds tail truncation, clicks, or unacceptable tone loss.
 
-## T3b - Manual ECO Hybrid poly SID budget - **planned**
+## T3b - Manual ECO Hybrid poly SID budget - **measured / blocked on listening**
 
 **Evidence:** after the T3 candidate, S3 worst case is technically under the
 512-sample block budget but still close: wall average 9264.5 us, `SIDRender`
@@ -349,11 +349,11 @@ showed that the typical path is comfortable, but worst case is not a fast-feel
 latency target. The largest remaining musical lever is reducing dense-poly SID
 engine count without hiding the dual-SID identity of the patch.
 
-**Planned fix:** add explicit Manual ECO settings with a `Poly SID Budget`.
+**Implemented fix:** add explicit Manual ECO settings with a `Poly SID Budget`.
 Hybrid keeps one stereo anchor note as a full L/R SID pair, while added poly
 notes clock one SID engine each and alternate L/R character. Current behavior
-becomes `Ultra` and remains the ECO-off/default path. `Max ECO` is planned as a
-later one-SID-per-note option. The full design is
+is `Ultra` and remains the ECO-off/default path. `Max ECO` is the explicit
+one-SID-per-note option. The full design is
 `docs/superpowers/specs/2026-06-12-eco-poly-sid-budget-design.md`; the
 implementation plan is
 `docs/superpowers/plans/2026-06-12-eco-poly-sid-budget.md`.
@@ -378,6 +378,59 @@ profiling scenarios.
   treated as a behavior-preserving replacement for Ultra.
 - Existing Ultra/current behavior remains available for patches that rely on
   full dual-SID-per-note stereo spread.
+
+**2026-06-12 Release profile artifacts:**
+
+- ECO Off/default: `releases/cpu_after_eco_params_off_2026-06-12.json`.
+- ECO Hybrid S7 scenario: `releases/cpu_after_eco_hybrid_2026-06-12.json`.
+- WAV renders: `releases/ab/eco_hybrid_2026-06-12/`.
+
+ECO-off CPU was compared against
+`releases/cpu_after_poly_release_gate_2026-06-12.json`. Dense poly stayed
+within normal run noise: S3 baseline JSON 9260 us wall / 9150 us `SIDRender`
+versus ECO-off 9450 us wall / 9330 us `SIDRender` (+2.1% wall). The largest
+non-dense drift was S6 digi at 1300 us -> 1470 us wall (+13.1%), so treat
+non-SIDRender micro-variation as run-context noise rather than a new target
+without more repeated profiles.
+
+Hybrid profiling adds `s7-eco-hybrid-poly`, the S3 musical workload with
+`ecoMode=Manual`, `polySidBudget=Hybrid`, and oldest stereo anchor. The
+measured Release run reported:
+
+| Scenario | Wall avg | `SIDRender` avg | Dense target |
+|---|---:|---:|---|
+| S3 `s3-worst-case` Ultra/current | 9083.5 us | 8966.43 us | Misses 6500 us |
+| S7 `s7-eco-hybrid-poly` ECO Hybrid | 2842.3 us | 2743.91 us | Passes 6500 us |
+
+S7 counters show the intended lower SID work: `polySidRenderSkipBlocks=7914`,
+`polyPairVoiceBlocks=561`, `polyLeftMonoVoiceBlocks=4390`, and
+`polyRightMonoVoiceBlocks=1373`.
+
+**WAV A/B against `releases/ab/poly_release_gate_2026-06-12/`:**
+
+| Pair | Diff peak | Diff RMS | Output RMS delta | Rough centroid delta | Status |
+|---|---:|---:|---:|---:|---|
+| S1 idle | -71.22 dBFS | -103.39 dBFS | -0.0029 dB | +4.60 Hz / 0.633% | pass |
+| S2 typical | -59.68 dBFS | -77.28 dBFS | +0.0002 dB | -0.24 Hz / 0.009% | pass |
+| S3 Ultra/current | -13.73 dBFS | -37.87 dBFS | -0.0253 dB | -0.78 Hz / 0.020% | flagged-listen |
+| S4 decay | -54.46 dBFS | -86.91 dBFS | -0.0000 dB | +1.24 Hz / 0.055% | pass |
+| S5 sweep | -69.48 dBFS | -85.53 dBFS | +0.0005 dB | +0.37 Hz / 0.011% | pass |
+| S5 pink burst | -67.39 dBFS | -88.50 dBFS | +0.0002 dB | -0.29 Hz / 0.004% | pass |
+| S6 digi | -55.50 dBFS | -72.60 dBFS | -0.0032 dB | -1.72 Hz / 0.060% | pass |
+| S7 ECO Hybrid vs S3 Ultra | -11.01 dBFS | -29.36 dBFS | -3.7634 dB | +193.59 Hz / 4.839% | listen-flag |
+
+Flagged/listening pairs:
+
+- `D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav`
+  vs `D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s3-worst-case.wav`.
+- `D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav`
+  vs `D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s7-eco-hybrid-poly.wav`.
+
+The S7 flag is expected because ECO Hybrid deliberately changes dense-poly
+rendering and is not a behavior-preserving replacement for Ultra. The S3
+Ultra/current flag is not acceptable under the ECO-off A/B policy until the
+user either accepts the pair by listening or provides/approves a better
+behavior-preserving baseline.
 
 ## T4 - Safety-chain micro-costs - **defer**
 

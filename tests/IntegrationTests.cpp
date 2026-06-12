@@ -3710,6 +3710,21 @@ static Scenario fullStackScenario() {
           }};
 }
 
+static Scenario ecoHybridFullStackScenario() {
+  auto scenario = fullStackScenario();
+  const auto s3Setup = scenario.setup;
+  scenario.name = "s7-eco-hybrid-poly";
+  scenario.description =
+      "S7 ECO Hybrid: S3 dense poly with one stereo anchor and alternating mono SID notes";
+  scenario.setup = [s3Setup](BreadbinProcessor &p) {
+    s3Setup(p);
+    setParamReal(p, "ecoMode", 1.0f);
+    setParamReal(p, "polySidBudget", 0.0f);
+    setParamReal(p, "polyStereoAnchor", 0.0f);
+  };
+  return scenario;
+}
+
 static Scenario decayScenario() {
   return {"s4-decay-to-silence", "S4 dense burst then long release to silence", 18.0,
           false, false, false,
@@ -3816,7 +3831,7 @@ static Scenario digi4BitScenario() {
 static std::vector<Scenario> allScenarios() {
   return {idleScenario(), typicalScenario(), fullStackScenario(),
           decayScenario(), inputSweepScenario(), inputPinkBurstScenario(),
-          digi4BitScenario()};
+          digi4BitScenario(), ecoHybridFullStackScenario()};
 }
 
 static bool renderScenario(const Scenario &scenario,

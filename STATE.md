@@ -108,13 +108,28 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   `s3-worst-case` for listening (`diff RMS -30.66 dBFS`, centroid delta 1.131%):
   `releases/ab/exact_hoists_2026-06-11/s3-worst-case.wav` vs
   `releases/ab/poly_release_gate_2026-06-12/s3-worst-case.wav`.
-- **ECO Poly SID Budget — PLANNED**:
-  design and implementation plan written for explicit Manual ECO behavior:
-  `docs/superpowers/specs/2026-06-12-eco-poly-sid-budget-design.md` and
-  `docs/superpowers/plans/2026-06-12-eco-poly-sid-budget.md`. The planned Hybrid mode keeps one
-  stereo anchor note and clocks added poly notes on alternating single SID engines (`N + 1` SID
-  engines instead of current Ultra `2N`). ECO Off must preserve current behavior; Auto ECO is later
-  roadmap work after Manual ECO and listening validation.
+- **ECO Poly SID Budget — MEASURED, LISTENING PENDING**:
+  Manual ECO and the Settings popup are implemented for explicit Ultra/current, Hybrid, and Max ECO
+  poly SID budget behavior. Current measured artifacts:
+  `releases/cpu_after_eco_params_off_2026-06-12.json`,
+  `releases/cpu_after_eco_hybrid_2026-06-12.json`, and
+  `releases/ab/eco_hybrid_2026-06-12/`. S7 ECO Hybrid uses the S3 dense-poly musical workload with
+  one stereo anchor and alternating mono SID notes; Release profiling measured 2842.3 us wall avg /
+  2743.91 us `SIDRender`, below the 6500 us target, with `polySidRenderSkipBlocks=7914`,
+  `polyPairVoiceBlocks=561`, `polyLeftMonoVoiceBlocks=4390`, and
+  `polyRightMonoVoiceBlocks=1373`.
+  WAV A/B against `releases/ab/poly_release_gate_2026-06-12/` passes S1, S2, S4, S5, and S6, but
+  flags S3 Ultra/current (`diff peak -13.73 dBFS`, `diff RMS -37.87 dBFS`, output RMS delta
+  -0.0253 dB, rough centroid delta -0.78 Hz / 0.020%):
+  `D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav` vs
+  `D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s3-worst-case.wav`.
+  S7 ECO Hybrid is also listen-flagged against S3 Ultra (`diff peak -11.01 dBFS`, `diff RMS
+  -29.36 dBFS`, output RMS delta -3.7634 dB, rough centroid delta +193.59 Hz / 4.839%):
+  `D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav` vs
+  `D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s7-eco-hybrid-poly.wav`.
+  The S7 flag is expected; the S3 ECO-off flag remains a residual acceptance risk until the user
+  accepts the pair by listening or approves another behavior-preserving baseline. Auto ECO is later
+  roadmap work after Manual ECO listening validation.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -134,7 +149,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 |-------|-------|--------|
 | BreadbinLFOTests | 484 | Pass |
 | BreadbinMutationTests | 18 mutations (17 killed) | 5.6% survival |
-| BreadbinIntegrationTests | 409 | Pass |
+| BreadbinIntegrationTests | 497 | Pass |
 
 Run: `ctest --test-dir build -C Release`
 
