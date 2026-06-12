@@ -1,6 +1,6 @@
 # Project State
 
-**Last Updated**: 2026-06-10
+**Last Updated**: 2026-06-11
 
 ## Current Status: Beta
 
@@ -84,6 +84,12 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
   sweep/pink burst. Matrix references are under `releases/ab/4c07888/`; baseline JSON is
   `releases/cpu_baseline_matrix_2026-06-10.json`. S3 remains over budget at 13412.6 us
   per 512-sample block, dominated by `SIDRender` at 13285.25 us.
+- **Preserve-tone audit counters — PINNED**:
+  `releases/cpu_audit_counters_2026-06-10.json` records SID setter/register no-op ratios for
+  the full S1-S5 matrix. The next optimization target is same-value SID register/write guards,
+  selected from this evidence before any quality or gating reduction. Its wall/section timings
+  are run context only; `releases/cpu_baseline_matrix_2026-06-10.json` remains the pinned timing
+  baseline until the next rebaseline.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
@@ -124,7 +130,9 @@ Artifacts: `releases/cpu_baseline_2026-06-10.json`,
 `releases/cpu_after_t1_2026-06-10.json`, `releases/ab/88fa9f6fbf6c/`, and
 `releases/ab/t1_2026-06-10/` for the initial T1 pass; full matrix references
 and baseline are `releases/ab/4c07888/` and
-`releases/cpu_baseline_matrix_2026-06-10.json`.
+`releases/cpu_baseline_matrix_2026-06-10.json`. Preserve-tone audit counters
+are pinned at `releases/cpu_audit_counters_2026-06-10.json`; use that artifact
+for no-op ratios, not as a replacement timing baseline.
 
 ## Directory Structure
 

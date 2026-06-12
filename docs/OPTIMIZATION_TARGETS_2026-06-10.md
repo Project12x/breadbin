@@ -111,6 +111,32 @@ Status: blocked in this shell.
 - Required follow-up: rerun from elevated PowerShell and keep
   `releases/etw/first_drilldown.{etl,json}`. Use `D:\SymCache` for symbols.
 
+## Preserve-Tone Audit Counters
+
+Artifact: `releases/cpu_audit_counters_2026-06-10.json`, generated from the
+Release `BreadbinIntegrationTests.exe --cpu-profile` harness after wiring
+diagnostic-only SID setter/register counters. The counters do not skip writes;
+they only measure repeated work. The artifact also includes wall/section timing
+from that run, but `releases/cpu_baseline_matrix_2026-06-10.json` remains the
+pinned timing baseline until the next full rebaseline; use the audit artifact for
+counter ratios and provenance, not as a replacement timing baseline.
+
+| Scenario | freq same/total | PW same/total | cutoff same/total | register same/total | active poly voices avg | active note slots avg |
+|---|---:|---:|---:|---:|---:|---:|
+| S1 `s1-idle-default` | 0/0 | 0/0 | 4000/4000 | 32000/32000 | 0.000 | 0.000 |
+| S2 `s2-typical-playing` | 32556/32556 | 65112/65112 | 25704/25704 | 976700/977276 | 2.701 | 2.701 |
+| S3 `s3-worst-case` | 4018/77428 | 1032/171792 | 368/65264 | 2003950/2537700 | 7.093 | 1.000 |
+| S4 `s4-decay-to-silence` | 0/0 | 0/0 | 4000/4000 | 48000/48000 | 0.000 | 0.000 |
+| S5 `s5-input-sweep` | 0/0 | 0/0 | 4000/4000 | 48000/48000 | 0.000 | 0.000 |
+| S5 `s5-input-pink-burst` | 0/0 | 0/0 | 4000/4000 | 48000/48000 | 0.000 | 0.000 |
+
+First proven no-op target: guard same-value SID register writes at the
+`SIDEngine::writeRegister` boundary, with wrapper-level setter guards where the
+same-value ratios are also high. This is a preserve-tone Breadbin SID-wrapper
+optimization because the repeated work is plugin-specific reSIDfp register I/O;
+if a reusable guarded-write primitive emerges during the implementation, it
+should land in `ghostmoongpl`/full `ghostmoon` first and then be consumed here.
+
 ## T1 - Silence-aware SID render skip for fully idle output - **landed**
 
 **Evidence:** `SIDRender` is 1787 us at idle and 1782 us in the typical-playing
@@ -144,19 +170,57 @@ phase after long idle.
 - No output goes silent while a source is active; no NaN/Inf/click evidence. Met
   by integration coverage plus A/B metrics.
 
-## T2 - Inactive poly SID voice gating - **planned after T1**
+## T2 - Same-value SID register/write guards - **planned next**
+
+**Evidence:** the preserve-tone audit counters show repeated no-op SID writes in
+active scenarios before any further gating. S2 typical playing has
+976700/977276 same-value register writes, with all measured wrapper setter calls
+same-value (`setFrequency`, `setPulseWidth`, cutoff, resonance, mode, and voice
+mask). S3 worst case still has 2003950/2537700 same-value register writes while
+averaging 7.093 active/releasing poly voices, so the target is not merely idle
+silence. The pinned timing baseline remains `SIDRender` dominated: S2
+5589.98 us and S3 13285.25 us.
+
+**Planned fix:** add behavior-preserving same-value guards around SID wrapper
+setter and register write paths so unchanged values do not re-enter reSIDfp.
+Keep the first implementation narrow and measured: no voice-count reduction, no
+quality mode, no silence gate expansion. If the guard helper can be expressed as
+a reusable primitive, land it in `ghostmoongpl` and full `ghostmoon` first, then
+consume it in Breadbin.
+
+**Landing area:** likely Breadbin `SIDEngine` wrapper first; promote any generic
+guard primitive to `ghostmoongpl`/full `ghostmoon` before plugin consumption.
+
+**Effort:** medium. The risk is subtle behavior dependence on repeated
+same-value register writes inside reSIDfp, so the change requires full matrix
+profiling plus WAV A/B even though the intended output should be unchanged.
+
+**Acceptance criteria:**
+
+- S2 and S3 same-value register-write counts drop by at least 50% in the audit
+  counters after the fix, with no missing non-same writes.
+- S2 and S3 wall averages do not regress by more than 5%; target a measurable
+  `SIDRender` drop in S2 and a smaller but positive S3 drop.
+- S1, S4, and both S5 scenarios do not regress by more than 5% and do not gain
+  reproducible max spikes.
+- Full Release tests remain green; mutation coverage remains adequate.
+- Full Phase 4 WAV A/B passes automatically or flags only explainable pairs.
+
+## T3 - Inactive poly SID voice gating - **defer behind T2**
 
 **Evidence:** the full matrix S3 worst case spends 13285.25 us in `SIDRender`
 with an average wall time of 13412.6 us, exceeding the 10666.7 us block budget.
 S2 typical playing also spends 5589.98 us in `SIDRender`. S4 and both S5 input
 scenarios show 1455-1808 us of `SIDRender` even after sources are disabled or
 voices are not intentionally contributing, so the waste is still concentrated in
-SID clocking rather than FX.
+SID clocking rather than FX. However, the preserve-tone audit now proves a
+lower-risk no-op write target first, so further gating waits until T2 is
+measured.
 
-**Planned fix:** after T1 proves the output-energy gate policy, extend the same
-principle to inactive poly voices: gate only on each voice pair's rendered output
-energy after note-off, preserve long tails, and reactivate on allocation or
-trigger. The established `gm::KsVoice` activity-gating pattern is the reference
+**Planned fix:** after T2, consider extending the T1 output-energy policy to
+inactive poly voices: gate only on each voice pair's rendered output energy
+after note-off, preserve long tails, and reactivate on allocation or trigger.
+The established `gm::KsVoice` activity-gating pattern is the reference
 behavioral shape, but implementation should remain SID-specific unless a clean
 shared primitive emerges.
 
@@ -166,17 +230,9 @@ shared primitive emerges.
 **Effort:** medium-high. More A/B risk than T1 because oscillator phase and
 voice stealing interact with allocation state.
 
-**Acceptance criteria:**
+**Acceptance criteria:** to be re-pinned after T2 rebaseline.
 
-- S3 `s3-worst-case` wall average drops below the 10.67 ms block budget or, if
-  active max-poly SID emulation proves to be the irreducible cost, the target doc
-  explicitly marks that portion as non-target sound cost with measured evidence.
-- S4 and S5 `SIDRender` averages drop by at least 40% when the relevant SID path
-  is audibly silent or disabled.
-- Mono `typical-playing` remains within 5%.
-- WAV A/B policy from Phase 4 passes or flags only explainable note-tail pairs.
-
-## T3 - Safety-chain micro-costs - **defer**
+## T4 - Safety-chain micro-costs - **defer**
 
 **Evidence:** the whole safety chain is small compared with SID render cost:
 idle `SafetyFilters` 6.9 us, `Limiter` 14.1 us, `NoiseGate` 5.3 us; full-stack

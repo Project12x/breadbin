@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   external-input sweep/pink-burst scenarios. Initial T1 artifacts are kept under
   `releases/cpu_baseline_2026-06-10.json` and `releases/ab/88fa9f6fbf6c/`; the full-matrix baseline is
   `releases/cpu_baseline_matrix_2026-06-10.json` with references under `releases/ab/4c07888/`.
+- **Preserve-tone CPU audit counters**: the headless CPU profile JSON now includes SID wrapper
+  setter and register-write counters so no-op work can be targeted before any quality or gating
+  changes.
 - **C64 "Neon Synthwave" Reskin — Phase A (foundation)**: `BreadbinLookAndFeel` rebuilt on
   `gm::ui` synthwave renderers from `ghostmoon-oss`: 270° glowing rotary knobs, inset linear
   sliders with accent fill and metallic thumbs, glass panels, CRT phosphor scope displays for
