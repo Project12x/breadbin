@@ -3027,6 +3027,24 @@ static void fillPinkBurst(juce::AudioBuffer<float> &buffer, int64_t blockStart,
   }
 }
 
+static std::vector<uint8_t> makeDigiReferenceData() {
+  constexpr double seconds = 1.25;
+  constexpr int holdSamples = 96;
+  const int totalSamples = static_cast<int>(kRenderSampleRate * seconds);
+  std::vector<uint8_t> data(static_cast<size_t>(totalSamples));
+  for (int i = 0; i < totalSamples; ++i) {
+    const int step = i / holdSamples;
+    const int phase = step % 32;
+    int q4 = phase < 16 ? phase : 31 - phase;
+    if (((step / 32) % 2) != 0)
+      q4 = 15 - q4;
+    if ((step % 97) == 0)
+      q4 = 8;
+    data[static_cast<size_t>(i)] = static_cast<uint8_t>(q4 * 17);
+  }
+  return data;
+}
+
 static Scenario idleScenario() {
   return {"s1-idle-default", "S1 idle/always-on: defaults, no MIDI/input", 10.0,
           false, false, true,
@@ -3237,9 +3255,40 @@ static Scenario inputPinkBurstScenario() {
           [](juce::MidiBuffer &, int64_t, int) {}};
 }
 
+static Scenario digi4BitScenario() {
+  return {"s6-digi-4bit", "S6 digi sampler: deterministic 4-bit $D418 playback", 12.0,
+          false, false, true,
+          [](BreadbinProcessor &p) {
+            setParamReal(p, "masterVol", 0.78f);
+            setParamReal(p, "voiceMode", 0.0f);
+            setParamReal(p, "digiEnable", 1.0f);
+            setParamReal(p, "digiRootNote", 60.0f);
+            setParamReal(p, "digiLoop", 1.0f);
+            setParamReal(p, "digiBitDepth", 0.0f);
+            for (int v = 0; v < 6; ++v) {
+              const auto prefix = juce::String("v") + juce::String(v) + "_";
+              setParamReal(p, (prefix + "enable").toRawUTF8(), 0.0f);
+            }
+            const auto data = makeDigiReferenceData();
+            p.getDigiSampler().setData8bit(data, static_cast<int>(data.size()),
+                                           kRenderSampleRate,
+                                           "deterministic://s6-digi-4bit");
+          },
+          [](juce::AudioBuffer<float> &, int64_t, int) {},
+          [](juce::MidiBuffer &midi, int64_t blockStart, int blockSamples) {
+            addMidiAt(midi, blockStart, blockSamples, 0,
+                      juce::MidiMessage::noteOn(1, 60,
+                                                static_cast<juce::uint8>(108)));
+            addMidiAt(midi, blockStart, blockSamples,
+                      static_cast<int64_t>(10.0 * kRenderSampleRate),
+                      juce::MidiMessage::noteOff(1, 60));
+          }};
+}
+
 static std::vector<Scenario> allScenarios() {
   return {idleScenario(), typicalScenario(), fullStackScenario(),
-          decayScenario(), inputSweepScenario(), inputPinkBurstScenario()};
+          decayScenario(), inputSweepScenario(), inputPinkBurstScenario(),
+          digi4BitScenario()};
 }
 
 static bool renderScenario(const Scenario &scenario,
