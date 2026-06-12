@@ -341,7 +341,34 @@ void testEcoPerformanceParamsExistAndDefaultSafe() {
   ASSERT_TRUE(eco != nullptr, "ecoMode parameter exists");
   ASSERT_TRUE(budget != nullptr, "polySidBudget parameter exists");
   ASSERT_TRUE(anchor != nullptr, "polyStereoAnchor parameter exists");
-  ASSERT_TRUE(eco->getValue() == 0.0f, "ECO mode defaults to Off");
+  if (eco == nullptr || budget == nullptr || anchor == nullptr)
+    return;
+
+  auto *ecoChoice = dynamic_cast<juce::AudioParameterChoice *>(eco);
+  auto *budgetChoice = dynamic_cast<juce::AudioParameterChoice *>(budget);
+  auto *anchorChoice = dynamic_cast<juce::AudioParameterChoice *>(anchor);
+
+  ASSERT_TRUE(ecoChoice != nullptr, "ecoMode is AudioParameterChoice");
+  ASSERT_TRUE(budgetChoice != nullptr, "polySidBudget is AudioParameterChoice");
+  ASSERT_TRUE(anchorChoice != nullptr, "polyStereoAnchor is AudioParameterChoice");
+  if (ecoChoice == nullptr || budgetChoice == nullptr || anchorChoice == nullptr)
+    return;
+
+  ASSERT_TRUE(ecoChoice->choices.size() == 2, "ecoMode has 2 choices");
+  ASSERT_TRUE(ecoChoice->choices[0] == "Off", "ecoMode[0] = Off");
+  ASSERT_TRUE(ecoChoice->choices[1] == "Manual", "ecoMode[1] = Manual");
+
+  ASSERT_TRUE(budgetChoice->choices.size() == 3, "polySidBudget has 3 choices");
+  ASSERT_TRUE(budgetChoice->choices[0] == "Hybrid", "polySidBudget[0] = Hybrid");
+  ASSERT_TRUE(budgetChoice->choices[1] == "Ultra", "polySidBudget[1] = Ultra");
+  ASSERT_TRUE(budgetChoice->choices[2] == "Max ECO", "polySidBudget[2] = Max ECO");
+
+  ASSERT_TRUE(anchorChoice->choices.size() == 2, "polyStereoAnchor has 2 choices");
+  ASSERT_TRUE(anchorChoice->choices[0] == "Oldest", "polyStereoAnchor[0] = Oldest");
+  ASSERT_TRUE(anchorChoice->choices[1] == "Newest", "polyStereoAnchor[1] = Newest");
+
+  ASSERT_TRUE(static_cast<int>(eco->convertFrom0to1(eco->getValue())) == 0,
+              "ECO mode defaults to Off");
   ASSERT_TRUE(static_cast<int>(budget->convertFrom0to1(budget->getValue())) == 0,
               "Poly SID budget defaults to Hybrid for ECO");
   ASSERT_TRUE(static_cast<int>(anchor->convertFrom0to1(anchor->getValue())) == 0,
