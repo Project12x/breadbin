@@ -3383,6 +3383,13 @@ static gm::tools::CpuProfileSpec makeSpec() {
   spec.getProfiler = [](juce::AudioProcessor &p) -> gm::CpuSectionProfiler & {
     return static_cast<BreadbinProcessor &>(p).getCpuProfiler();
   };
+  spec.resetCounters = [](juce::AudioProcessor &p) {
+    static_cast<BreadbinProcessor &>(p).resetCpuAuditCounters();
+  };
+  spec.getCountersJson = [](juce::AudioProcessor &p, int measuredBlocks) {
+    return static_cast<BreadbinProcessor &>(p).getCpuAuditCountersJson(
+        measuredBlocks);
+  };
   for (const auto &scenario : abrender::allScenarios()) {
     spec.scenarios.push_back(
         {scenario.name, scenario.description,
