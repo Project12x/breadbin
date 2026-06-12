@@ -2782,11 +2782,15 @@ static void assertHybridPairBelongsToAnchor(
   const auto voices = p.getPolyVoiceRoleDebug();
   int expectedNote = -1;
   uint32_t expectedStart = 0;
+  int expectedIndex = -1;
   bool foundActive = false;
   int pairNote = -1;
+  uint32_t pairStart = 0;
+  int pairIndex = -1;
   int pairCount = 0;
 
-  for (const auto &voice : voices) {
+  for (int i = 0; i < static_cast<int>(voices.size()); ++i) {
+    const auto &voice = voices[static_cast<size_t>(i)];
     if (!voice.active && !voice.releasing)
       continue;
 
@@ -2797,11 +2801,14 @@ static void assertHybridPairBelongsToAnchor(
          voice.startSample > expectedStart)) {
       expectedNote = voice.midiNote;
       expectedStart = voice.startSample;
+      expectedIndex = i;
       foundActive = true;
     }
 
     if (voice.role == BreadbinProcessor::PolySidRenderRole::Pair) {
       pairNote = voice.midiNote;
+      pairStart = voice.startSample;
+      pairIndex = i;
       ++pairCount;
     }
   }
@@ -2809,11 +2816,17 @@ static void assertHybridPairBelongsToAnchor(
   const std::string activeMessage =
       std::string(context) + ": has active/releasing voice";
   const std::string countMessage = std::string(context) + ": exactly one Pair";
-  const std::string ownerMessage =
-      std::string(context) + ": Pair belongs to anchor voice";
+  const std::string startMessage =
+      std::string(context) + ": Pair startSample belongs to anchor voice";
+  const std::string indexMessage =
+      std::string(context) + ": Pair slot belongs to anchor voice";
+  const std::string noteMessage =
+      std::string(context) + ": Pair note belongs to anchor voice";
   ASSERT_TRUE(foundActive, activeMessage.c_str());
   ASSERT_TRUE(pairCount == 1, countMessage.c_str());
-  ASSERT_TRUE(pairNote == expectedNote, ownerMessage.c_str());
+  ASSERT_TRUE(pairStart == expectedStart, startMessage.c_str());
+  ASSERT_TRUE(pairIndex == expectedIndex, indexMessage.c_str());
+  ASSERT_TRUE(pairNote == expectedNote, noteMessage.c_str());
 }
 
 void testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice() {
@@ -3283,15 +3296,15 @@ void testEcoHybridNewestKeepsOnePairForNewestAnchor() {
 
   juce::MidiBuffer midi;
   midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
-  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
-  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 128);
   processBlock(*p, 512, &midi);
 
   assertEcoRoleCounters(*p, 1, 1, 1,
-                        "Hybrid/Newest three-note assignment");
+                        "Hybrid/Newest duplicate-note assignment");
   assertHybridPairBelongsToAnchor(
       *p, BreadbinProcessor::PolyStereoAnchor::Newest,
-      "Hybrid/Newest three-note assignment");
+      "Hybrid/Newest duplicate-note assignment");
 }
 
 void testEcoHybridReducesPolySidClockWork() {
