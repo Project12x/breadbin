@@ -3030,6 +3030,61 @@ static void setParamReal(BreadbinProcessor &p, const char *id, float realValue) 
     param->setValueNotifyingHost(param->convertTo0to1(realValue));
 }
 
+static double rmsDiff(const juce::AudioBuffer<float> &a,
+                      const juce::AudioBuffer<float> &b) {
+  const int channels = std::min(a.getNumChannels(), b.getNumChannels());
+  const int samples = std::min(a.getNumSamples(), b.getNumSamples());
+  double sum = 0.0;
+  int count = 0;
+  for (int ch = 0; ch < channels; ++ch) {
+    const auto *pa = a.getReadPointer(ch);
+    const auto *pb = b.getReadPointer(ch);
+    for (int i = 0; i < samples; ++i) {
+      const double d = static_cast<double>(pa[i]) - static_cast<double>(pb[i]);
+      sum += d * d;
+      ++count;
+    }
+  }
+  return count > 0 ? std::sqrt(sum / static_cast<double>(count)) : 0.0;
+}
+
+void testEcoOffPreservesUltraPolyRender() {
+  std::printf("--- ECO off preserves ultra poly render ---\n");
+
+  auto render = [](bool explicitlyUltra) {
+    auto p = createTestProcessor();
+    warmUp(*p);
+    setParamReal(*p, "voiceMode", 2.0f);
+    setParamReal(*p, "polyMaxNotes", 4.0f);
+    setParamReal(*p, "ecoMode", 0.0f);
+    if (explicitlyUltra)
+      setParamReal(*p, "polySidBudget", 1.0f);
+    warmUp(*p);
+
+    juce::AudioBuffer<float> out(2, 512 * 24);
+    out.clear();
+    for (int b = 0; b < 24; ++b) {
+      juce::MidiBuffer midi;
+      if (b == 0) midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+      if (b == 2) midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 0);
+      if (b == 4) midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 0);
+      juce::AudioBuffer<float> block(2, 512);
+      block.clear();
+      p->processBlock(block, midi);
+      for (int ch = 0; ch < 2; ++ch)
+        out.copyFrom(ch, b * 512, block, ch, 0, 512);
+    }
+    return out;
+  };
+
+  const auto defaultRender = render(false);
+  const auto explicitUltraIgnored = render(true);
+  const double diff = rmsDiff(defaultRender, explicitUltraIgnored);
+  std::printf("  ECO-off default vs explicit Ultra RMS diff: %.9g\n", diff);
+  ASSERT_TRUE(diff < 5.0e-4,
+              "ECO off ignores polySidBudget and preserves current Ultra render");
+}
+
 static void addMidiAt(juce::MidiBuffer &midi, int64_t blockStart,
                       int blockSamples, int64_t eventSample,
                       const juce::MidiMessage &message) {
@@ -3580,6 +3635,7 @@ int main(int argc, char *argv[]) {
   testAPVTSParameters();
   testAPVTSDefaultValues();
   testEcoPerformanceParamsExistAndDefaultSafe();
+  abrender::testEcoOffPreservesUltraPolyRender();
 
   // State persistence
   testSaveRestoreState();
