@@ -479,10 +479,65 @@ git -c safe.directory=D:/Code/breadbin commit -m "feat: assign ECO poly SID rend
 ### Task 4: Render Poly Voices According To Role
 
 **Files:**
+- Modify: `D:\Code\breadbin\src\PluginProcessor.h`
 - Modify: `D:\Code\breadbin\src\PluginProcessor.cpp`
 - Test: `D:\Code\breadbin\tests\IntegrationTests.cpp`
 
-- [ ] **Step 1: Add failing clock-budget test**
+- [ ] **Step 1: Add role identity diagnostics before consuming roles**
+
+In `PluginProcessor.h`, add a compact test/debug snapshot type near the existing public test helpers:
+
+```cpp
+  struct PolyVoiceRoleDebug {
+    int midiNote = -1;
+    uint32_t startSample = 0;
+    bool active = false;
+    bool releasing = false;
+    PolySidRenderRole role = PolySidRenderRole::Pair;
+  };
+  std::array<PolyVoiceRoleDebug, MAX_POLY> getPolyVoiceRoleDebug() const;
+```
+
+In `PluginProcessor.cpp`, implement:
+
+```cpp
+std::array<BreadbinProcessor::PolyVoiceRoleDebug, BreadbinProcessor::MAX_POLY>
+BreadbinProcessor::getPolyVoiceRoleDebug() const {
+  std::array<PolyVoiceRoleDebug, MAX_POLY> out{};
+  for (int i = 0; i < MAX_POLY; ++i) {
+    const auto &pv = polyVoices[i];
+    out[i] = {pv.midiNote, pv.startSample, pv.active, pv.releasing, pv.sidRenderRole};
+  }
+  return out;
+}
+```
+
+Then strengthen the Task 3 role tests before changing render behavior:
+
+```cpp
+void assertHybridNewestPairIsNewest(BreadbinProcessor &p) {
+  auto roles = p.getPolyVoiceRoleDebug();
+  uint32_t newest = 0;
+  int newestIdx = -1;
+  int pairIdx = -1;
+  for (int i = 0; i < BreadbinProcessor::MAX_POLY; ++i) {
+    if (!roles[i].active && !roles[i].releasing)
+      continue;
+    if (newestIdx < 0 || roles[i].startSample > newest) {
+      newest = roles[i].startSample;
+      newestIdx = i;
+    }
+    if (roles[i].role == BreadbinProcessor::PolySidRenderRole::Pair)
+      pairIdx = i;
+  }
+  ASSERT_TRUE(pairIdx == newestIdx, "Hybrid Newest pair belongs to newest voice");
+}
+```
+
+Add the equivalent helper/assertion for Hybrid Oldest where the `Pair` belongs to the lowest
+`startSample` active/releasing voice. Use these helpers in the existing Hybrid Oldest/Newest tests.
+
+- [ ] **Step 2: Add failing clock-budget test**
 
 Use the existing CPU counters and add:
 
@@ -518,7 +573,7 @@ void testEcoHybridReducesPolySidClockWork() {
 
 This verifies role accounting; CPU reduction is verified by profile, not unit timing.
 
-- [ ] **Step 2: Branch clock/mix by role**
+- [ ] **Step 3: Branch clock/mix by role**
 
 In the poly sample loop, replace unconditional `sL = pv.sidLeft->clock()` / `sR = pv.sidRight->clock()`
 with:
@@ -552,7 +607,7 @@ Keep the existing pan/mix lines:
               + voiceR * rightGainR * smoothedRightVoiceGain;
 ```
 
-- [ ] **Step 3: Trigger only needed sides for new ECO mono voices**
+- [ ] **Step 4: Trigger only needed sides for new ECO mono voices**
 
 In `polyNoteOn()`, wrap note-on calls:
 
@@ -573,7 +628,7 @@ In `polyNoteOn()`, wrap note-on calls:
 
 Mirror this for the new-allocation path in `polyParaNoteOn()` using slot `0`.
 
-- [ ] **Step 4: Apply modulation only to used sides**
+- [ ] **Step 5: Apply modulation only to used sides**
 
 In the poly modulation loop, guard setter work:
 
@@ -587,7 +642,7 @@ In the poly modulation loop, guard setter work:
 Then only call left-side setters when `useLeft`, and right-side setters when `useRight`. ECO off and
 Ultra roles still use both sides.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests**
 
 Run:
 
@@ -599,12 +654,12 @@ cmake --build build --config Release --target BreadbinIntegrationTests -- /m:1 /
 Expected: all integration tests pass. ECO-off preservation remains under the documented `5.0e-4`
 RMS diff tolerance.
 
-- [ ] **Step 6: Commit render role implementation**
+- [ ] **Step 7: Commit render role implementation**
 
 Run:
 
 ```powershell
-git -c safe.directory=D:/Code/breadbin add src/PluginProcessor.cpp tests/IntegrationTests.cpp
+git -c safe.directory=D:/Code/breadbin add src/PluginProcessor.h src/PluginProcessor.cpp tests/IntegrationTests.cpp
 git -c safe.directory=D:/Code/breadbin commit -m "perf: render ECO poly voices by SID budget"
 ```
 
