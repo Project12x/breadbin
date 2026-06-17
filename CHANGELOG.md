@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Digi performance A/B scenario**: the deterministic render/profile matrix now includes
   `s6-digi-4bit`, a generated 4-bit `$D418` playback case used to protect DigiSampler output
   while optimizing same-value SID register writes.
-- **Poly release SID render gate candidate**: released poly voices can skip their paired reSIDfp
+- **Poly release SID render gate**: released poly voices can skip their paired reSIDfp
   `clock()` calls after their own rendered output tail falls below the shared `gm::SilenceGate`
   threshold, while preserving allocation/voice-stealing state. S3 worst-case A/B is flagged for
-  listening before merge (`diff RMS -30.66 dBFS`, centroid delta 1.131%).
+  listening before release/push acceptance (`diff RMS -30.66 dBFS`, centroid delta 1.131%).
 - **ECO Poly SID Budget plan**: documented the Manual ECO design for Hybrid/Ultra/Max ECO poly
   rendering, including a Settings popup, stereo-anchor policy, ECO-off preservation requirements,
   and future Auto ECO roadmap.

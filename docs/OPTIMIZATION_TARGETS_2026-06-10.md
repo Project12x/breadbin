@@ -8,15 +8,15 @@ references under `releases/ab/4c07888/`. ETW drill-down was attempted, but
 collection requires an elevated Administrator shell; no function-level
 acceptance criterion is marked landed until that pass is captured.*
 
-The sequence is in progress on branch `perf/breadbin-optimization-20260610`.
-Breadbin consumes
+The sequence was merged to local `main` on 2026-06-17 from
+`perf/breadbin-optimization-20260610`. Breadbin consumes
 the GPL-compatible `ghostmoon-oss` slice at
 `C:\Users\estee\Desktop\My Stuff\Code\Antigravity\ghostmoongpl`; fixes should
 land there first when the primitive is shared. The current first-order hotspot is
 plugin-level reSIDfp clocking, so the first behavioral target lands in Breadbin
 around SID render activity gating rather than in JUCE or vendored reSIDfp.
 
-Phase -1 branch setup:
+Phase -1 branch setup record:
 
 - Breadbin: `perf/breadbin-optimization-20260610`
 - `ghostmoongpl`: `perf/breadbin-optimization-20260610`
@@ -332,7 +332,7 @@ S3 is explainable: the optimization intentionally stops clocking released poly
 SID pairs once their own output tail has fallen below the gate threshold, so
 the difference is concentrated in the worst-case release-heavy scenario. It is
 inside the policy's `-45` to `-25 dBFS` flagged band, not an automatic pass.
-Flagged pair for user listening before merge:
+Flagged pair for user listening before release/push acceptance:
 `releases/ab/exact_hoists_2026-06-11/s3-worst-case.wav` vs
 `releases/ab/poly_release_gate_2026-06-12/s3-worst-case.wav`.
 
