@@ -1,0 +1,13 @@
+#EXTM3U
+# Pair 1 A - Poly release gate baseline
+D:\Code\breadbin\releases\ab\exact_hoists_2026-06-11\s3-worst-case.wav
+# Pair 1 B - Poly release gate candidate
+D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav
+# Pair 2 A - ECO-off preservation baseline
+D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav
+# Pair 2 B - ECO-off current merged render
+D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s3-worst-case.wav
+# Pair 3 A - Ultra/current baseline
+D:\Code\breadbin\releases\ab\poly_release_gate_2026-06-12\s3-worst-case.wav
+# Pair 3 B - Manual ECO Hybrid render
+D:\Code\breadbin\releases\ab\eco_hybrid_2026-06-12\s7-eco-hybrid-poly.wav
