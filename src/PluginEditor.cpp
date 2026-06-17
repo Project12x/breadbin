@@ -512,10 +512,8 @@ SidPlayerPanel::SidPlayerPanel(BreadbinProcessor &proc) : processor(proc) {
               subtuneSelector.setSelectedId(player.getCurrentSubtune(),
                                             juce::dontSendNotification);
               loadedFileName = file.getFileNameWithoutExtension().toUpperCase();
-              loadLineLabel.setText(
-                  "LOAD\"" + loadedFileName +
-                      "\",8,1   READY.   \xE2\x96\x88   DEVICE 8 \xC2\xB7 1541",
-                  juce::dontSendNotification);
+              loadCursorVisible = true;
+              loadLineLabel.setText(makeLoadLineText(), juce::dontSendNotification);
               loadLineLabel.setVisible(true);
             } else {
               tuneInfoLabel.setText("Failed to load file",
@@ -699,7 +697,27 @@ void SidPlayerPanel::refreshFonts(const juce::Font &mono) {
   loadLineLabel.setFont(panelMonoFont.withHeight(11.0f));
 }
 
-void SidPlayerPanel::timerCallback() { updateRegisterDisplay(); }
+void SidPlayerPanel::timerCallback() {
+  ++animationFrame;
+  const bool nextCursorVisible = ((animationFrame / 16) % 2) == 0;
+  if (nextCursorVisible != loadCursorVisible) {
+    loadCursorVisible = nextCursorVisible;
+    if (loadedFileName.isNotEmpty()) {
+      loadLineLabel.setText(makeLoadLineText(), juce::dontSendNotification);
+      loadLineLabel.repaint();
+    }
+  }
+  updateRegisterDisplay();
+}
+
+juce::String SidPlayerPanel::cursorGlyph() const {
+  return loadCursorVisible ? juce::String::fromUTF8("\xE2\x96\x88") : " ";
+}
+
+juce::String SidPlayerPanel::makeLoadLineText() const {
+  return "LOAD\"" + loadedFileName + "\",8,1   READY.   " + cursorGlyph() +
+         "   DEVICE 8 \xC2\xB7 1541";
+}
 
 void SidPlayerPanel::updateRegisterDisplay() {
   auto &player = processor.getSidFilePlayer();
@@ -726,6 +744,7 @@ void SidPlayerPanel::updateRegisterDisplay() {
         << (int)snapshot.regs[b + 6] << " : REM V" << (v + 1) << " ADSR\n";
     }
     t << "90 POKE SID+4," << (int)snapshot.regs[0x04] << " : REM V1 CTRL\n";
+    t << "READY. " << cursorGlyph();
     registerDisplay.setText(t);
     return;
   }
@@ -787,6 +806,7 @@ void SidPlayerPanel::updateRegisterDisplay() {
 
   // Time display
   text += "\nTime: " + juce::String(player.getPlayTimeMs() / 1000) + "s";
+  text += "\nREADY. " + cursorGlyph();
 
   registerDisplay.setText(text);
 }
@@ -1421,6 +1441,11 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   };
   addAndMakeVisible(scaleSelector);
 
+  modRingsEnabled = static_cast<bool>(
+      processor.apvts.state.getProperty("modRingsEnabled", false));
+  modRingToggleButton.setToggleState(modRingsEnabled, juce::dontSendNotification);
+  updateModRingVisibility();
+
   setScale(savedScale);
 }
 
@@ -1453,10 +1478,13 @@ void BreadbinEditor::handleNoteOff(juce::MidiKeyboardState *, int midiChannel,
 }
 
 void BreadbinEditor::timerCallback() {
+  ++animationFrame;
   midiLearnOverlay.tick();
   if (midiLearnOverlay.isShowingAnything())
     repaint();
 
+  filterDisplay_L.setScanlineDriftFrame(animationFrame);
+  filterDisplay_R.setScanlineDriftFrame(animationFrame);
   updateModulationMeters();
   updateVoiceCountDisplay();
   updateFxBypassVisuals();
@@ -1464,33 +1492,32 @@ void BreadbinEditor::timerCallback() {
 }
 
 void BreadbinEditor::updateModulationMeters() {
-  if (cutoffMeterL.setValues(
-          static_cast<float>(processor.getBaseFilterCutoff(true)),
-          static_cast<float>(processor.getLastAppliedCutoffLeft())))
-    cutoffMeterL.repaint();
+  auto updateMeterAndRing = [this](ModulationMeter &meter, ModulationRing &ring,
+                                   float base, float modulated) {
+    if (meter.setValues(base, modulated) && meter.isVisible())
+      meter.repaint();
+    if (ring.setValues(base, modulated) && ring.isVisible())
+      ring.repaint();
+    ring.setAnimationFrame(animationFrame);
+  };
 
-  if (cutoffMeterR.setValues(
-          static_cast<float>(processor.getBaseFilterCutoff(false)),
-          static_cast<float>(processor.getLastAppliedCutoffRight())))
-    cutoffMeterR.repaint();
-
-  if (pwMeter.setValues(
-          static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
-          static_cast<float>(processor.getLastAppliedPW())))
-    pwMeter.repaint();
-
-  if (pitchMeter.setValues(0.0f, processor.getLastAppliedPitchOffset()))
-    pitchMeter.repaint();
-
-  if (resMeterL.setValues(
-          static_cast<float>(processor.getBaseFilterResonance(true)),
-          static_cast<float>(processor.getLastAppliedResLeft())))
-    resMeterL.repaint();
-
-  if (resMeterR.setValues(
-          static_cast<float>(processor.getBaseFilterResonance(false)),
-          static_cast<float>(processor.getLastAppliedResRight())))
-    resMeterR.repaint();
+  updateMeterAndRing(cutoffMeterL, cutoffRingL,
+                     static_cast<float>(processor.getBaseFilterCutoff(true)),
+                     static_cast<float>(processor.getLastAppliedCutoffLeft()));
+  updateMeterAndRing(cutoffMeterR, cutoffRingR,
+                     static_cast<float>(processor.getBaseFilterCutoff(false)),
+                     static_cast<float>(processor.getLastAppliedCutoffRight()));
+  updateMeterAndRing(pwMeter, pwRing,
+                     static_cast<float>(processor.getVoiceSettings(selectedVoice).pulseWidth),
+                     static_cast<float>(processor.getLastAppliedPW()));
+  updateMeterAndRing(pitchMeter, pitchRing, 0.0f,
+                     processor.getLastAppliedPitchOffset());
+  updateMeterAndRing(resMeterL, resRingL,
+                     static_cast<float>(processor.getBaseFilterResonance(true)),
+                     static_cast<float>(processor.getLastAppliedResLeft()));
+  updateMeterAndRing(resMeterR, resRingR,
+                     static_cast<float>(processor.getBaseFilterResonance(false)),
+                     static_cast<float>(processor.getLastAppliedResRight()));
 
   // Filter knob value readouts (Label::setText no-ops when unchanged)
   leftCutoffValueLabel.setText(juce::String((int)processor.getBaseFilterCutoff(true)),
@@ -1529,6 +1556,34 @@ void BreadbinEditor::updateModulationMeters() {
   else
     cpuLoadLabel.setColour(juce::Label::textColourId, gm::ui::theme::grn);
   cpuLoadLabel.setText(txt, juce::dontSendNotification);
+}
+
+void BreadbinEditor::setModRingsEnabled(bool enabled) {
+  if (modRingsEnabled == enabled)
+    return;
+
+  modRingsEnabled = enabled;
+  processor.apvts.state.setProperty("modRingsEnabled", modRingsEnabled, nullptr);
+  modRingToggleButton.setToggleState(modRingsEnabled, juce::dontSendNotification);
+  updateModRingVisibility();
+}
+
+void BreadbinEditor::updateModRingVisibility() {
+  auto setPair = [this](ModulationMeter &meter, ModulationRing &ring) {
+    meter.setVisible(!modRingsEnabled);
+    ring.setVisible(modRingsEnabled);
+    if (modRingsEnabled)
+      ring.repaint();
+  };
+
+  setPair(cutoffMeterL, cutoffRingL);
+  setPair(cutoffMeterR, cutoffRingR);
+  setPair(pwMeter, pwRing);
+  setPair(pitchMeter, pitchRing);
+  setPair(resMeterL, resRingL);
+  setPair(resMeterR, resRingR);
+
+  modRingToggleButton.setButtonText(modRingsEnabled ? "MOD ◉" : "MOD ○");
 }
 
 void BreadbinEditor::updateVoiceCountDisplay() {
@@ -2294,6 +2349,7 @@ void ModMatrixPanel::refreshFonts(const juce::Font &pro, const juce::Font &bold,
 }
 
 void ModMatrixPanel::timerCallback() {
+  ++animationFrame;
   for (int i = 0; i < BreadbinProcessor::kModSlots; ++i) {
     bool rowEnabled = slots[i].enableButton.getToggleState();
     float alpha = rowEnabled ? 1.0f : 0.35f;
@@ -2326,8 +2382,10 @@ void ModMatrixPanel::timerCallback() {
 
   lfoDisplay1.setWaveType(lfoWaveformSelector.getSelectedId());
   lfoDisplay1.setPhase(static_cast<float>(processor.getLFO().phase));
+  lfoDisplay1.setScanlineDriftFrame(animationFrame);
   lfoDisplay2.setWaveType(lfo2WaveformSelector.getSelectedId());
   lfoDisplay2.setPhase(static_cast<float>(processor.getLFO2().phase));
+  lfoDisplay2.setScanlineDriftFrame(animationFrame);
 
   bool s1 = processor.isLfoSynced();
   lfoSyncModeBtn.setButtonText(s1 ? "Sync" : "Free");
@@ -3989,6 +4047,19 @@ void BreadbinEditor::setupPopupButtons() {
       std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
           processor.apvts, "digiEnable", digiEnableToggle);
 
+  modRingToggleButton.setTooltip("Swap modulation bars for animated modulation rings");
+  modRingToggleButton.setClickingTogglesState(true);
+  modRingToggleButton.setColour(juce::TextButton::buttonColourId,
+                                juce::Colour(40, 48, 28));
+  modRingToggleButton.setColour(juce::TextButton::textColourOnId,
+                                gm::ui::theme::grn);
+  modRingToggleButton.setColour(juce::TextButton::textColourOffId,
+                                gm::ui::theme::txt2);
+  modRingToggleButton.onClick = [this]() {
+    setModRingsEnabled(modRingToggleButton.getToggleState());
+  };
+  addAndMakeVisible(modRingToggleButton);
+
   // Per-section accent (Phase B2): aux enable toggles = greenyellow.
   {
     const int grnA = (int)gm::ui::theme::grn.getARGB();
@@ -3996,6 +4067,7 @@ void BreadbinEditor::setupPopupButtons() {
     lfo2EnableToggle.getProperties().set("accent", grnA);
     wtEnableToggle.getProperties().set("accent", grnA);
     digiEnableToggle.getProperties().set("accent", grnA);
+    modRingToggleButton.getProperties().set("accent", grnA);
   }
 
   // SID Player register overlay labels (hidden by default)
@@ -4045,6 +4117,8 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   auto &resSlider = isLeft ? leftResonanceSlider : rightResonanceSlider;
   auto &cutoffMeter = isLeft ? cutoffMeterL : cutoffMeterR;
   auto &resMeter = isLeft ? resMeterL : resMeterR;
+  auto &cutoffRing = isLeft ? cutoffRingL : cutoffRingR;
+  auto &resRing = isLeft ? resRingL : resRingR;
   auto &lpBtn = isLeft ? leftLPButton : rightLPButton;
   auto &bpBtn = isLeft ? leftBPButton : rightBPButton;
   auto &hpBtn = isLeft ? leftHPButton : rightHPButton;
@@ -4167,6 +4241,12 @@ void BreadbinEditor::setupSidPanel(bool isLeft) {
   addAndMakeVisible(cutoffMeter);
   resMeter.setRange(0.0f, 15.0f);
   addAndMakeVisible(resMeter);
+  cutoffRing.setRange(0.0f, 2047.0f);
+  cutoffRing.setVisible(false);
+  addAndMakeVisible(cutoffRing);
+  resRing.setRange(0.0f, 15.0f);
+  resRing.setVisible(false);
+  addAndMakeVisible(resRing);
 
   // Filter mode buttons
   auto setupButton = [this, &colour](juce::ToggleButton &btn) {
@@ -4287,6 +4367,12 @@ void BreadbinEditor::setupVoiceEditor() {
   addAndMakeVisible(pwMeter);
   pitchMeter.setRange(-24.0f, 24.0f);
   addAndMakeVisible(pitchMeter);
+  pwRing.setRange(0.0f, 4095.0f);
+  pwRing.setVisible(false);
+  addAndMakeVisible(pwRing);
+  pitchRing.setRange(-24.0f, 24.0f);
+  pitchRing.setVisible(false);
+  addAndMakeVisible(pitchRing);
 
   auto setupADSR = [this](juce::Slider &slider, juce::Label &label,
                           const juce::String &text, const juce::String &tooltip,
@@ -4792,6 +4878,7 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
       leftCutoffValueLabel.setBounds(col);
     }
     leftCutoffSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    cutoffRingL.setBounds(leftCutoffSlider.getBounds().expanded(6));
     cutoffMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
     filterRow.removeFromLeft(pad * 4);
     {
@@ -4800,6 +4887,7 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
       leftResonanceValueLabel.setBounds(col);
     }
     leftResonanceSlider.setBounds(filterRow.removeFromLeft(knob).withHeight(knob).withY(filterRow.getCentreY() - knob / 2));
+    resRingL.setBounds(leftResonanceSlider.getBounds().expanded(6));
     resMeterL.setBounds(filterRow.removeFromLeft(6).reduced(0, 6));
   }
 
@@ -4862,6 +4950,7 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
       rightCutoffValueLabel.setBounds(col);
     }
     rightCutoffSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
+    cutoffRingR.setBounds(rightCutoffSlider.getBounds().expanded(6));
     cutoffMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
     group.removeFromLeft(pad * 4);
     {
@@ -4870,6 +4959,7 @@ void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
       rightResonanceValueLabel.setBounds(col);
     }
     rightResonanceSlider.setBounds(group.removeFromLeft(knob).withHeight(knob).withY(group.getCentreY() - knob / 2));
+    resRingR.setBounds(rightResonanceSlider.getBounds().expanded(6));
     resMeterR.setBounds(group.removeFromLeft(6).reduced(0, 6));
   }
 
@@ -4943,7 +5033,9 @@ void BreadbinEditor::layoutVoiceEditor(juce::Rectangle<int> &bounds) {
   auto pwRow = col1.removeFromTop(sliderRowH);
   pwLabel.setBounds(pwRow.removeFromLeft(labelW).withHeight(14).withY(pwRow.getCentreY() - 7));
   pwMeter.setBounds(pwRow.removeFromRight(6).reduced(0, 4));
+  pwRing.setBounds(pwMeter.getBounds().withSizeKeepingCentre(24, 24));
   pitchMeter.setBounds(pwRow.removeFromRight(6).reduced(0, 4));
+  pitchRing.setBounds(pitchMeter.getBounds().withSizeKeepingCentre(24, 24));
   pulseWidthSlider.setBounds(pwRow.withHeight(20).withY(pwRow.getCentreY() - 10));
   col1.removeFromTop(pad);
 
@@ -5108,11 +5200,12 @@ void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> fxArea,
   // -- Top tier: enable toggles, evenly spaced across the right portion --
   {
     auto t = togRow.removeFromRight(juce::jmin(380, togRow.getWidth()));
-    const int tw = t.getWidth() / 4;
+    const int tw = t.getWidth() / 5;
     lfo1EnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
     lfo2EnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
     wtEnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
     digiEnableToggle.setBounds(t.removeFromLeft(tw).withHeight(14));
+    modRingToggleButton.setBounds(t.removeFromLeft(tw).withHeight(14));
   }
 }
 

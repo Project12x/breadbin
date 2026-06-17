@@ -373,6 +373,88 @@ private:
   float baseValue = 0.0f, modulatedValue = 0.0f;
 };
 
+// Optional modulation display that replaces the bar meters with a live ring.
+class ModulationRing : public juce::Component {
+public:
+  ModulationRing() { setInterceptsMouseClicks(false, false); }
+
+  void setRange(float min, float max) {
+    rangeMin = min;
+    rangeMax = max;
+  }
+
+  bool setValues(float base, float modulated) {
+    if (base == baseValue && modulated == modulatedValue)
+      return false;
+    baseValue = base;
+    modulatedValue = modulated;
+    return true;
+  }
+
+  void setAnimationFrame(int frame) {
+    if (animationFrame == frame)
+      return;
+    animationFrame = frame;
+    if (isVisible())
+      repaint();
+  }
+
+  void paint(juce::Graphics &g) override {
+    auto b = getLocalBounds().toFloat().reduced(2.0f);
+    const float range = rangeMax - rangeMin;
+    if (range <= 0.0f || b.getWidth() <= 4.0f || b.getHeight() <= 4.0f)
+      return;
+
+    const float baseNorm = juce::jlimit(0.0f, 1.0f, (baseValue - rangeMin) / range);
+    const float modNorm = juce::jlimit(0.0f, 1.0f, (modulatedValue - rangeMin) / range);
+    const float diff = std::abs(modNorm - baseNorm);
+    if (diff < 0.001f)
+      return;
+
+    const float startAngle = -juce::MathConstants<float>::pi * 1.25f;
+    const float endAngle =  juce::MathConstants<float>::pi * 0.25f;
+    const auto angleFor = [startAngle, endAngle](float n) {
+      return startAngle + (endAngle - startAngle) * n;
+    };
+
+    const float a0 = angleFor(baseNorm);
+    const float a1 = angleFor(modNorm);
+    const float from = std::min(a0, a1);
+    const float to = std::max(a0, a1);
+    const float radius = std::min(b.getWidth(), b.getHeight()) * 0.5f - 4.0f;
+    const float pulse = 0.75f + 0.25f * std::sin((float)animationFrame * 0.18f);
+    const auto accent = modNorm >= baseNorm ? gm::ui::theme::cyan
+                                            : gm::ui::theme::orange;
+
+    juce::Path track;
+    track.addCentredArc(b.getCentreX(), b.getCentreY(), radius, radius, 0.0f,
+                        startAngle, endAngle, true);
+    g.setColour(juce::Colour(0xFF26262F).withAlpha(0.75f));
+    g.strokePath(track, juce::PathStrokeType(1.4f));
+
+    juce::Path arc;
+    arc.addCentredArc(b.getCentreX(), b.getCentreY(), radius, radius, 0.0f,
+                      from, to, true);
+    g.setColour(accent.withAlpha(0.18f * pulse));
+    g.strokePath(arc, juce::PathStrokeType(7.0f));
+    g.setColour(accent.withAlpha(0.55f + 0.25f * pulse));
+    g.strokePath(arc, juce::PathStrokeType(3.0f));
+
+    const float markerAngle = a1;
+    const float markerRadius = radius + 0.5f;
+    const auto markerCentre = juce::Point<float>(
+        b.getCentreX() + std::cos(markerAngle) * markerRadius,
+        b.getCentreY() + std::sin(markerAngle) * markerRadius);
+    g.setColour(accent.withAlpha(0.9f));
+    g.fillEllipse(markerCentre.x - 2.0f, markerCentre.y - 2.0f, 4.0f, 4.0f);
+  }
+
+private:
+  float rangeMin = 0.0f, rangeMax = 1.0f;
+  float baseValue = 0.0f, modulatedValue = 0.0f;
+  int animationFrame = 0;
+};
+
 // Waveform shape preview for LFO rows in the Modulation popup
 class LFODisplay : public juce::Component {
 public:
@@ -382,6 +464,13 @@ public:
   void setPhase(float p) {
     phase = p;
     repaint();
+  }
+  void setScanlineDriftFrame(int frame) {
+    const int nextOffset = (frame / 4) % 8;
+    if (nextOffset != scanlineDriftOffset) {
+      scanlineDriftOffset = nextOffset;
+      repaint();
+    }
   }
   void resized() override {
     if (getWidth() > 0 && getHeight() > 0)
@@ -443,12 +532,18 @@ public:
     gm::ui::drawScopeTrace(g, path, gm::ui::theme::cyan);
 
     // Scanline overlay (built once in resized())
-    if (scanlineCache.isValid())
-      g.drawImageAt(scanlineCache, 0, 0);
+    if (scanlineCache.isValid()) {
+      const int h = scanlineCache.getHeight();
+      const int offset = h > 0 ? scanlineDriftOffset % h : 0;
+      g.drawImageAt(scanlineCache, 0, offset);
+      if (offset > 0)
+        g.drawImageAt(scanlineCache, 0, offset - h);
+    }
   }
 private:
   int waveType = 1;
   float phase = 0.0f;
+  int scanlineDriftOffset = 0;
   juce::Image scanlineCache;
 };
 
@@ -472,6 +567,7 @@ private:
   BreadbinProcessor &processor;
   juce::Font panelProFont, panelBoldFont, panelMonoFont;
   juce::Image gridCache, scanCache;
+  int animationFrame = 0;
 
   // ========== LFO1 ==========
   MappableToggle lfoEnableButton{"LFO", processor,
@@ -700,10 +796,14 @@ private:
   bool basicView = false;
   juce::String loadedFileName;
   juce::Label loadLineLabel;
+  int animationFrame = 0;
+  bool loadCursorVisible = true;
 
   std::unique_ptr<juce::FileChooser> fileChooser;
 
   void updateRegisterDisplay();
+  juce::String makeLoadLineText() const;
+  juce::String cursorGlyph() const;
 };
 
 // 4-bit digi sample player popup panel
@@ -800,6 +900,13 @@ public:
       lpOn = lp; bpOn = bp; hpOn = hp; repaint();
     }
   }
+  void setScanlineDriftFrame(int frame) {
+    const int nextOffset = (frame / 4) % 8;
+    if (nextOffset != scanlineDriftOffset) {
+      scanlineDriftOffset = nextOffset;
+      repaint();
+    }
+  }
 
   void resized() override {
     if (getWidth() > 0 && getHeight() > 0)
@@ -816,7 +923,7 @@ public:
       g.setColour(gm::ui::theme::txt3);
       g.setFont(displayFont.withHeight(9.0f));
       g.drawText("filter off", b, juce::Justification::centred);
-      if (scanlineCache.isValid()) g.drawImageAt(scanlineCache, 0, 0);
+      drawScanlines(g);
       return;
     }
 
@@ -887,8 +994,7 @@ public:
                juce::Justification::centredRight);
 
     // Scanline overlay (built once in resized())
-    if (scanlineCache.isValid())
-      g.drawImageAt(scanlineCache, 0, 0);
+    drawScanlines(g);
   }
 
   void mouseDown(const juce::MouseEvent &e) override {
@@ -920,7 +1026,18 @@ private:
   int  dragStartRes     = 0;
   juce::Font displayFont;
   juce::Font monoFont;
+  int scanlineDriftOffset = 0;
   juce::Image scanlineCache;
+
+  void drawScanlines(juce::Graphics &g) {
+    if (!scanlineCache.isValid())
+      return;
+    const int h = scanlineCache.getHeight();
+    const int offset = h > 0 ? scanlineDriftOffset % h : 0;
+    g.drawImageAt(scanlineCache, 0, offset);
+    if (offset > 0)
+      g.drawImageAt(scanlineCache, 0, offset - h);
+  }
 };
 
 // C64-stylized neon on-screen keyboard: dark gradient key caps, accent glow on
@@ -956,6 +1073,8 @@ public:
   void updateVoiceCountDisplay();
   void updateFxBypassVisuals();
   void updateSidPlayerOverlay();
+  void setModRingsEnabled(bool enabled);
+  void updateModRingVisibility();
 
   // resized() layout subsections
   void layoutTopRow(juce::Rectangle<int> &bounds);
@@ -1334,6 +1453,13 @@ private:
   ModulationMeter pwMeter;
   ModulationMeter resMeterL, resMeterR;
   ModulationMeter pitchMeter;
+  ModulationRing cutoffRingL, cutoffRingR;
+  ModulationRing pwRing;
+  ModulationRing resRingL, resRingR;
+  ModulationRing pitchRing;
+  juce::TextButton modRingToggleButton{"MOD ◉"};
+  bool modRingsEnabled = false;
+  int animationFrame = 0;
 
   // ========== SID PLAYER REGISTER OVERLAY ==========
   juce::Label sidOverlayWave, sidOverlayPW;
