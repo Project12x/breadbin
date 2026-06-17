@@ -1426,6 +1426,16 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
 
 BreadbinEditor::~BreadbinEditor() {
   stopTimer();
+  auto closePopup = [](juce::Component::SafePointer<juce::DialogWindow> &window) {
+    if (window != nullptr)
+      window.deleteAndZero();
+  };
+  closePopup(wavetableWindow);
+  closePopup(digiWindow);
+  closePopup(modMatrixWindow);
+  closePopup(chordMemoryWindow);
+  closePopup(sidPlayerWindow);
+  closePopup(settingsWindow);
   setLookAndFeel(nullptr); // Must reset before customLookAndFeel is destroyed
   keyboardState.removeListener(this);
 }

@@ -126,6 +126,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Popup lifetime cleanup**: editor destruction now explicitly closes all non-modal popup windows
+  before detaching the editor-owned LookAndFeel, avoiding stale LookAndFeel pointers after the
+  merged popup/settings UI stack.
 - **Idle SID render CPU**: added a `gm::SilenceGate`-backed skip around fully silent
   mono/paraphonic SID rendering. Release-profile `idle-default` wall time dropped from 1818 us to
   24.5 us per 512-sample block; `SIDRender` dropped from 1787 us to 0.09 us. WAV A/B passed for
