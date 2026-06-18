@@ -92,6 +92,20 @@ inline void drawInsetCard(juce::Graphics &g, juce::Rectangle<float> r) {
   g.setColour(juce::Colour(0x44000000)); // inner top shadow
   g.fillRect(r.getX() + 2.0f, r.getY() + 1.0f, r.getWidth() - 4.0f, 2.0f);
 }
+inline int uiScaleIdFor(float s) {
+  if (s < 0.875f) return 1;
+  if (s < 1.125f) return 2;
+  if (s < 1.375f) return 3;
+  return 4;
+}
+inline float uiScaleForId(int id) {
+  switch (id) {
+  case 1: return 0.75f;
+  case 3: return 1.25f;
+  case 4: return 1.5f;
+  default: return 1.0f;
+  }
+}
 // Mini waveform glyph (0=Triangle, 1=Saw, 2=Pulse, 3=Noise) stroked in the given colour.
 inline void drawWaveGlyph(juce::Graphics &g, juce::Rectangle<float> box, int wave,
                           juce::Colour c) {
@@ -1062,7 +1076,9 @@ void DigiSamplerPanel::updateInfoLabels() {
 
 // ========== SETTINGS PANEL ==========
 
-SettingsPanel::SettingsPanel(BreadbinProcessor &proc) : processor(proc) {
+SettingsPanel::SettingsPanel(BreadbinProcessor &proc, float initialUiScale,
+                             std::function<void(float)> scaleChanged)
+    : processor(proc), onScaleChanged(std::move(scaleChanged)) {
   setSize(panelWidth, panelHeight);
 
   auto setupLabel = [this](juce::Label &label, const juce::String &text) {
@@ -1076,6 +1092,13 @@ SettingsPanel::SettingsPanel(BreadbinProcessor &proc) : processor(proc) {
     box.setTooltip(tooltip);
     box.getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
     addAndMakeVisible(box);
+  };
+  auto setupSlider = [this](juce::Slider &slider, const juce::String &tooltip) {
+    slider.setSliderStyle(juce::Slider::LinearHorizontal);
+    slider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 18);
+    slider.setTooltip(tooltip);
+    slider.getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
+    addAndMakeVisible(slider);
   };
 
   setupLabel(ecoModeLabel, "ECO MODE");
@@ -1103,6 +1126,34 @@ SettingsPanel::SettingsPanel(BreadbinProcessor &proc) : processor(proc) {
   setupCombo(polyStereoAnchorSelector,
              "Which hybrid ECO note keeps the stereo SID pair.");
 
+  setupLabel(uiScaleLabel, "UI SCALE");
+  uiScaleSelector.addItem("75%", 1);
+  uiScaleSelector.addItem("100%", 2);
+  uiScaleSelector.addItem("125%", 3);
+  uiScaleSelector.addItem("150%", 4);
+  uiScaleSelector.setSelectedId(uiScaleIdFor(initialUiScale),
+                                juce::dontSendNotification);
+  setupCombo(uiScaleSelector, "Rescale the plugin UI for low-resolution displays.");
+
+  setupLabel(settingsGateLabel, "GATE");
+  settingsGateSlider.setRange(0.0, 0.1, 0.001);
+  settingsGateSlider.setDoubleClickReturnValue(true, 0.01);
+  settingsGateSlider.setTextValueSuffix("");
+  setupSlider(settingsGateSlider, "Noise gate threshold for silence detection");
+
+  setupLabel(settingsExtLabel, "EXT INPUT");
+  settingsExtEnableButton.setTooltip("Enable external audio input through SID filter");
+  settingsExtEnableButton.setColour(juce::ToggleButton::textColourId,
+                                    juce::Colours::orange);
+  settingsExtEnableButton.setColour(juce::ToggleButton::tickColourId,
+                                    juce::Colours::orange);
+  settingsExtEnableButton.getProperties().set(
+      "accent", (int)gm::ui::theme::orange.getARGB());
+  addAndMakeVisible(settingsExtEnableButton);
+  settingsExtLevelSlider.setRange(0.0, 2.0, 0.01);
+  settingsExtLevelSlider.setDoubleClickReturnValue(true, 1.0);
+  setupSlider(settingsExtLevelSlider, "External input level (0-200%)");
+
   statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xFFE8E8F0));
   statusLabel.setColour(juce::Label::backgroundColourId,
                         juce::Colours::black.withAlpha(0.35f));
@@ -1118,9 +1169,22 @@ SettingsPanel::SettingsPanel(BreadbinProcessor &proc) : processor(proc) {
   polyStereoAnchorAttachment =
       std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
           processor.apvts, "polyStereoAnchor", polyStereoAnchorSelector);
+  settingsGateAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "noiseGateThreshold", settingsGateSlider);
+  settingsExtEnableAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+          processor.apvts, "extInputEnable", settingsExtEnableButton);
+  settingsExtLevelAttachment =
+      std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+          processor.apvts, "extInputLevel", settingsExtLevelSlider);
 
   ecoModeSelector.onChange = [this]() { updateStatusText(); };
   polySidBudgetSelector.onChange = [this]() { updateStatusText(); };
+  uiScaleSelector.onChange = [this]() {
+    if (onScaleChanged)
+      onScaleChanged(uiScaleForId(uiScaleSelector.getSelectedId()));
+  };
   updateStatusText();
 }
 
@@ -1129,7 +1193,7 @@ void SettingsPanel::resized() {
   const int labelW = 118;
   const int rowH = 30;
   const int gap = 10;
-  int y = bounds.getY() + 14;
+  int y = bounds.getY() + 20;
 
   auto placeRow = [&](juce::Label &label, juce::ComboBox &box) {
     label.setBounds(bounds.getX() + 12, y, labelW, rowH);
@@ -1137,11 +1201,27 @@ void SettingsPanel::resized() {
                   bounds.getWidth() - labelW - 32, rowH - 4);
     y += rowH + gap;
   };
+  auto placeSliderRow = [&](juce::Label &label, juce::Slider &slider) {
+    label.setBounds(bounds.getX() + 12, y, labelW, rowH);
+    slider.setBounds(bounds.getX() + labelW + 20, y + 2,
+                     bounds.getWidth() - labelW - 32, rowH - 4);
+    y += rowH + gap;
+  };
 
   placeRow(ecoModeLabel, ecoModeSelector);
   placeRow(polySidBudgetLabel, polySidBudgetSelector);
   placeRow(polyStereoAnchorLabel, polyStereoAnchorSelector);
-  statusLabel.setBounds(bounds.getX() + 12, y + 6, bounds.getWidth() - 24, 48);
+  y = bounds.getY() + 164;
+  placeRow(uiScaleLabel, uiScaleSelector);
+  placeSliderRow(settingsGateLabel, settingsGateSlider);
+  settingsExtLabel.setBounds(bounds.getX() + 12, y, labelW, rowH);
+  settingsExtEnableButton.setBounds(bounds.getX() + labelW + 20, y + 2, 72,
+                                    rowH - 4);
+  settingsExtLevelSlider.setBounds(bounds.getX() + labelW + 98, y + 2,
+                                   bounds.getWidth() - labelW - 110, rowH - 4);
+  y += rowH + gap;
+
+  statusLabel.setBounds(bounds.getX() + 12, y + 4, bounds.getWidth() - 24, 46);
 
   buildPopupCaches(*this, gridCache, scanCache);
 }
@@ -1153,11 +1233,15 @@ void SettingsPanel::paint(juce::Graphics &g) {
   drawInsetCard(g, juce::Rectangle<float>(
                        14.0f, 22.0f, static_cast<float>(panelWidth - 28), 122.0f));
   drawInsetCard(g, juce::Rectangle<float>(
-                       14.0f, 154.0f, static_cast<float>(panelWidth - 28), 52.0f));
+                       14.0f, 162.0f, static_cast<float>(panelWidth - 28), 110.0f));
+  drawInsetCard(g, juce::Rectangle<float>(
+                       14.0f, 282.0f, static_cast<float>(panelWidth - 28), 52.0f));
 
   g.setColour(BreadbinLookAndFeel::accentOf(*this));
   g.setFont(panelBoldFont.withHeight(11.0f));
   g.drawText("PERFORMANCE SETTINGS", 26, 8, panelWidth - 52, 16,
+             juce::Justification::centredLeft);
+  g.drawText("UTILITY SETTINGS", 26, 148, panelWidth - 52, 16,
              juce::Justification::centredLeft);
 }
 
@@ -1170,6 +1254,9 @@ void SettingsPanel::refreshFonts(const juce::Font &pro,
   ecoModeLabel.setFont(panelBoldFont.withHeight(10.0f));
   polySidBudgetLabel.setFont(panelBoldFont.withHeight(10.0f));
   polyStereoAnchorLabel.setFont(panelBoldFont.withHeight(10.0f));
+  uiScaleLabel.setFont(panelBoldFont.withHeight(10.0f));
+  settingsGateLabel.setFont(panelBoldFont.withHeight(10.0f));
+  settingsExtLabel.setFont(panelBoldFont.withHeight(10.0f));
   statusLabel.setFont(panelMonoFont.withHeight(10.0f));
 }
 
@@ -1421,25 +1508,14 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
       settings != nullptr
           ? (float)settings->getDoubleValue("uiScale", 1.0)
           : 1.0f;
-  const auto idForScale = [](float s) {
-    if (s < 0.875f) return 1;
-    if (s < 1.125f) return 2;
-    if (s < 1.375f) return 3;
-    return 4;
-  };
-  scaleSelector.setSelectedId(idForScale(savedScale), juce::dontSendNotification);
+  currentUiScale = savedScale;
+  scaleSelector.setSelectedId(uiScaleIdFor(savedScale), juce::dontSendNotification);
 
   scaleSelector.onChange = [this]() {
-    const float scales[] = {0.75f, 1.0f, 1.25f, 1.5f};
-    const int idx = scaleSelector.getSelectedId() - 1;
-    if (idx < 0 || idx >= 4) return;
-    setScale(scales[idx]);
-    if (auto *s = appProperties.getUserSettings()) {
-      s->setValue("uiScale", (double)scales[idx]);
-      s->saveIfNeeded();
-    }
+    applyUiScale(uiScaleForId(scaleSelector.getSelectedId()));
   };
   addAndMakeVisible(scaleSelector);
+  scaleSelector.setVisible(false);
 
   modRingsEnabled = static_cast<bool>(
       processor.apvts.state.getProperty("modRingsEnabled", false));
@@ -1447,6 +1523,16 @@ BreadbinEditor::BreadbinEditor(BreadbinProcessor &p)
   updateModRingVisibility();
 
   setScale(savedScale);
+}
+
+void BreadbinEditor::applyUiScale(float scale) {
+  currentUiScale = scale;
+  scaleSelector.setSelectedId(uiScaleIdFor(scale), juce::dontSendNotification);
+  setScale(scale);
+  if (auto *s = appProperties.getUserSettings()) {
+    s->setValue("uiScale", static_cast<double>(scale));
+    s->saveIfNeeded();
+  }
 }
 
 BreadbinEditor::~BreadbinEditor() {
@@ -1543,8 +1629,11 @@ void BreadbinEditor::updateModulationMeters() {
                             rightHPButton.getToggleState());
 
   // Preset dirty indicator
-  presetDirtyLabel.setText(processor.isPresetDirty() ? "*" : "",
+  const bool presetDirty = processor.isPresetDirty();
+  presetDirtyLabel.setText(presetDirty ? "*" : "",
                            juce::dontSendNotification);
+  footerStatusLabel.setText(presetDirty ? "PATCH MODIFIED" : "PATCH READY",
+                            juce::dontSendNotification);
 
   // CPU load
   float cpu = processor.getCpuLoad();
@@ -1587,37 +1676,55 @@ void BreadbinEditor::updateModRingVisibility() {
 }
 
 void BreadbinEditor::updateVoiceCountDisplay() {
-  auto vm = processor.getVoiceMode();
+  const auto activity = processor.getVoiceActivitySnapshot();
+  auto vm = activity.voiceMode;
   bool showMaxNotes = (vm == BreadbinProcessor::VoiceMode::Polyphonic ||
                        vm == BreadbinProcessor::VoiceMode::PolyPara);
   polyMaxNotesSelector.setVisible(showMaxNotes);
 
+  auto setActivityTooltip = [&](const juce::String &label) {
+    juce::String tip = label;
+    if (activity.soundingPolyVoices > 0) {
+      tip += "\nSounding slots: " + juce::String(activity.soundingPolyVoices);
+      tip += "\nECO roles P/L/R: " + juce::String(activity.ecoPairVoices) +
+             "/" + juce::String(activity.ecoLeftMonoVoices) + "/" +
+             juce::String(activity.ecoRightMonoVoices);
+      tip += "\nRendered SID engines: " +
+             juce::String(activity.renderedSidEngines);
+    }
+    polyVoiceCountLabel.setTooltip(tip);
+  };
+
   switch (vm) {
   case BreadbinProcessor::VoiceMode::Mono:
     polyVoiceCountLabel.setVisible(false);
+    polyVoiceCountLabel.setTooltip("Mono voice mode");
     break;
   case BreadbinProcessor::VoiceMode::Paraphonic: {
-    int active = processor.getActiveParaVoiceCount();
+    int active = activity.heldParaVoices;
     polyVoiceCountLabel.setText(
         juce::String(active) + "/6", juce::dontSendNotification);
+    setActivityTooltip("Held paraphonic voices");
     polyVoiceCountLabel.setVisible(true);
     break;
   }
   case BreadbinProcessor::VoiceMode::Polyphonic: {
-    int active = processor.getActivePolyVoiceCount();
-    int maxN = processor.getPolyMaxNotes();
+    int active = activity.heldPolyVoices;
+    int maxN = activity.polyMaxNotes;
     polyVoiceCountLabel.setText(
         juce::String(active) + "/" + juce::String(maxN),
         juce::dontSendNotification);
+    setActivityTooltip("Held poly notes");
     polyVoiceCountLabel.setVisible(true);
     break;
   }
   case BreadbinProcessor::VoiceMode::PolyPara: {
-    int total = processor.getTotalActiveNoteCount();
-    int maxTotal = processor.getPolyMaxNotes() * 3;
+    int total = activity.heldPolyParaNotes;
+    int maxTotal = activity.polyMaxNotes * 3;
     polyVoiceCountLabel.setText(
         juce::String(total) + "/" + juce::String(maxTotal),
         juce::dontSendNotification);
+    setActivityTooltip("Held Poly+Para notes");
     polyVoiceCountLabel.setVisible(true);
     break;
   }
@@ -3298,7 +3405,8 @@ void BreadbinEditor::showSettingsPopup() {
     }
   }
 
-  auto *panel = new SettingsPanel(processor);
+  auto *panel = new SettingsPanel(processor, currentUiScale,
+                                  [this](float scale) { applyUiScale(scale); });
   panel->setLookAndFeel(&customLookAndFeel);
   panel->getProperties().set("accent", (int)gm::ui::theme::orange.getARGB());
   panel->refreshFonts(proFont, boldFont, monoFont);
@@ -3324,6 +3432,9 @@ void BreadbinEditor::setupControls() {
 }
 
 void BreadbinEditor::setupGlobalControls() {
+  titleLabel.setText("", juce::dontSendNotification);
+  titleLabel.setInterceptsMouseClicks(false, false);
+
   // Mode
   modeLabel.setText("Mode:", juce::dontSendNotification);
   modeLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
@@ -3389,6 +3500,20 @@ void BreadbinEditor::setupGlobalControls() {
   paraRetrigAttachment = std::make_unique<
       juce::AudioProcessorValueTreeState::ButtonAttachment>(
       processor.apvts, "paraFilterRetrig", paraRetrigButton);
+
+  footerBrandLabel.setText("WOMBLETOOK · BREADBIN", juce::dontSendNotification);
+  footerBrandLabel.setFont(boldFont.withHeight(10.0f));
+  footerBrandLabel.setColour(juce::Label::textColourId, gm::ui::theme::cyan);
+  footerBrandLabel.setJustificationType(juce::Justification::centredLeft);
+  footerBrandLabel.setTooltip("Wombletook Breadbin");
+  addAndMakeVisible(footerBrandLabel);
+
+  footerStatusLabel.setText("PATCH READY", juce::dontSendNotification);
+  footerStatusLabel.setFont(monoFont.withHeight(10.0f));
+  footerStatusLabel.setColour(juce::Label::textColourId, gm::ui::theme::txt2);
+  footerStatusLabel.setJustificationType(juce::Justification::centred);
+  footerStatusLabel.setTooltip("Patch and interaction status");
+  addAndMakeVisible(footerStatusLabel);
 
   // Global Factory Presets
   globalPresetLabel.setText("Patch:", juce::dontSendNotification);
@@ -3739,7 +3864,7 @@ void BreadbinEditor::setupGlobalControls() {
   masterVolSlider.setRange(0.0, 1.0, 0.01);
   masterVolSlider.setDoubleClickReturnValue(true, 0.8);
   masterVolSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-  masterVolSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 45, 18);
+  masterVolSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 46, 11);
   masterVolSlider.setTooltip("Master output volume (affects both SID chips)");
   // No onValueChange needed — APVTS attachment + processBlock sync handles it
   addAndMakeVisible(masterVolSlider);
@@ -4622,15 +4747,33 @@ void BreadbinEditor::paint(juce::Graphics &g) {
   drawGlassPanel(voiceEditorPanelBounds);
   drawGlassPanel(fxPanelBounds);
   drawGlassPanel(dockPanelBounds);
+  drawGlassPanel(footerPanelBounds);
 
-  // Logo emblem in the top bar's reserved left area
+  // Compact logo in the top bar's reserved left area.
   {
     auto logo = juce::ImageCache::getFromMemory(BinaryData::logo_png,
                                                 BinaryData::logo_pngSize);
-    auto lb = titleLabel.getBounds();
-    if (logo.isValid() && !lb.isEmpty())
-      g.drawImageWithin(logo, lb.getX(), lb.getY(), lb.getWidth(), lb.getHeight(),
-                        juce::RectanglePlacement::centred, false);
+    auto lb = titleLabel.getBounds().reduced(2, 3);
+    if (!lb.isEmpty()) {
+      auto lbf = lb.toFloat();
+      g.setColour(juce::Colour(0xAA05070A));
+      g.fillRoundedRectangle(lbf, 5.0f);
+      g.setColour(gm::ui::theme::cyan.withAlpha(0.45f));
+      g.drawRoundedRectangle(lbf, 5.0f, 1.0f);
+
+      if (logo.isValid()) {
+        g.drawImageWithin(logo, lb.getX() + 3, lb.getY() + 2,
+                          lb.getWidth() - 6, lb.getHeight() - 4,
+                          juce::RectanglePlacement::centred |
+                              juce::RectanglePlacement::onlyReduceInSize,
+                          false);
+      } else {
+        gm::ui::drawGlowText(g, "BREADBIN", retroFont.withHeight(8.0f),
+                             lbf.reduced(3.0f, 5.0f),
+                             gm::ui::theme::orange,
+                             juce::Justification::centred);
+      }
+    }
   }
 
   // Glow text headers for SID and voice editor sections
@@ -4658,7 +4801,7 @@ void BreadbinEditor::paint(juce::Graphics &g) {
 }
 
 void BreadbinEditor::resizedContent() {
-  // OptionD 6-region layout — positioning only, no behavior changes.
+  // OptionD layout plus a persistent footer — positioning only, no behavior changes.
   // Content area: ~984 wide × 727 tall (1000x743 minus 8px padding each side).
   // Region heights (sum = 687): topBar=46, towers=240, voiceEd=175, fx=104, dock=34, keyboard=88.
   // 5 gaps × 8px = 40px. Total = 727px. ✓
@@ -4668,10 +4811,11 @@ void BreadbinEditor::resizedContent() {
   static constexpr int kVoiceH   = 175;
   static constexpr int kFxH      = 104;
   static constexpr int kDockH    = 48;
-  static constexpr int kKbH      = 74;
+  static constexpr int kFooterH  = 28;
 
   midiLearnOverlay.setBounds(getLocalBounds());
   auto bounds = getLocalBounds().reduced(8);
+  footerPanelBounds = bounds.removeFromBottom(kFooterH);
 
   // --- Region 1: Top bar ---
   topBarPanelBounds = bounds.removeFromTop(kTopBarH);
@@ -4703,7 +4847,7 @@ void BreadbinEditor::resizedContent() {
   bounds.removeFromTop(kGap);
 
   // --- Region 6: Keyboard ---
-  keyboard.setBounds(bounds.removeFromTop(kKbH));
+  keyboard.setBounds(bounds);
   // Widen keys to fill the full region width (C2-C6 white keys) instead of a
   // cramped left strip with dead space.
   {
@@ -4724,6 +4868,7 @@ void BreadbinEditor::resizedContent() {
     auto dockArea = dockPanelBounds;
     layoutBottomControls(fxArea, dockArea);
   }
+  layoutFooter(footerPanelBounds);
 
   // Build background cache (background_clean.png + vignette)
   if (getWidth() > 0 && getHeight() > 0) {
@@ -4765,19 +4910,17 @@ void BreadbinEditor::resizedContent() {
 }
 
 void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
-  // OptionD top bar: logo | divider | Engine seg | Voicing seg + fold-ins | spacer |
+  // OptionD top bar: logo | divider | Engine seg | spacer |
   //   Master slider+val | divider | preset stepper | CPU label | scaleSelector
   const int pad = 6;
   auto row = bounds.reduced(6, 1); // inner margin inside the glass panel
 
-  // Right side: scale selector + CPU
-  scaleSelector.setBounds(row.removeFromRight(60).withHeight(22).withY(row.getCentreY() - 11));
-  row.removeFromRight(pad);
+  // Right side: CPU only. UI scale lives in the footer.
   cpuLoadLabel.setBounds(row.removeFromRight(52).withHeight(16).withY(row.getCentreY() - 8));
   row.removeFromRight(pad);
 
   // Left: logo area (drawn by paint(), reserve space)
-  auto logoBounds = row.removeFromLeft(92);
+  auto logoBounds = row.removeFromLeft(96);
   titleLabel.setBounds(logoBounds); // titleLabel occupies logo area
   row.removeFromLeft(pad);
 
@@ -4790,22 +4933,11 @@ void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
   dualModeSelector.setBounds(row.removeFromLeft(110).withHeight(22).withY(row.getCentreY() - 11));
   row.removeFromLeft(pad);
 
-  // Voicing segmented (voiceModeSelector) + poly count + spread + retrig
-  voiceModeSelector.setBounds(row.removeFromLeft(80).withHeight(22).withY(row.getCentreY() - 11));
-  polyMaxNotesSelector.setBounds(row.removeFromLeft(42).withHeight(22).withY(row.getCentreY() - 11));
-  polyVoiceCountLabel.setBounds(row.removeFromLeft(28).withHeight(16).withY(row.getCentreY() - 8));
-  paraSpreadLabel.setBounds(row.removeFromLeft(36).withHeight(16).withY(row.getCentreY() - 8));
-  paraSpreadSlider.setBounds(row.removeFromLeft(64).withHeight(22).withY(row.getCentreY() - 11));
-  paraRetrigButton.setBounds(row.removeFromLeft(50).withHeight(20).withY(row.getCentreY() - 10));
-  row.removeFromLeft(pad);
-
   // Spacer (flex:1 in JSX) — skip to master slider
   // Place master vol in centre-right area
-  const int masterW = 130;
-  masterVolLabel.setBounds(row.removeFromLeft(46).withHeight(16).withY(row.getCentreY() - 8));
-  masterVolSlider.setBounds(row.removeFromLeft(masterW).withHeight(22).withY(row.getCentreY() - 11));
-  noiseGateLabel.setBounds(row.removeFromLeft(34).withHeight(16).withY(row.getCentreY() - 8));
-  noiseGateSlider.setBounds(row.removeFromLeft(100).withHeight(22).withY(row.getCentreY() - 11));
+  const int masterW = 86;
+  masterVolLabel.setBounds(row.removeFromLeft(42).withHeight(16).withY(row.getCentreY() - 8));
+  masterVolSlider.setBounds(row.removeFromLeft(masterW).withHeight(34).withY(row.getCentreY() - 17));
   row.removeFromLeft(pad);
 
   // Divider (spacer)
@@ -4815,7 +4947,7 @@ void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
   // Preset stepper: prev | selector | dirty | next | save | load
   globalPresetLabel.setBounds(row.removeFromLeft(40).withHeight(16).withY(row.getCentreY() - 8));
   presetPrevButton.setBounds(row.removeFromLeft(20).reduced(0, 3));
-  globalPresetSelector.setBounds(row.removeFromLeft(110).withHeight(22).withY(row.getCentreY() - 11));
+  globalPresetSelector.setBounds(row.removeFromLeft(220).withHeight(22).withY(row.getCentreY() - 11));
   presetDirtyLabel.setBounds(row.removeFromLeft(14).withHeight(16).withY(row.getCentreY() - 8));
   presetNextButton.setBounds(row.removeFromLeft(20).reduced(0, 3));
   row.removeFromLeft(pad);
@@ -4823,12 +4955,31 @@ void BreadbinEditor::layoutTopRow(juce::Rectangle<int> &bounds) {
   row.removeFromLeft(pad / 2);
   loadPatchButton.setBounds(row.removeFromLeft(28).reduced(0, 3));
   row.removeFromLeft(pad);
+}
 
-  // Ext input (tucked before right edge)
-  extInputEnableButton.setBounds(row.removeFromLeft(50).withHeight(20).withY(row.getCentreY() - 10));
-  row.removeFromLeft(pad / 2);
-  extInputLabel.setBounds(row.removeFromLeft(30).withHeight(16).withY(row.getCentreY() - 8));
-  extInputLevelSlider.setBounds(row.removeFromLeft(70).withHeight(22).withY(row.getCentreY() - 11));
+void BreadbinEditor::layoutFooter(juce::Rectangle<int> &bounds) {
+  auto row = bounds.reduced(8, 3);
+  auto centreV = [](juce::Rectangle<int> r, int h) {
+    return r.withHeight(h).withY(r.getCentreY() - h / 2);
+  };
+
+  footerBrandLabel.setBounds(
+      row.removeFromLeft(150).withHeight(16).withY(row.getCentreY() - 8));
+  row.removeFromLeft(8);
+  footerStatusLabel.setBounds(
+      row.removeFromLeft(128).withHeight(16).withY(row.getCentreY() - 8));
+  row.removeFromLeft(8);
+
+  settingsButton.setBounds(centreV(row.removeFromLeft(72), 20));
+
+  paraSpreadSlider.setBounds(centreV(row.removeFromRight(80), 20));
+  paraSpreadLabel.setBounds(
+      row.removeFromRight(38).withHeight(14).withY(row.getCentreY() - 7));
+  paraRetrigButton.setBounds(centreV(row.removeFromRight(54), 20));
+  polyVoiceCountLabel.setBounds(
+      row.removeFromRight(34).withHeight(16).withY(row.getCentreY() - 8));
+  polyMaxNotesSelector.setBounds(centreV(row.removeFromRight(42), 20));
+  voiceModeSelector.setBounds(centreV(row.removeFromRight(86), 20));
 }
 
 void BreadbinEditor::layoutSidPanels(juce::Rectangle<int> &bounds) {
@@ -5184,13 +5335,11 @@ void BreadbinEditor::layoutBottomControls(juce::Rectangle<int> fxArea,
   mainRow.removeFromRight(pad);
 
   const int btnH = 20;
-  auto settingsBtnBounds = mainRow.removeFromRight(68); mainRow.removeFromRight(pad);
   auto digiBtnBounds  = mainRow.removeFromRight(56); mainRow.removeFromRight(pad);
   auto sidBtnBounds   = mainRow.removeFromRight(75); mainRow.removeFromRight(pad);
   auto chordBtnBounds = mainRow.removeFromRight(62); mainRow.removeFromRight(pad);
   auto wtBtnBounds    = mainRow.removeFromRight(80); mainRow.removeFromRight(pad);
   auto modBtnBounds   = mainRow.removeFromRight(86);
-  settingsButton.setBounds(centreV(settingsBtnBounds, btnH));
   digiButton.setBounds(centreV(digiBtnBounds, btnH));
   sidPlayerButton.setBounds(centreV(sidBtnBounds, btnH));
   chordMemoryButton.setBounds(centreV(chordBtnBounds, btnH));

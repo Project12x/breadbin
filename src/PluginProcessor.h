@@ -8,6 +8,7 @@
 #include <ghostmoon/SilenceGate.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -132,7 +133,21 @@ public:
     bool releasing = false;
     PolySidRenderRole role = PolySidRenderRole::Pair;
   };
+  struct VoiceActivitySnapshot {
+    VoiceMode voiceMode = VoiceMode::Mono;
+    int polyMaxNotes = 4;
+    int heldParaVoices = 0;
+    int heldPolyVoices = 0;
+    int soundingPolyVoices = 0;
+    int heldPolyParaNotes = 0;
+    int soundingPolyParaNotes = 0;
+    int ecoPairVoices = 0;
+    int ecoLeftMonoVoices = 0;
+    int ecoRightMonoVoices = 0;
+    int renderedSidEngines = 0;
+  };
   std::array<PolyVoiceRoleDebug, MAX_POLY> getPolyVoiceRoleDebug() const;
+  VoiceActivitySnapshot getVoiceActivitySnapshot() const noexcept;
 
   // Wavetable step sequencer
   struct WavetableStep {
@@ -490,6 +505,17 @@ private:
   uint32_t polyNoteCounter = 0;
   int polyMaxNotes = 4;
   std::atomic<float> *polyMaxNotesPtr = nullptr;
+  std::atomic<int> publishedVoiceMode{0};
+  std::atomic<int> publishedPolyMaxNotes{4};
+  std::atomic<int> publishedHeldParaVoices{0};
+  std::atomic<int> publishedHeldPolyVoices{0};
+  std::atomic<int> publishedSoundingPolyVoices{0};
+  std::atomic<int> publishedHeldPolyParaNotes{0};
+  std::atomic<int> publishedSoundingPolyParaNotes{0};
+  std::atomic<int> publishedEcoPairVoices{0};
+  std::atomic<int> publishedEcoLeftMonoVoices{0};
+  std::atomic<int> publishedEcoRightMonoVoices{0};
+  std::atomic<int> publishedRenderedSidEngines{0};
 
   // Paraphonic: per-SID-voice note allocation (mono SIDs only)
   std::array<ParaVoiceState, 6> paraVoices{{
@@ -525,6 +551,7 @@ private:
   PolySidRenderRole chooseNewPolyRenderRoleForSlot(int targetIdx) const noexcept;
   void demoteExistingPolyPairForNewestAnchor() noexcept;
   void rebalancePolyRenderRoles() noexcept;
+  void publishVoiceActivitySnapshot() noexcept;
   using PolyRoleSnapshot = std::array<PolySidRenderRole, MAX_POLY>;
   PolyRoleSnapshot snapshotPolyRenderRoles() const noexcept;
   void syncPromotedPolyRenderSides(const PolyRoleSnapshot &oldRoles);

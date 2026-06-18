@@ -8,6 +8,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <ghostmoon/ui/synthwave/Scope.h>
+#include <functional>
 
 class MappableSlider; // Forward declaration
 
@@ -845,17 +846,19 @@ private:
 // Performance and plugin settings popup panel
 class SettingsPanel : public juce::Component {
 public:
-  SettingsPanel(BreadbinProcessor &proc);
+  SettingsPanel(BreadbinProcessor &proc, float initialUiScale,
+                std::function<void(float)> scaleChanged);
   ~SettingsPanel() override { setLookAndFeel(nullptr); }
   void resized() override;
   void paint(juce::Graphics &g) override;
   void refreshFonts(const juce::Font &pro, const juce::Font &bold,
                     const juce::Font &mono);
   static constexpr int panelWidth = 430;
-  static constexpr int panelHeight = 220;
+  static constexpr int panelHeight = 350;
 
 private:
   BreadbinProcessor &processor;
+  std::function<void(float)> onScaleChanged;
   juce::Font panelProFont{juce::FontOptions(12.0f)};
   juce::Font panelBoldFont{juce::FontOptions(12.0f)};
   juce::Font panelMonoFont{juce::FontOptions(12.0f)};
@@ -867,6 +870,13 @@ private:
   juce::Label polySidBudgetLabel;
   juce::ComboBox polyStereoAnchorSelector;
   juce::Label polyStereoAnchorLabel;
+  juce::ComboBox uiScaleSelector;
+  juce::Label uiScaleLabel;
+  juce::Slider settingsGateSlider;
+  juce::Label settingsGateLabel;
+  juce::ToggleButton settingsExtEnableButton{"Ext In"};
+  juce::Slider settingsExtLevelSlider;
+  juce::Label settingsExtLabel;
   juce::Label statusLabel;
 
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
@@ -875,6 +885,12 @@ private:
       polySidBudgetAttachment;
   std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
       polyStereoAnchorAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      settingsGateAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+      settingsExtEnableAttachment;
+  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+      settingsExtLevelAttachment;
 
   int choiceIdFromParam(const juce::String &paramId, int fallbackId) const;
   void updateStatusText();
@@ -1081,6 +1097,7 @@ public:
   void layoutSidPanels(juce::Rectangle<int> &bounds);
   void layoutVoiceEditor(juce::Rectangle<int> &bounds);
   void layoutBottomControls(juce::Rectangle<int> fxArea, juce::Rectangle<int> dockArea);
+  void layoutFooter(juce::Rectangle<int> &bounds);
 
 private:
   BreadbinProcessor &processor;
@@ -1125,6 +1142,8 @@ private:
   juce::ShapeButton loadVoiceButton{"Load", juce::Colours::cyan,
                                     juce::Colours::cyan.withAlpha(0.7f),
                                     juce::Colours::white};
+  juce::Label footerBrandLabel;
+  juce::Label footerStatusLabel;
 
   // Voice mode controls
   juce::ComboBox voiceModeSelector;
@@ -1488,6 +1507,7 @@ private:
   juce::Rectangle<int> voiceEditorPanelBounds;
   juce::Rectangle<int> fxPanelBounds;
   juce::Rectangle<int> dockPanelBounds;
+  juce::Rectangle<int> footerPanelBounds;
   juce::TooltipWindow tooltipWindow{this, 500}; // 500ms delay before showing
 
   void setupControls();
@@ -1513,6 +1533,8 @@ private:
   void savePresetToMenu();               // Save into preset dropdown
   void refreshUserPresets();             // Scan user preset directory
   static juce::File getUserPresetsDir(); // %APPDATA%/GPLAudio/Breadbin/Presets
+  void applyUiScale(float scale);
+  float currentUiScale = 1.0f;
 
   // MidiKeyboardState::Listener
   void handleNoteOn(juce::MidiKeyboardState *, int midiChannel,

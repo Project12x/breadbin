@@ -2,26 +2,26 @@
 
 ## Goal
 
-Restore the refactored UI's missing high-level chrome: visible preset access, visible logo/brand presence, and a slim footer that also hosts the poly/voicing controls.
+Restore the refactored UI's missing high-level chrome: visible preset access, visible logo/brand presence, and a slim footer that hosts status, Settings access, and live poly/voicing controls without becoming crowded.
 
 ## Approved Direction
 
 Use the balanced repair layout:
 
 - Keep the global patch selector in the top bar, but reserve enough width for it to remain usable.
-- Restore the embedded Breadbin logo on the far-left side of the top bar.
+- Restore the embedded Breadbin logo on the far-left side of the top bar at toolbar scale.
 - Move the poly/voicing cluster out of the crowded top bar and into the new footer.
-- Add a slim always-visible footer below the keyboard for brand, status/help text, and poly controls.
+- Add a slim always-visible footer below the keyboard for brand, status/help text, Settings access, and poly controls.
 
 ## Top Bar
 
 The top bar should prioritize global actions:
 
-- Logo area at the far left.
+- Compact logo area at the far left.
 - Engine selector near the logo.
-- Master and gate controls.
+- Master control with its value inset or underneath the slider to preserve horizontal space.
 - Protected global preset browser with previous/next, dirty indicator, save, and load controls.
-- CPU and UI scale controls at the far right.
+- CPU at the far right.
 
 The preset selector must not be starved by lower-priority controls. If space is tight, the footer-owned poly controls must not remain in the top bar.
 
@@ -31,8 +31,9 @@ The footer should be slim and persistent. It should sit below the keyboard and u
 
 Footer content:
 
-- Left: `ANTIGRAVITY · BREADBIN` brand text.
+- Left: `WOMBLETOOK · BREADBIN` brand text.
 - Center: status/help text. Initial content can report the current preset surface, for example `PATCH READY`.
+- Center utility: Settings button.
 - Right: poly/voicing cluster:
   - Voicing mode.
   - Poly max notes.
@@ -42,11 +43,22 @@ Footer content:
 
 The footer must remain usable at the existing scaled editor sizes.
 
+## Settings Popup
+
+The Settings popup should absorb lower-frequency utility controls so the footer stays scannable:
+
+- UI scale.
+- External input enable and level.
+- Gate threshold.
+- Existing ECO/performance controls.
+
 ## Implementation Notes
 
 - Reuse `globalPresetSelector`, `presetPrevButton`, `presetNextButton`, `savePatchButton`, `loadPatchButton`, and `presetDirtyLabel`.
 - Reuse `BinaryData::logo_png`.
 - Reuse the existing `voiceModeSelector`, `polyMaxNotesSelector`, `polyVoiceCountLabel`, `paraSpreadSlider`, and `paraRetrigButton`; only relocate them.
+- Reuse existing APVTS parameters for external input and gate in the Settings popup instead of exposing those utility controls in the footer.
+- Route UI scale through the editor because it is an editor-local preference, not an APVTS parameter.
 - Do not rewrite preset loading/saving behavior.
 - Keep the change localized to `src/PluginEditor.h` and `src/PluginEditor.cpp` unless build metadata unexpectedly requires an asset reference update.
 

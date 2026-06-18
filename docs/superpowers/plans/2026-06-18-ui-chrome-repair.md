@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Restore visible preset selection, logo branding, and a slim footer that hosts status text plus the poly/voicing controls.
+**Goal:** Restore visible preset selection, toolbar-scaled logo branding, and a slim footer that hosts status text, Settings access, and the poly/voicing controls while moving lower-frequency utilities into Settings.
 
 **Architecture:** Keep the existing `BreadbinEditor` component tree and preset backend. The change is layout-only plus two footer labels, so implementation stays in `PluginEditor.h` and `PluginEditor.cpp`.
 
@@ -13,7 +13,7 @@
 ## File Structure
 
 - Modify `D:/Code/breadbin/src/PluginEditor.h`: add footer labels and a footer panel bounds rectangle.
-- Modify `D:/Code/breadbin/src/PluginEditor.cpp`: add footer label setup, draw the footer glass panel, rebalance region heights, move poly controls into a new footer layout helper, and protect preset selector width in the top bar.
+- Modify `D:/Code/breadbin/src/PluginEditor.cpp`: add footer label setup, draw the footer glass panel, rebalance region heights, move Settings and poly controls into a new footer layout helper, move scale/gate/ext-input into Settings, compact the master control, and protect preset selector width in the top bar.
 
 Automated red/green UI layout tests are not practical in this codebase because the affected behavior is JUCE pixel placement and asset visibility inside the standalone/plugin editor. Verification is build plus manual visual check against the spec.
 
@@ -39,7 +39,7 @@ void layoutFooter(juce::Rectangle<int> &bounds);
 Configure text, fonts, colors, justification, and visibility:
 
 ```cpp
-footerBrandLabel.setText("ANTIGRAVITY · BREADBIN", juce::dontSendNotification);
+footerBrandLabel.setText("WOMBLETOOK · BREADBIN", juce::dontSendNotification);
 footerBrandLabel.setFont(boldFont.withHeight(10.0f));
 footerBrandLabel.setColour(juce::Label::textColourId, gm::ui::theme::cyan);
 footerBrandLabel.setJustificationType(juce::Justification::centredLeft);
@@ -90,7 +90,7 @@ In `paint()`, include:
 drawGlassPanel(footerPanelBounds);
 ```
 
-- [ ] **Step 3: Remove poly controls from top-bar layout**
+- [ ] **Step 3: Remove poly, gate, and ext-input controls from top-bar layout**
 
 Delete these top-bar bounds assignments from `layoutTopRow()`:
 
@@ -101,6 +101,11 @@ polyVoiceCountLabel.setBounds(...);
 paraSpreadLabel.setBounds(...);
 paraSpreadSlider.setBounds(...);
 paraRetrigButton.setBounds(...);
+noiseGateLabel.setBounds(...);
+noiseGateSlider.setBounds(...);
+extInputEnableButton.setBounds(...);
+extInputLabel.setBounds(...);
+extInputLevelSlider.setBounds(...);
 ```
 
 - [ ] **Step 4: Build check**
@@ -132,6 +137,19 @@ void BreadbinEditor::layoutFooter(juce::Rectangle<int> &bounds) {
   footerBrandLabel.setBounds(row.removeFromLeft(170).withHeight(16).withY(row.getCentreY() - 8));
   row.removeFromLeft(8);
   footerStatusLabel.setBounds(row.removeFromLeft(160).withHeight(16).withY(row.getCentreY() - 8));
+  row.removeFromLeft(8);
+
+  scaleSelector.setBounds(centreV(row.removeFromLeft(54), 20));
+  row.removeFromLeft(8);
+
+  extInputEnableButton.setBounds(centreV(row.removeFromLeft(50), 20));
+  row.removeFromLeft(4);
+  extInputLabel.setBounds(row.removeFromLeft(30).withHeight(14).withY(row.getCentreY() - 7));
+  extInputLevelSlider.setBounds(centreV(row.removeFromLeft(70), 20));
+  row.removeFromLeft(8);
+
+  noiseGateLabel.setBounds(row.removeFromLeft(34).withHeight(14).withY(row.getCentreY() - 7));
+  noiseGateSlider.setBounds(centreV(row.removeFromLeft(86), 20));
   row.removeFromLeft(8);
 
   paraSpreadSlider.setBounds(centreV(row.removeFromRight(92), 20));

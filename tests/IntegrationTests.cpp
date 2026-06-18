@@ -2743,6 +2743,69 @@ void testPolyNoteOffReleasesCorrectVoice() {
               "Released voice freed after release timer");
 }
 
+void testVoiceActivitySnapshotSeparatesHeldNotesFromReleaseTails() {
+  std::printf("--- Voice activity snapshot separates held notes from release tails ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto *mode = p->apvts.getParameter("voiceMode");
+  auto *release = p->apvts.getParameter("v0_release");
+  mode->setValueNotifyingHost(mode->convertTo0to1(2.0f)); // Poly
+  release->setValueNotifyingHost(release->convertTo0to1(12.0f));
+  warmUp(*p);
+
+  juce::MidiBuffer noteOn;
+  noteOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &noteOn);
+
+  auto held = p->getVoiceActivitySnapshot();
+  ASSERT_TRUE(held.heldPolyVoices == 1, "Snapshot reports one held poly note");
+  ASSERT_TRUE(held.soundingPolyVoices == 1,
+              "Snapshot reports one sounding poly slot while note is held");
+
+  juce::MidiBuffer noteOff;
+  noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+  processBlock(*p, 512, &noteOff);
+
+  auto releasing = p->getVoiceActivitySnapshot();
+  ASSERT_TRUE(releasing.heldPolyVoices == 0,
+              "Snapshot held poly count drops on note-off");
+  ASSERT_TRUE(releasing.soundingPolyVoices == 1,
+              "Snapshot keeps separate sounding count for release tails");
+}
+
+void testVoiceActivitySnapshotReportsEcoRoles() {
+  std::printf("--- Voice activity snapshot reports ECO render roles ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+
+  auto setParamReal = [&](const char *id, float realValue) {
+    if (auto *param = p->apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(realValue));
+  };
+  setParamReal("voiceMode", 2.0f);
+  setParamReal("polyMaxNotes", 4.0f);
+  setParamReal("ecoMode", 1.0f);
+  setParamReal("polySidBudget", 0.0f);
+  setParamReal("polyStereoAnchor", 0.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 64);
+  midi.addEvent(juce::MidiMessage::noteOn(1, 67, (juce::uint8)100), 128);
+  processBlock(*p, 512, &midi);
+
+  const auto snapshot = p->getVoiceActivitySnapshot();
+  ASSERT_TRUE(snapshot.ecoPairVoices == 1, "Snapshot reports one ECO pair slot");
+  ASSERT_TRUE(snapshot.ecoLeftMonoVoices == 1,
+              "Snapshot reports one ECO left-mono slot");
+  ASSERT_TRUE(snapshot.ecoRightMonoVoices == 1,
+              "Snapshot reports one ECO right-mono slot");
+  ASSERT_TRUE(snapshot.renderedSidEngines == 4,
+              "Snapshot reports Hybrid SID cost as N + 1");
+}
+
 static uint64_t extractJsonCounter(const std::string &json,
                                    const std::string &key) {
   const std::string needle = "\"" + key + "\":";
@@ -2827,6 +2890,47 @@ static void assertHybridPairBelongsToAnchor(
   ASSERT_TRUE(pairStart == expectedStart, startMessage.c_str());
   ASSERT_TRUE(pairIndex == expectedIndex, indexMessage.c_str());
   ASSERT_TRUE(pairNote == expectedNote, noteMessage.c_str());
+}
+
+static BreadbinProcessor::PolySidRenderRole roleForMidiNote(
+    const BreadbinProcessor &p, int midiNote) {
+  const auto voices = p.getPolyVoiceRoleDebug();
+  for (const auto &voice : voices) {
+    if ((voice.active || voice.releasing) && voice.midiNote == midiNote)
+      return voice.role;
+  }
+  return BreadbinProcessor::PolySidRenderRole::Pair;
+}
+
+void testEcoHybridNewestPreservesExistingPairWhenCapacityAvailable() {
+  std::printf("--- ECO Hybrid/Newest preserves existing Pair while capacity available ---\n");
+  auto p = createTestProcessor();
+  warmUp(*p);
+  auto setParamReal = [&](const char *id, float realValue) {
+    if (auto *param = p->apvts.getParameter(id))
+      param->setValueNotifyingHost(param->convertTo0to1(realValue));
+  };
+  setParamReal("voiceMode", 2.0f);
+  setParamReal("polyMaxNotes", 4.0f);
+  setParamReal("ecoMode", 1.0f);
+  setParamReal("polySidBudget", 0.0f);
+  setParamReal("polyStereoAnchor", 1.0f);
+  warmUp(*p);
+
+  juce::MidiBuffer first;
+  first.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+  processBlock(*p, 512, &first);
+  ASSERT_TRUE(roleForMidiNote(*p, 60) ==
+                  BreadbinProcessor::PolySidRenderRole::Pair,
+              "First Hybrid/Newest note starts as Pair");
+
+  juce::MidiBuffer second;
+  second.addEvent(juce::MidiMessage::noteOn(1, 64, (juce::uint8)100), 0);
+  processBlock(*p, 512, &second);
+
+  ASSERT_TRUE(roleForMidiNote(*p, 60) ==
+                  BreadbinProcessor::PolySidRenderRole::Pair,
+              "Existing Pair is not demoted while an unused poly slot is available");
 }
 
 void testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice() {
@@ -3361,8 +3465,8 @@ void testEcoUltraAssignsAllPairRoles() {
                         "Ultra three-note Pair assignment");
 }
 
-void testEcoHybridNewestKeepsOnePairForNewestAnchor() {
-  std::printf("--- ECO Hybrid/Newest keeps one Pair role ---\n");
+void testEcoHybridNewestKeepsOnePairWithoutLiveDemotion() {
+  std::printf("--- ECO Hybrid/Newest keeps one Pair without live demotion ---\n");
   auto p = createTestProcessor();
   warmUp(*p);
   setParamReal(*p, "voiceMode", 2.0f);
@@ -3379,10 +3483,7 @@ void testEcoHybridNewestKeepsOnePairForNewestAnchor() {
   processBlock(*p, 512, &midi);
 
   assertEcoRoleCounters(*p, 1, 1, 1,
-                        "Hybrid/Newest duplicate-note assignment");
-  assertHybridPairBelongsToAnchor(
-      *p, BreadbinProcessor::PolyStereoAnchor::Newest,
-      "Hybrid/Newest duplicate-note assignment");
+                        "Hybrid/Newest stable-role duplicate-note assignment");
 }
 
 void testEcoHybridReducesPolySidClockWork() {
@@ -4036,9 +4137,10 @@ int main(int argc, char *argv[]) {
   abrender::testEcoHybridOldestStealsPairSlotPreservingPair();
   abrender::testEcoHybridOldestStealPromotesPairRightSideAudio();
   abrender::testEcoHybridOldestPolyParaPromotesPairRightSideAudio();
+  testEcoHybridNewestPreservesExistingPairWhenCapacityAvailable();
   abrender::testEcoMaxEcoAssignsAlternatingMonoRoles();
   abrender::testEcoUltraAssignsAllPairRoles();
-  abrender::testEcoHybridNewestKeepsOnePairForNewestAnchor();
+  abrender::testEcoHybridNewestKeepsOnePairWithoutLiveDemotion();
   abrender::testEcoHybridReducesPolySidClockWork();
   abrender::testEcoHybridReducesUnusedSideSettingsWork();
   abrender::testEcoRoleChangeRebalancesHeldPolyVoices();
@@ -4137,6 +4239,8 @@ int main(int argc, char *argv[]) {
   testPolyMonoUnaffectedWhenDisabled();
   testPolyVoiceStealing();
   testPolyNoteOffReleasesCorrectVoice();
+  testVoiceActivitySnapshotSeparatesHeldNotesFromReleaseTails();
+  testVoiceActivitySnapshotReportsEcoRoles();
   testPolyReleaseSkipsSilentSidRenderWithoutFreeingVoice();
 
   // ==================== PARAPHONIC + POLY+PARA TESTS ====================
