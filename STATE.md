@@ -133,7 +133,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
-- Confirm JUCE 9 distribution licensing (AGPLv3 or commercial) before release
+- Release packaging must include the AGPLv3 and third-party licence texts listed in `THIRD_PARTY_LICENSES.md`
 - Minor: clangd lint errors related to JUCE includes (build succeeds)
 
 ## Build Status

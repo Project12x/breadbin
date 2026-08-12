@@ -128,6 +128,7 @@
 
 ### Release Engineering
 
+- [x] AGPLv3 distribution choice — JUCE uses AGPLv3; the GPL-2.0-or-later SID engine uses its GPLv3-or-later option; source and attribution record in `LICENSE.md` / `THIRD_PARTY_LICENSES.md`
 - [ ] DAW compatibility testing (Reaper, Ableton, FL Studio, Bitwig)
 - [ ] macOS build (AU + VST3 format)
 - [x] Factory preset pack (77 global presets, 37 voice presets, categorized submenus)

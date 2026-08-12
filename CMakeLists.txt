@@ -16,7 +16,9 @@ include(${CMAKE_BINARY_DIR}/cmake/CPM.cmake)
 
 # JUCE 9.0.0, pinned to the annotated release commit.
 # Upstream: https://github.com/juce-framework/JUCE @ f8f8864172464b9adf9eba6101e1f784838d1597
-# Reuse mode: dependency. JUCE 9's CMake integration and breaking-change notes were reviewed.
+# Reuse mode: dependency. Breadbin selects JUCE's AGPLv3 option because the project
+# directly compiles GPL-2.0-or-later libsidplayfp/reSIDfp; the combined work is AGPL-3.0-only.
+# JUCE 9's CMake integration and breaking-change notes were reviewed.
 CPMAddPackage(
     NAME JUCE
     GIT_TAG f8f8864172464b9adf9eba6101e1f784838d1597

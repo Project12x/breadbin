@@ -1,6 +1,6 @@
 # Breadbin
 
-C64 Dual SID Synthesizer - GPL v3
+C64 Dual SID Synthesizer - AGPL-3.0-only
 
 A JUCE 9 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip emulation.
 
@@ -75,10 +75,9 @@ ctest --test-dir build -C Release
 
 ## License
 
-GPL v3
-
-JUCE 9 is available under AGPLv3 or a commercial licence. Before distributing
-Breadbin binaries, ensure the distribution terms meet JUCE 9's licensing
-requirements.
-
-reSIDfp is GPL v2+ from the libsidplayfp project.
+Breadbin uses JUCE under its AGPLv3 option and is distributed under the GNU
+Affero General Public License, version 3 only (`AGPL-3.0-only`). This is
+compatible with the directly compiled `GPL-2.0-or-later` reSIDfp/libsidplayfp
+sources by choosing their GPLv3-or-later option. See [LICENSE.md](LICENSE.md)
+and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for release obligations
+and upstream attribution.

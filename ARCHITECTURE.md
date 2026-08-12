@@ -71,9 +71,14 @@ The `gm::ui::theme::cyan` (and other accent) tokens used throughout `BreadbinLoo
 
 | Library | Version | Fetch method | License | Role |
 |---|---|---|---|---|
-| JUCE | 9.0.0 (`f8f8864`) | CPM | AGPLv3 / commercial | Plugin framework, audio I/O, UI primitives |
+| JUCE | 9.0.0 (`f8f8864`) | CPM | AGPL-3.0-only (selected) | Plugin framework, audio I/O, UI primitives |
 | reSIDfp / libsidplayfp | 2.16.0 | CPM (tarball) | GPL v2+ | Cycle-accurate SID emulation + .SID file playback |
 | melatonin_blur | v1.4 | FetchContent | MIT | Frosted-glass blur for popup panels; fetched into `${CMAKE_BINARY_DIR}/melatonin_blur` so `juce_add_module` finds `melatonin_blur.h` at the expected path (CPM's `-src` suffix breaks the module discovery) |
+
+Breadbin is distributed as `AGPL-3.0-only`: JUCE uses its AGPLv3 option, and
+the directly compiled `GPL-2.0-or-later` libsidplayfp/reSIDfp sources are used
+under their GPLv3-or-later option. The dependency revision and attribution
+record is maintained in `THIRD_PARTY_LICENSES.md`.
 
 ## Data Flow
 

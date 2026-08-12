@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **AGPLv3 distribution selection**: Breadbin now explicitly selects JUCE's `AGPL-3.0-only`
+  option and distributes the combined work under `AGPL-3.0-only`. This resolves the licensing
+  conflict between JUCE's standard commercial EULA and the directly compiled
+  `GPL-2.0-or-later` libsidplayfp/reSIDfp source by using the dependency's GPLv3-or-later
+  option. `LICENSE.md` and `THIRD_PARTY_LICENSES.md` now record the release licence, pinned
+  upstream revisions, reuse modes, and source/notice obligations.
+
 - **JUCE 9 migration**: upgraded the CPM dependency from JUCE 8.0.4 to JUCE 9.0.0, pinned to
   [`juce-framework/JUCE` `f8f8864172464b9adf9eba6101e1f784838d1597`](https://github.com/juce-framework/JUCE/tree/f8f8864172464b9adf9eba6101e1f784838d1597).
   Reuse mode: dependency. Reviewed upstream `CMakeLists.txt`, `BREAKING_CHANGES.md`, and the
