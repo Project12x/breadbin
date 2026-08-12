@@ -133,7 +133,7 @@ Feature-complete. In UI-polish and release-engineering phase toward 1.0.
 
 ### Known Issues
 - MutationTests: 1/18 mutation survives (triangle boundary test) — pre-existing
-- Deprecated `juce::Font` constructor warnings (JUCE 8)
+- Confirm JUCE 9 distribution licensing (AGPLv3 or commercial) before release
 - Minor: clangd lint errors related to JUCE includes (build succeeds)
 
 ## Build Status
@@ -196,5 +196,5 @@ breadbin/
 │   └── IntegrationTests.cpp     # Full signal-path integration/regression (JUCE-linked)
 ├── assets/                      # background_clean.png, logo.png, fonts (Lato, JetBrains Mono, etc.)
 ├── releases/                    # preserved build artifacts (per build-preservation policy)
-└── build/                       # CMake output; JUCE 8 + libsidplayfp + ghostmoon-oss fetched via CPM/GHOSTMOON_OSS_DIR
+└── build/                       # CMake output; JUCE 9 + libsidplayfp + ghostmoon-oss fetched via CPM/GHOSTMOON_OSS_DIR
 ```

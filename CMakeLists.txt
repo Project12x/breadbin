@@ -14,10 +14,12 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/cmake/CPM.cmake")
 endif()
 include(${CMAKE_BINARY_DIR}/cmake/CPM.cmake)
 
-# JUCE 8
+# JUCE 9.0.0, pinned to the annotated release commit.
+# Upstream: https://github.com/juce-framework/JUCE @ f8f8864172464b9adf9eba6101e1f784838d1597
+# Reuse mode: dependency. JUCE 9's CMake integration and breaking-change notes were reviewed.
 CPMAddPackage(
     NAME JUCE
-    GIT_TAG 8.0.4
+    GIT_TAG f8f8864172464b9adf9eba6101e1f784838d1597
     GITHUB_REPOSITORY juce-framework/JUCE
     OPTIONS
         "JUCE_BUILD_EXTRAS OFF"
@@ -142,6 +144,7 @@ juce_add_plugin(Breadbin
     PLUGIN_MANUFACTURER_CODE Estw
     PLUGIN_CODE Bred
     FORMATS VST3 Standalone
+    BUNDLE_ID "com.ericsteenwerth.breadbin"
     PRODUCT_NAME "Breadbin"
     DESCRIPTION "C64 Dual SID Synthesizer"
 )
@@ -163,23 +166,16 @@ target_include_directories(Breadbin PRIVATE
     src
 )
 
-# ASIO Support (Windows standalone)
+# ASIO support (Windows standalone). JUCE 9 bundles the required ASIO SDK headers,
+# so an external Steinberg SDK installation is no longer necessary.
 if(WIN32)
-    set(ASIO_SDK_PATH "C:/SDKs/asiosdk/ASIOSDK" CACHE PATH "Path to Steinberg ASIO SDK")
-    if(EXISTS "${ASIO_SDK_PATH}/common/asio.h")
-        message(STATUS "ASIO SDK found at ${ASIO_SDK_PATH}")
-        target_compile_definitions(Breadbin PUBLIC JUCE_ASIO=1)
-        target_include_directories(Breadbin PRIVATE "${ASIO_SDK_PATH}/common")
-    else()
-        message(WARNING "ASIO SDK not found at ${ASIO_SDK_PATH}/common/asio.h - building without ASIO support")
-    endif()
+    target_compile_definitions(Breadbin PUBLIC JUCE_ASIO=1)
 endif()
 
 target_compile_definitions(Breadbin PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0
     # Disable plugin host formats that cause compile issues on Windows
     JUCE_PLUGINHOST_LV2=0
     JUCE_PLUGINHOST_AU=0
@@ -262,7 +258,6 @@ target_compile_definitions(BreadbinIntegrationTests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0
     JUCE_PLUGINHOST_LV2=0
     JUCE_PLUGINHOST_AU=0
     HB_MUTEX_IMPL_STD_MUTEX=1

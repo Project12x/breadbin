@@ -2,7 +2,7 @@
 
 ## Overview
 
-Breadbin is a JUCE 8 VST3/Standalone plugin. It uses a standard JUCE `AudioProcessor` +
+Breadbin is a JUCE 9 VST3/Standalone plugin. It uses a standard JUCE `AudioProcessor` +
 `AudioProcessorEditor` split. The audio thread runs entirely in `BreadbinProcessor::processBlock`;
 the UI thread lives in `BreadbinEditor` and its popup panels. All parameter communication between
 the two goes through JUCE's `AudioProcessorValueTreeState` (APVTS); non-APVTS state (e.g. MIDI
@@ -71,7 +71,7 @@ The `gm::ui::theme::cyan` (and other accent) tokens used throughout `BreadbinLoo
 
 | Library | Version | Fetch method | License | Role |
 |---|---|---|---|---|
-| JUCE | 8.0.4 | CPM | GPL v3 / commercial | Plugin framework, audio I/O, UI primitives |
+| JUCE | 9.0.0 (`f8f8864`) | CPM | AGPLv3 / commercial | Plugin framework, audio I/O, UI primitives |
 | reSIDfp / libsidplayfp | 2.16.0 | CPM (tarball) | GPL v2+ | Cycle-accurate SID emulation + .SID file playback |
 | melatonin_blur | v1.4 | FetchContent | MIT | Frosted-glass blur for popup panels; fetched into `${CMAKE_BINARY_DIR}/melatonin_blur` so `juce_add_module` finds `melatonin_blur.h` at the expected path (CPM's `-src` suffix breaks the module discovery) |
 

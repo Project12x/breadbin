@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **JUCE 9 migration**: upgraded the CPM dependency from JUCE 8.0.4 to JUCE 9.0.0, pinned to
+  [`juce-framework/JUCE` `f8f8864172464b9adf9eba6101e1f784838d1597`](https://github.com/juce-framework/JUCE/tree/f8f8864172464b9adf9eba6101e1f784838d1597).
+  Reuse mode: dependency. Reviewed upstream `CMakeLists.txt`, `BREAKING_CHANGES.md`, and the
+  JUCE ASIO module; the project does not use JUCE 9's removed/changed APIs. Windows standalone
+  builds now use JUCE's bundled ASIO headers, removing the external SDK path requirement. An
+  explicit `com.ericsteenwerth.breadbin` bundle ID replaces JUCE's invalid generated fallback,
+  and the now-ignored `JUCE_DISPLAY_SPLASH_SCREEN` definition was removed.
+
 ### Added
 
 - **Headless performance profiling and A/B render harness**: `BreadbinIntegrationTests` now supports

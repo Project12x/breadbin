@@ -2,7 +2,7 @@
 
 ## Phase 1: Core Foundation ✅
 
-- [x] Project scaffold with JUCE 8 + reSIDfp
+- [x] Project scaffold with JUCE 9 + reSIDfp
 - [x] SIDEngine wrapper class
 - [x] Dual SID architecture
 - [x] Basic audio processing pipeline

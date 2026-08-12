@@ -80,7 +80,7 @@ Output: `build/Breadbin_artefacts/Release/VST3/Breadbin.vst3`
 Standalone: `build/Breadbin_artefacts/Release/Standalone/Breadbin.exe`
 
 ## Dependencies
-- JUCE 8.0.4 (via CPM)
+- JUCE 9.0.0 (via CPM, pinned to `f8f8864172464b9adf9eba6101e1f784838d1597`)
 - libsidplayfp 2.16.0 (release tarball, not git)
 - MSVC on Windows 10, CMake
 
@@ -103,4 +103,4 @@ Standalone: `build/Breadbin_artefacts/Release/Standalone/Breadbin.exe`
 
 ## Known Issues
 - MutationTests has pre-existing 17/18 kill rate (triangle boundary test)
-- Deprecated Font constructor warnings (JUCE 8)
+- Confirm JUCE 9 distribution licensing (AGPLv3 or commercial) before release

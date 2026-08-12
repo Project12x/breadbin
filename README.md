@@ -2,7 +2,7 @@
 
 C64 Dual SID Synthesizer - GPL v3
 
-A JUCE 8 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip emulation.
+A JUCE 9 VST3/Standalone synthesizer using reSIDfp for cycle-accurate SID chip emulation.
 
 ## Features
 
@@ -68,7 +68,7 @@ ctest --test-dir build -C Release
 
 ## Dependencies
 
-- JUCE 8.0.4
+- JUCE 9.0.0 (pinned to `f8f8864172464b9adf9eba6101e1f784838d1597`)
 - libsidplayfp 2.16.0
 - melatonin_blur v1.4 (MIT, fetched automatically)
 - CMake 3.22+
@@ -76,5 +76,9 @@ ctest --test-dir build -C Release
 ## License
 
 GPL v3
+
+JUCE 9 is available under AGPLv3 or a commercial licence. Before distributing
+Breadbin binaries, ensure the distribution terms meet JUCE 9's licensing
+requirements.
 
 reSIDfp is GPL v2+ from the libsidplayfp project.

@@ -5,8 +5,8 @@
 ### Prerequisites
 - Visual Studio 2022 with C++ workload
 - CMake 3.22+
-- JUCE 8.0.4 and libsidplayfp 2.16.0 (fetched automatically via CPM)
-- Optional: Steinberg ASIO SDK at `C:/SDKs/asiosdk/ASIOSDK` for ASIO standalone support
+- JUCE 9.0.0 and libsidplayfp 2.16.0 (fetched automatically via CPM)
+- No external ASIO SDK is required; JUCE 9 bundles the required ASIO headers for Windows standalone support
 
 ### Build Steps
 
